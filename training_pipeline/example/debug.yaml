@@ -1,0 +1,5 @@
+# Overrides for fast iteration — tiny data, minimal epochs
+n_train: 64
+n_val: 16
+epochs: 3
+batch_size: 16
