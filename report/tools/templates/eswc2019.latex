@@ -1,0 +1,269 @@
+%% tools/templates/eswc2019.latex
+%% Pandoc LaTeX template for ESWC 2019 conference papers.
+%%
+%% Usage: set in paper.yaml:
+%%   latex_template: tools/templates/eswc2019.latex
+%%
+%% Based on ESWC 2019 paper template:
+%%   - Single-column layout (no IEEEtran multi-column)
+%%   - Sans-serif font (Arial → lmodern sans)
+%%   - Block paragraph style (spacing between paragraphs, no indent)
+%%   - Section headings: all caps, bold, numbered "1. INTRODUCTION"
+%%   - Custom author block with superscript affiliation numbers
+%%   - Conference header and footer
+%%
+%% Template syntax: $variable$, $if(var)$...$endif$, $for(list)$...$sep$...$endfor$
+%% See: https://pandoc.org/MANUAL.html#using-variables-in-templates
+
+% ── Pass-through options ──────────────────────────────────────────────────────
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+
+% ── Document class ────────────────────────────────────────────────────────────
+% article class with 10pt for single-column
+\documentclass[10pt]{article}
+
+% ── Page geometry ─────────────────────────────────────────────────────────────
+\usepackage[
+  a4paper,
+  top=1.5in,
+  bottom=1in,
+  left=1in,
+  right=1in,
+  headheight=14pt,
+  headsep=0.3in,
+  footskip=0.5in
+]{geometry}
+
+% ── Colour ────────────────────────────────────────────────────────────────────
+\usepackage{xcolor}
+
+% ── Math ──────────────────────────────────────────────────────────────────────
+\usepackage{amsmath,amssymb}
+
+% ── Section numbering ─────────────────────────────────────────────────────────
+$if(numbersections)$
+\setcounter{secnumdepth}{$if(secnumdepth)$$secnumdepth$$else$5$endif$}
+$endif$
+
+% ── Font encoding and sans-serif ──────────────────────────────────────────────
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp}
+  % Unicode character declarations
+  \DeclareUnicodeCharacter{2212}{-}
+\else
+  % For XeLaTeX/LuaLaTeX (not expected in TeX Live Basic, but for completeness)
+  \usepackage{unicode-math}
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+% Switch to sans-serif as default (Arial → lmodern sans)
+\renewcommand{\familydefault}{\sfdefault}
+
+% ── Microtype ─────────────────────────────────────────────────────────────────
+\IfFileExists{microtype.sty}{%
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath}
+}{}
+
+% ── Paragraph formatting ──────────────────────────────────────────────────────
+% Block style: no indent, spacing between paragraphs
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt plus 2pt minus 1pt}
+
+% ── Tables ────────────────────────────────────────────────────────────────────
+\usepackage{longtable,booktabs,array}
+\newcounter{none}
+\usepackage{calc}
+\usepackage{etoolbox}
+% Suppress longtable error in single-column (though less likely to hit it)
+\makeatletter
+\def\LT@err#1#2{\PackageWarning{longtable}{#1}}
+\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+\makeatother
+\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
+\makesavenoteenv{longtable}
+
+% ── Graphics ──────────────────────────────────────────────────────────────────
+\usepackage{graphicx}
+\makeatletter
+\newsavebox\pandoc@box
+\newcommand*\pandocbounded[1]{%
+  \sbox\pandoc@box{#1}%
+  \Gscale@div\@tempa{\textheight}{\dimexpr\ht\pandoc@box+\dp\pandoc@box\relax}%
+  \Gscale@div\@tempb{\linewidth}{\wd\pandoc@box}%
+  \ifdim\@tempb\p@<\@tempa\p@\let\@tempa\@tempb\fi%
+  \ifdim\@tempa\p@<\p@\scalebox{\@tempa}{\usebox\pandoc@box}%
+  \else\usebox{\pandoc@box}%
+  \fi%
+}
+\def\fps@figure{htbp}
+\makeatother
+
+% ── Headers and footers ───────────────────────────────────────────────────────
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textit{$if(conference-header)$$conference-header$$else$Conference Name, Dates, Location$endif$}}
+\fancyhead[R]{$if(conference-logo)$$conference-logo$$endif$}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% ── Section formatting ────────────────────────────────────────────────────────
+% ESWC style: "1. INTRODUCTION" (all caps, bold, period after number)
+\makeatletter
+\renewcommand\section{\@startsection{section}{1}{\z@}%
+  {-3.5ex \@plus -1ex \@minus -.2ex}%
+  {2.3ex \@plus.2ex}%
+  {\normalfont\large\bfseries\MakeUppercase}}
+\renewcommand\subsection{\@startsection{subsection}{2}{\z@}%
+  {-3.25ex\@plus -1ex \@minus -.2ex}%
+  {1.5ex \@plus .2ex}%
+  {\normalfont\normalsize\bfseries}}
+\renewcommand\subsubsection{\@startsection{subsubsection}{3}{\z@}%
+  {-3.25ex\@plus -1ex \@minus -.2ex}%
+  {1.5ex \@plus .2ex}%
+  {\normalfont\normalsize\bfseries}}
+
+% Add period after section number
+\renewcommand{\@seccntformat}[1]{\csname the#1\endcsname.\quad}
+\makeatother
+
+% ── Title formatting ──────────────────────────────────────────────────────────
+\makeatletter
+\renewcommand{\maketitle}{%
+  \begin{flushleft}
+    {\fontsize{18}{22}\selectfont\bfseries\@title\par}
+    \vskip 1em
+    {\normalsize\@author\par}
+  \end{flushleft}
+  \vskip 1.5em
+}
+\makeatother
+
+% ── Citeproc compatibility macros ────────────────────────────────────────────
+% Pandoc's built-in template emits these via its internal common.latex partial,
+% which custom templates cannot call. Copied verbatim from pandoc 3.x output.
+\NewDocumentCommand\citeproctext{}{}
+\NewDocumentCommand\citeproc{mm}{%
+  \begingroup\def\citeproctext{#2}\cite{#1}\endgroup}
+\makeatletter
+ \let\@cite@ofmt\@firstofone
+ \def\@biblabel#1{}
+ \def\@cite#1#2{{#1\if@tempswa , #2\fi}}
+\makeatother
+\newlength{\cslhangindent}
+\setlength{\cslhangindent}{1.5em}
+\newlength{\csllabelwidth}
+\setlength{\csllabelwidth}{3em}
+\newenvironment{CSLReferences}[2]
+ {\begin{list}{}{%
+  \setlength{\itemindent}{0pt}
+  \setlength{\leftmargin}{0pt}
+  \setlength{\parsep}{0pt}
+  \ifodd #1
+   \setlength{\leftmargin}{\cslhangindent}
+   \setlength{\itemindent}{-1\cslhangindent}
+  \fi
+  \setlength{\itemsep}{#2\baselineskip}}}
+ {\end{list}}
+\newcommand{\CSLBlock}[1]{\hfill\break\parbox[t]{\linewidth}{\strut\ignorespaces#1\strut}}
+\newcommand{\CSLLeftMargin}[1]{\parbox[t]{\csllabelwidth}{\strut#1\strut}}
+\newcommand{\CSLRightInline}[1]{\parbox[t]{\linewidth - \csllabelwidth}{\strut#1\strut}}
+\newcommand{\CSLIndent}[1]{\hspace{\cslhangindent}#1}
+
+% ── Pandoc list/line spacing ──────────────────────────────────────────────────
+\setlength{\emergencystretch}{3em}
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+
+% ── URLs and hyperref ─────────────────────────────────────────────────────────
+\usepackage{bookmark}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{}
+\urlstyle{same}
+\hypersetup{
+$if(title)$
+  pdftitle={$title$},
+$endif$
+$if(authors)$
+  pdfauthor={$for(authors)$$authors.name$$sep$; $endfor$},
+$else$
+$if(author)$
+  pdfauthor={$for(author)$$it$$sep$; $endfor$},
+$endif$
+$endif$
+$if(keywords)$
+  pdfkeywords={$keywords$},
+$endif$
+  hidelinks,
+  pdfcreator={LaTeX via pandoc}}
+
+% ── User header-includes (from metadata) ─────────────────────────────────────
+$for(header-includes)$
+$header-includes$
+$endfor$
+
+% ── Title ─────────────────────────────────────────────────────────────────────
+$if(title)$
+\title{$title$$if(subtitle)$\\{\large $subtitle$}$endif$}
+$endif$
+
+% ── Author blocks ─────────────────────────────────────────────────────────────
+% Manual author block with superscript affiliation numbers
+% Expected structure in authors: list:
+%   - name: "First Author"
+%     affiliation_number: 1
+%   - name: "Second Author"
+%     affiliation_number: 2
+% And affiliations: list:
+%   - number: 1
+%     dept: "Department, Organization, Country"
+%     email: "email@example.com"
+$if(authors)$
+\author{%
+$for(authors)$
+  \textbf{$authors.name$}$if(authors.affiliation_number)$\textsuperscript{$authors.affiliation_number$}$endif$$sep$,
+$endfor$
+  \vskip 0.5em
+$if(affiliations)$
+$for(affiliations)$
+  \textsuperscript{$affiliations.number$}~$if(affiliations.dept)$$affiliations.dept$$endif$\\
+  $if(affiliations.email)$\textit{$affiliations.email$}\\$endif$
+$endfor$
+$endif$
+  \vskip 0.3em
+}
+$else$
+$if(author)$
+\author{$for(author)$$it$$sep$ \and $endfor$}
+$endif$
+$endif$
+
+\date{}
+
+% =============================================================================
+\begin{document}
+
+\maketitle
+
+$if(abstract)$
+\noindent\textbf{ABSTRACT}
+
+$abstract$
+
+$endif$
+
+$if(keywords)$
+\noindent\textbf{Keywords:} $keywords$
+
+\vskip 1em
+$endif$
+
+$body$
+
+\end{document}

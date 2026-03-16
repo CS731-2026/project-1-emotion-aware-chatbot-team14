@@ -1,0 +1,13 @@
+.ignore
+
+# Pipeline-generated output — do not commit
+runs/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.DS_Store
