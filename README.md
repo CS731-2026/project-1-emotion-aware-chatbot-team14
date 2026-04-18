@@ -1,184 +1,232 @@
-# COMPSCI-731 Human-Robot Interaction — Team Project
+# CS731 — Emotion-Aware Chatbot
+
+**Group**: [Your group name]  
+**Members**: [Member 1], [Member 2], [Member 3]  
+**Course**: COMPSYS 731 / CS731, University of Auckland
+
+---
+
+## Project Overview
+
+An emotion-aware chatbot that detects facial expressions in real time via webcam and tailors its conversational responses accordingly. The system uses a custom-trained CNN for emotion recognition and OpenAI's API for the chatbot.
+
+---
 
 ## Repository Structure
 
 ```
-.
-├── report/               Academic paper (Markdown → LaTeX → PDF)
-├── training_pipeline/    ML experimentation harness and model training
-├── web_application/      Full-stack application (frontend, backend, model service)
-└── Makefile              Root orchestration — delegates to each sub-project
+project-root/
+├── README.md
+├── requirements.txt
+├── .env.example              ← copy to .env and add your API key
+├── main.py                   ← entry point (terminal application)
+├── face_detector.py          ← face detection (YOLOv8, RetinaFace, MediaPipe, Haar)
+├── emotion_inferencer.py     ← inference wrapper + emotion buffer
+├── chatbot.py                ← LLM integration + multi-model comparison
+├── speech.py                 ← FasterWhisper speech-to-text
+├── data/
+│   ├── dataset_preparation.py  ← build train/val splits from labels.csv
+│   └── emotion_dataset.py      ← PyTorch Dataset class + MixUp/CutMix
+├── models/
+│   ├── model.py                ← all model architectures (timm + ChatBox_V1)
+│   ├── train.py                ← training loop with curves + checkpointing
+│   ├── evaluate.py             ← confusion matrix, per-class metrics
+│   └── checkpoints/            ← saved .pt files (download separately)
+├── notebooks/
+│   └── CS731_Face_Detection_Comparison.ipynb
+├── results/
+│   ├── face_detection/
+│   ├── training/
+│   └── evaluation/
+└── weights/
+    └── yolov8n-face.pt         ← auto-downloaded on first run
 ```
 
 ---
 
-## report/
+## Setup
 
-The report is written in Markdown and compiled to a formatted PDF via pandoc and LaTeX. A separate DOCX output is also available.
-
-See [report/README.md](report/README.md) for full authoring instructions, citation syntax, and template switching.
-
-**Common commands (run from repo root):**
-
-| Command | What it does |
-|---|---|
-| `make report` | Build PDF |
-| `make report-docx` | Build DOCX |
-| `make report-clean` | Remove build artefacts |
-| `make report-deps` | Install dependencies |
-
----
-
-## training_pipeline/
-
-A modular ML experimentation harness built on PyTorch. Handles CLI argument parsing, config merging (multiple YAML files deep-merged left to right), per-step persistence to disk, and automatic run resumption.
-
-See [training_pipeline/README.md](training_pipeline/README.md) for full documentation including Store, Steps, Routines, serialisation, and the working example pipeline.
-
-**Key concepts:**
-
-- **Store** — the only channel through which steps pass data; serialised to disk after each step
-- **Step** — a plain function `(store, config) -> Success | Failure`
-- **Routine** — ordered list of steps with a named `runs/` directory
-
----
-
-## web_application/
-
-A three-service web application. The frontend calls the backend, which forwards requests to the Python model service.
-
-### Request flow
-
-```
-Browser
-  └─▶ SvelteKit (SSR server)         localhost:5173
-        └─▶ Express backend           localhost:3000
-              └─▶ FastAPI model service   localhost:8000
-                    └─▶ ML model (future)
-```
-
-All three services run independently. The browser only ever talks to SvelteKit. SvelteKit's server-side load functions call Express. Express forwards to the model service.
-
-### Services
-
-#### frontend — SvelteKit (TypeScript)
-
-| Tool | Purpose | Docs |
-|---|---|---|
-| [SvelteKit](https://kit.svelte.dev) | Meta-framework (routing, SSR, build) | kit.svelte.dev |
-| [Svelte 5](https://svelte.dev) | UI component framework | svelte.dev |
-| [Vite 8](https://vite.dev) | Dev server and bundler | vite.dev |
-| [TypeScript](https://www.typescriptlang.org) | Type checking | typescriptlang.org |
-| [svelte-check](https://github.com/sveltejs/language-tools) | Svelte-aware type checking | github.com/sveltejs/language-tools |
-
-#### backend — Express (TypeScript)
-
-| Tool | Purpose | Docs |
-|---|---|---|
-| [Express 4](https://expressjs.com) | HTTP server and routing | expressjs.com |
-| [TypeScript](https://www.typescriptlang.org) | Type checking | typescriptlang.org |
-| [tsx](https://github.com/privatenumber/tsx) | Run TypeScript directly (dev) | github.com/privatenumber/tsx |
-| [dotenv](https://github.com/motdotla/dotenv) | Environment variable loading | github.com/motdotla/dotenv |
-
-#### model_service — FastAPI (Python)
-
-| Tool | Purpose | Docs |
-|---|---|---|
-| [FastAPI](https://fastapi.tiangolo.com) | HTTP server and routing | fastapi.tiangolo.com |
-| [Uvicorn](https://www.uvicorn.org) | ASGI server | uvicorn.org |
-| [Pydantic](https://docs.pydantic.dev) | Request/response validation (bundled with FastAPI) | docs.pydantic.dev |
-| [python-dotenv](https://github.com/theskumar/python-dotenv) | Environment variable loading | github.com/theskumar/python-dotenv |
-
-### Getting started
+### 1. Clone the repository
 
 ```bash
-# Install all dependencies (first time only)
-make web-install
-
-# Start all three services
-make web-dev
+git clone https://github.com/your-org/your-repo.git
+cd your-repo
 ```
 
-`make web-install` creates a Python virtual environment at `model_service/.venv` — Python packages are isolated from your system environment.
+### 2. Create and activate environment
 
-### Environment variables
+```bash
+# Using conda (recommended)
+conda create -n cs731 python=3.10
+conda activate cs731
 
-Each service has a `.env` file (gitignored) and a committed `.env.example`:
+# Or using venv
+python -m venv .venv
+source .venv/bin/activate        # macOS / Linux
+.venv\Scripts\activate           # Windows
+```
 
-| Service | File | Key variables |
-|---|---|---|
-| backend | `backend/.env` | `PORT`, `NODE_ENV`, `MODEL_SERVICE_URL` |
-| frontend | `frontend/.env` | `BACKEND_URL` |
-| model_service | `model_service/.env` | `PORT`, `HOST` |
+### 3. Install dependencies
 
-Copy `.env.example` to `.env` when setting up a new environment.
+```bash
+pip install -r requirements.txt
+```
 
----
+### 4. Set your OpenAI API key
 
-## Conventions
+```bash
+cp .env.example .env
+# Edit .env and set: OPENAI_API_KEY=sk-...
+```
 
-### Frontend (SvelteKit / Svelte 5)
+### 5. Download trained models
 
-**Svelte syntax — always use Svelte 5 runes:**
-- State: `let x = $state(value)` — never `let x = value` for reactive vars
-- Derived: `let y = $derived(expr)` — never `$: y = expr`
-- Side effects: `$effect(() => { ... })` — never `$: { ... }` blocks
-- Props: `let { prop } = $props()` — never `export let prop`
-- Event handlers: `onclick={fn}` — never `on:click={fn}`
-- Snippets: `{#snippet name()}{/snippet}` and `{@render name()}` — never named slots
+Pre-trained checkpoints are hosted on REANNZ FileSender (too large for GitHub):
 
-**File structure:**
-- Components live in `src/lib/components/`
-- Import components via the `$lib` alias: `import Foo from "$lib/components/Foo.svelte"`
-- Server-side logic (data loading, backend calls) goes in `+page.server.ts`
-- Client-side-only logic goes in `+page.ts`
-- The browser must never call the Express backend or model service directly
+```
+[Link to REANNZ FileSender — add before submission]
+```
 
-**TypeScript:**
-- All `.svelte` files use `<script lang="ts">`
-- Use `$env/static/private` for server-only env vars (e.g. `BACKEND_URL`)
-- Run `npx svelte-kit sync` after adding new env vars or routes to regenerate types
-
-**Reference:** see `src/.example/Svelte5Reference.svelte` for a local Svelte 5 cheat sheet (not built, not a route).
+Place downloaded `.pt` files in `models/checkpoints/`.
 
 ---
 
-### Backend (Express / TypeScript)
+## Dataset Setup
 
-**Project structure — one file per responsibility:**
-- `src/index.ts` — server startup only; no business logic
-- `src/app.ts` — Express app creation, middleware registration, route mounting
-- `src/config/env.ts` — all environment variables defined in one place
-- `src/routes/<domain>.router.ts` — one router file per domain (e.g. `prediction.router.ts`)
-- `src/routes/index.ts` — aggregates all routers; the only file that knows all route prefixes
-- `src/middleware/errorHandler.ts` — all `next(err)` calls land here
+Download **AffectNet-HQ** (provided by course) and place it as:
 
-**Routing conventions:**
-- All API routes are prefixed `/api/v1/`
-- Each router file defines routes relative to its mount point (e.g. `router.post("/")` not `router.post("/predict")`)
-- Every async route handler wraps its body in `try/catch` and calls `next(err)` on failure
+```
+1_Dataset/
+├── labels.csv
+├── anger/
+├── contempt/
+├── disgust/
+├── fear/
+├── happy/
+├── neutral/
+├── sad/
+└── surprise/
+```
 
-**TypeScript:**
-- `strict: true` is enforced
-- Run `npm run typecheck` (`tsc --noEmit`) before committing — no ESLint
-- Use `npm run dev` in development (`tsx watch`), `npm run build` + `npm start` for production
+Then run the preparation script:
+
+```bash
+# Ekman's 6 emotions (no contempt, no neutral) — 85/15 split
+python data/dataset_preparation.py --mode ekman6
+
+# Ekman's 7 (includes neutral) — 70/15/15 split
+python data/dataset_preparation.py --mode ekman7 --test_size 0.15
+```
+
+This creates `data/splits/ekman6_train.csv` and `data/splits/ekman6_val.csv`.
 
 ---
 
-### Model Service (FastAPI / Python)
+## Training
 
-**Project structure:**
-- `main.py` — entry point; runs uvicorn; no business logic
-- `app.py` — FastAPI app creation and router registration
-- `config.py` — all environment variables; loads `.env` via `python-dotenv`
-- `routers/<domain>.py` — one router file per domain (e.g. `prediction.py`)
+```bash
+# Train a single model
+python models/train.py --model swin_tiny --mode ekman6 --epochs 20
 
-**Routing conventions:**
-- All routes are prefixed `/api/v1/` (mounted in `app.py`)
-- Use Pydantic `BaseModel` for all request and response bodies — no raw `dict`
-- Route functions are `async def`
+# Train all 5 comparison models (Group 15 style)
+python models/train.py --all --mode ekman6 --epochs 20
 
-**Python environment:**
-- Always work inside the virtual environment at `model_service/.venv`
-- Add new packages to `requirements.txt`; run `make web-install` to install
-- Never install packages globally or into conda base for this project
+# ChatBox_V1 (7-class, Team 7 style)
+python models/train.py --model chatbox_v1 --mode ekman7 --epochs 30
+
+# With custom learning rate
+python models/train.py --model convnext_tiny --lr 0.0001 --epochs 23
+```
+
+Checkpoints saved to `models/checkpoints/`.  
+Training curves saved to `results/training/`.
+
+---
+
+## Evaluation
+
+```bash
+python models/evaluate.py \
+  --checkpoint models/checkpoints/swin_tiny_ekman6_best.pt \
+  --split val
+```
+
+Outputs: accuracy, per-class F1, confusion matrix PNG.
+
+---
+
+## Running the Chatbot
+
+```bash
+# Full pipeline (webcam + voice + chatbot)
+python main.py --checkpoint models/checkpoints/swin_tiny_ekman6_best.pt --voice
+
+# No webcam (for testing — fixed mock emotion)
+python main.py --no_webcam --mock_emotion happy
+
+# No webcam, no voice (keyboard only)
+python main.py --no_webcam --no_voice
+```
+
+**Controls in terminal:**
+- Type your message and press Enter to send
+- Press Enter with empty input to record voice (if `--voice` enabled)
+- Type `reset` to clear conversation history
+- Type `quit` to exit
+
+---
+
+## Face Detection Comparison
+
+Open the notebook to reproduce the face detection comparison:
+
+```bash
+jupyter notebook notebooks/CS731_Face_Detection_Comparison.ipynb
+```
+
+Results saved to `results/face_detection/`.
+
+---
+
+## LLM Comparison
+
+```python
+from chatbot import compare_llms, save_comparison_results
+
+test_msgs = [
+    {'text': "I've been feeling quite lonely lately.", 'emotion': 'sad'},
+    {'text': "I had a wonderful day today!", 'emotion': 'happy'},
+    {'text': "I'm not sure how I feel about everything.", 'emotion': 'neutral'},
+]
+
+results = compare_llms(test_msgs, models=['o4-mini', 'gpt-4o', 'o3'])
+save_comparison_results(results, 'results/llm_comparison.csv')
+```
+
+---
+
+## Environment Variables
+
+```bash
+# .env.example — copy to .env and fill in
+OPENAI_API_KEY=sk-your-key-here
+```
+
+---
+
+## Known Issues & Notes
+
+- **RetinaFace**: has TensorFlow dependency conflicts on Python 3.12+. It is evaluated in the notebook but skipped gracefully in the live pipeline.
+- **MediaPipe**: not available for Python 3.13 at time of writing. Skipped gracefully.
+- **YOLOv8n-face weights**: auto-downloaded from GitHub on first run. Requires internet connection.
+- **Windows Long Paths**: if you hit path-too-long errors on Windows, enable long path support in Group Policy or registry.
+
+---
+
+## References
+
+- AffectNet-HQ: Mollahosseini et al. (2019), IEEE Transactions on Affective Computing
+- YOLOv8-face: https://github.com/akanametov/yolov8-face
+- timm: Wightman (2019), PyTorch Image Models
+- FasterWhisper: https://github.com/SYSTRAN/faster-whisper
+- Ekman (1992): An argument for basic emotions
