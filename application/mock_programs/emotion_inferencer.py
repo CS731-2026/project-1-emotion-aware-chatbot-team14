@@ -28,9 +28,7 @@ import torch.nn.functional as F
 from PIL import Image
 from torchvision import transforms
 
-import sys
-sys.path.insert(0, str(Path(__file__).resolve().parents[0]))
-from models.model import build_model
+from model import build_model
 
 # ── Default emotion lists ──────────────────────────────────────────────────────
 EKMAN_6 = ['angry', 'disgust', 'fear', 'happy', 'sad', 'surprise']
