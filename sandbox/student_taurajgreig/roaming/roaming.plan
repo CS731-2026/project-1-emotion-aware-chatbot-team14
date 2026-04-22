@@ -1,0 +1,96 @@
+- Set up the Python face-detection test environment on the MacBook
+  OpenCV webcam example:
+  https://www.geeksforgeeks.org/python/face-detection-using-python-and-opencv-with-webcam/
+  Ultralytics repo:
+  https://github.com/ultralytics/ultralytics
+  MediaPipe face detection docs:
+  https://mediapipe.readthedocs.io/en/latest/solutions/face_detection.html
+  Face detection implementation walkthrough:
+  https://denshub.com/en/face-detection-tracking-models/
+
+- Pick 2 face-localisation libraries to test
+  Library option 1: MediaPipe
+  https://mediapipe.readthedocs.io/en/latest/solutions/face_detection.html
+  Library option 2: RetinaFace Python package
+  https://github.com/serengil/retinaface
+  Extra comparison article:
+  https://medium.com/pythons-gurus/what-is-the-best-face-detector-ab650d8c1225
+
+- Pick 2 face-detection models to test
+  Model option 1: BlazeFace via MediaPipe
+  https://mediapipe.readthedocs.io/en/latest/solutions/face_detection.html
+  Model option 2: RetinaFace
+  https://github.com/serengil/retinaface
+  YOLO-style practical example:
+  https://denshub.com/en/face-detection-tracking-models/
+
+- Build a minimal Python webcam script that draws face boxes or landmarks
+  OpenCV webcam skeleton:
+  https://www.geeksforgeeks.org/python/face-detection-using-python-and-opencv-with-webcam/
+  MediaPipe webcam example:
+  https://mediapipe.readthedocs.io/en/latest/solutions/face_detection.html
+  YOLO webcam example:
+  https://denshub.com/en/face-detection-tracking-models/
+
+- Add rough timing or FPS output to the webcam test
+  Practical real-time implementation examples:
+  https://denshub.com/en/face-detection-tracking-models/
+
+- Test each option with a frontal face in good lighting
+  Use your webcam test script and log whether detection is immediate and stable
+
+- Test each option with a turned head
+  Use your webcam test script and log whether the box stays locked on the face
+
+- Test each option in dimmer lighting
+  Use your webcam test script and log missed detections and jitter
+
+- Test each option with natural movement in frame
+  Use your webcam test script and log stability while leaning or shifting
+
+- Record quick notes on stability, speed, and detection quality
+  Comparison reading:
+  https://medium.com/pythons-gurus/what-is-the-best-face-detector-ab650d8c1225
+  Practical comparison and code:
+  https://denshub.com/en/face-detection-tracking-models/
+
+- Choose the face-localisation approach to recommend
+  Base the decision on your notes from the 4 webcam conditions
+
+- Set up FasterWhisper in Python
+  PyPI:
+  https://pypi.org/project/faster-whisper/
+  Repo:
+  https://github.com/SYSTRAN/faster-whisper
+  Guide:
+  https://generalistprogrammer.com/tutorials/faster-whisper-python-package-guide
+
+- Make a short speech test phrase list
+  Include:
+  1. normal sentence
+  2. technical sentence
+  3. short command
+  4. fast sentence
+  5. slightly mumbled sentence
+
+- Run FasterWhisper on the test phrases
+  Official package page with usage example:
+  https://pypi.org/project/faster-whisper/
+
+- Record transcription quality and delay
+  FasterWhisper benchmarks and usage:
+  https://pypi.org/project/faster-whisper/
+
+- Choose the speech-recognition approach to recommend
+  SpeechRecognition PyPI:
+  https://pypi.org/project/SpeechRecognition/
+  SpeechRecognition microphone tutorial:
+  https://www.mygreatlearning.com/blog/speech-recognition-python/
+  FasterWhisper PyPI:
+  https://pypi.org/project/faster-whisper/
+
+- Likely stack to test first
+  Microphone capture:
+  https://pypi.org/project/SpeechRecognition/
+  Transcription:
+  https://pypi.org/project/faster-whisper/
