@@ -7,3 +7,9 @@ ResNet-18 is used as a general-purpose baseline. Unlike POSTER++, it was not des
 Ada-DF is used as a general FER-specific comparison model. It was proposed for facial expression recognition more broadly rather than for RAF-DB alone, and the paper explicitly evaluates it on RAF-DB, AffectNet, and SFEW. This gives us a comparison point against a modern FER method that addresses annotation ambiguity in expression datasets.
 
 Together, these three models provide a balanced comparison framework: POSTER++ represents a strong RAF-DB benchmark, ResNet-18 represents a standard baseline, and Ada-DF represents a modern FER-specific method. Comparing our internal model against all three helps us show whether it is competitive with dataset-established results, whether it improves over a plain classification backbone, and whether it remains strong relative to current FER-focused approaches.
+
+He, K., Zhang, X., Ren, S., & Sun, J. (2016). Deep residual learning for image recognition. In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR) (pp. 770-778).
+
+Liu, S., Xu, Y., Wan, T., & Kui, X. (2024). Ada-DF: An adaptive label distribution fusion network for facial expression recognition. arXiv preprint arXiv:2404.15714.
+
+Mao, J., Xu, R., Yin, X., Chang, Y., Nie, B., & Huang, A. (2023). POSTER++: A simpler and stronger facial expression recognition network. arXiv preprint arXiv:2301.12149.
