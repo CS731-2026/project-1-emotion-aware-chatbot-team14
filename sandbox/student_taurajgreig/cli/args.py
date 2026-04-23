@@ -1,6 +1,8 @@
 """Command-line argument parsing and service creation."""
 
 import argparse
+# from services.whisper_cpp import WhisperCppTranscriptionService
+from services.whisper_pp import WhisperCppTranscriptionService
 from services import (
     MockTranscriptionService,
     WhisperTranscriptionService,
@@ -77,19 +79,25 @@ def create_service(service_name, model_name=None):
     Raises:
         ValueError: If service_name is unknown
     """
+def create_service(service_name, model_name):
+
     if service_name == "mock":
-        print("[INIT] Using MockTranscriptionService (no model loaded)\n")
+
         return MockTranscriptionService()
-    elif service_name == "whisper":
-        print(f"[INIT] Using WhisperTranscriptionService ({model_name} model)\n")
+
+    if service_name == "whisper":
+
         return WhisperTranscriptionService(model_name)
-    elif service_name == "whisper-distilled":
-        print(
-            f"[INIT] Using WhisperDistilledTranscriptionService ({model_name} model)\n"
-        )
+
+    if service_name == "whisper-distilled":
+
         return WhisperDistilledTranscriptionService(model_name)
-    elif service_name == "openai":
-        print("[INIT] Using OpenAIWhisperTranscriptionService (cloud API)\n")
-        return OpenAIWhisperTranscriptionService()
-    else:
-        raise ValueError(f"Unknown service: {service_name}")
+
+    if service_name == "whisper-cpp":
+
+        return WhisperCppTranscriptionService(
+            model_name=model_name,
+            repo_dir="sandbox/student_taurajgreig/services/wisper.cpp/wpp",
+        )
+    
+    raise ValueError(f"Unknown service: {service_name}")
