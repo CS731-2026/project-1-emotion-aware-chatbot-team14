@@ -1,17 +1,23 @@
 """
 Speech recognition with voice activation detection.
 Terminal-only mode with live mic volume monitoring.
+Uses pluggable transcription services.
 Press Ctrl+C to quit.
+
+Usage:
+  python speech_recognition_test.py              # Uses mock service (no model)
+  python speech_recognition_test.py --service mock   # Mock service
+  python speech_recognition_test.py --service whisper --model tiny  # Whisper (if available)
 """
 
 import time
-from faster_whisper import WhisperModel
-import torch
+import argparse
 import os
-from huggingface_hub import snapshot_download
 from dotenv import load_dotenv
 import sounddevice as sd
 import numpy as np
+
+from services import MockTranscriptionService, WhisperTranscriptionService
 
 
 # ── Tunable Constants ─────────────────────────────────────────────────────
@@ -22,44 +28,12 @@ CHANNELS = 1  # Mono audio
 CHUNK_SIZE = 512  # Samples per recording chunk
 
 # Voice Activation Detection (VAD) thresholds
-SPEECH_THRESHOLD = 0.015  # RMS level to trigger recording (0.0 - 1.0)
+SPEECH_THRESHOLD = 0.0005  # RMS level to trigger recording (0.0 - 1.0)
 SILENCE_DURATION = 0.6  # Seconds of silence to stop recording
 
 # Recording duration limits
 MIN_SPEECH_DURATION = 0.4  # Minimum recording duration to process (seconds)
 MAX_SPEECH_DURATION = 30  # Maximum recording duration (seconds)
-
-
-# ── Device Selection ───────────────────────────────────────────────────────
-
-def get_device_priority():
-    """Get ordered list of devices to try: CUDA -> CPU"""
-    devices = []
-    if torch.cuda.is_available():
-        devices.append(("cuda", "int8_float16"))
-    devices.append(("cpu", "int8"))
-    return devices
-
-
-def select_device_with_fallback(model_name="base"):
-    """Try devices in order until one works: CUDA -> CPU"""
-    devices = get_device_priority()
-
-    for device, compute_type in devices:
-        try:
-            print(f"🔄 Trying {device.upper()}...", end=" ", flush=True)
-            model = WhisperModel(
-                model_name,
-                device=device,
-                compute_type=compute_type,
-            )
-            print(f"✓ Success!")
-            return device, compute_type, model
-        except (ValueError, RuntimeError) as e:
-            print(f"✗ Failed")
-            continue
-
-    raise RuntimeError("No compatible device found")
 
 
 # ── Audio Utilities ───────────────────────────────────────────────────────
@@ -142,70 +116,14 @@ def record_with_vad():
     return audio_data
 
 
-# ── Model Management ───────────────────────────────────────────────────────
+# ── Main Loop ───────────────────────────────────────────────────
 
-def check_model_cached(model_name="base"):
-    """Check if Whisper model is cached"""
-    cache_dir = os.path.expanduser("~/.cache/huggingface/hub")
-    model_cache = os.path.join(cache_dir, f"models--openai--whisper-{model_name}")
-    return os.path.exists(model_cache)
+def main(service):
+    """Main application
 
-
-def download_model(model_name="base"):
-    """Download Whisper model"""
-    print(f"\n{'='*60}")
-    print(f"📥 Downloading Whisper '{model_name}' model")
-    print(f"{'='*60}")
-
-    repo_id = f"openai/whisper-{model_name}"
-    cache_dir = os.path.expanduser("~/.cache/huggingface/hub")
-
-    start_time = time.time()
-    snapshot_download(
-        repo_id,
-        cache_dir=cache_dir,
-        resume_download=True,
-        local_files_only=False,
-    )
-    elapsed = time.time() - start_time
-    print(f"✓ Download complete in {elapsed:.1f}s\n")
-
-
-def load_whisper_model(model_name="base"):
-    """Load Whisper model with automatic device fallback"""
-    print(f"[{time.strftime('%H:%M:%S')}] Loading Whisper '{model_name}'...")
-
-    if not check_model_cached(model_name):
-        download_model(model_name)
-
-    print(f"[{time.strftime('%H:%M:%S')}] Detecting compatible device...")
-    start_time = time.time()
-    device, compute_type, model = select_device_with_fallback(model_name)
-    elapsed = time.time() - start_time
-
-    print(f"[{time.strftime('%H:%M:%S')}] ✓ Using {device.upper()} in {elapsed:.2f}s\n")
-
-    return model
-
-
-# ── Transcription ───────────────────────────────────────────────────────
-
-def transcribe_audio(audio_data, model):
-    """Transcribe audio"""
-    print(f"[{time.strftime('%H:%M:%S')}] Transcribing...")
-
-    start_time = time.time()
-    segments, info = model.transcribe(audio_data, beam_size=5)
-    transcript = " ".join([seg.text for seg in segments]).strip()
-    elapsed = time.time() - start_time
-
-    return transcript, info.language, elapsed
-
-
-# ── Main Loop ───────────────────────────────────────────────────────
-
-def main():
-    """Main application"""
+    Args:
+        service: TranscriptionService instance
+    """
     # Load environment
     env_path = os.path.join(os.path.dirname(__file__), "../../.env")
     if os.path.exists(env_path):
@@ -215,12 +133,10 @@ def main():
             os.environ["HF_TOKEN"] = token
             print("[INIT] ✓ HF token loaded\n")
 
-    # Setup model
-    model = load_whisper_model("base")
-
     print("="*60)
     print("🎤 SPEECH RECOGNITION")
     print("="*60)
+    print(f"Service: {service.__class__.__name__}")
     print(f"Config:")
     print(f"  • Speech Threshold: {SPEECH_THRESHOLD:.4f}")
     print(f"  • Min Duration: {MIN_SPEECH_DURATION}s")
@@ -236,7 +152,10 @@ def main():
             if audio_data is None:
                 continue
 
-            transcript, language, elapsed = transcribe_audio(audio_data, model)
+            print(f"[{time.strftime('%H:%M:%S')}] Transcribing...")
+            start_time = time.time()
+            transcript, language = service.transcribe(audio_data)
+            elapsed = time.time() - start_time
 
             if transcript:
                 print(f"[{time.strftime('%H:%M:%S')}] ✅ TRANSCRIBED in {elapsed:.2f}s")
@@ -251,4 +170,41 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(
+        description="Speech recognition with voice activation detection",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python speech_recognition_test.py              # mock (default)
+  python speech_recognition_test.py --service mock  # explicit mock
+  python speech_recognition_test.py --service whisper --model tiny  # Whisper
+        """,
+    )
+    parser.add_argument(
+        "--service",
+        type=str,
+        default="mock",
+        choices=["mock", "whisper"],
+        help="Transcription service (default: mock - no model)",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="tiny",
+        choices=["tiny", "base", "small", "medium", "large-v3"],
+        help="Model size for Whisper (default: tiny)",
+    )
+
+    args = parser.parse_args()
+
+    # Create service based on argument
+    if args.service == "mock":
+        print("[INIT] Using MockTranscriptionService (no model loaded)\n")
+        service = MockTranscriptionService()
+    elif args.service == "whisper":
+        print(f"[INIT] Using WhisperTranscriptionService ({args.model} model)\n")
+        service = WhisperTranscriptionService(args.model)
+    else:
+        raise ValueError(f"Unknown service: {args.service}")
+
+    main(service)
