@@ -1,13 +1,21 @@
+# Core dependencies - required for all services
+numpy>=1.24.0
+sounddevice>=0.4.5
+soundfile>=0.12.1
+python-dotenv>=1.0.0
+
+# Optional service dependencies - install only what you need:
+#   pip install -r services/requirements-base.txt     (always)
+#   pip install -r services/requirements-whisper.txt  (for Whisper models)
+#   pip install -r services/requirements-openai.txt   (future: for OpenAI API)
+
+# Legacy dependencies (kept for face detection and other modules)
 opencv-python>=4.8.0
 mediapipe>=0.10.0
 torch>=2.0.0
 torchvision>=0.15.0
-faster-whisper>=0.10.0
 SpeechRecognition>=3.10.0
-numpy>=1.24.0
 ultralytics>=8.0.0
 supervision>=0.1.0
 huggingface-hub>=0.16.0
-python-dotenv>=1.0.0
-sounddevice>=0.4.5
-soundfile>=0.12.1
+openai>=1.0.0

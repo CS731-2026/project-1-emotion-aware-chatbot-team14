@@ -1,13 +1,21 @@
-"""Whisper transcription service.
+"""Distilled Whisper transcription service.
+
+Distilled models are knowledge-distilled versions of larger Whisper models,
+optimized for faster inference with minimal accuracy loss.
+
+Available models:
+  - distil-small.en (optimized from small)
+  - distil-medium.en (optimized from medium)
+  - distil-large-v3 (optimized from large-v3)
 
 NOTE: Requires faster-whisper library and sufficient system resources.
       Currently disabled due to memory constraints on this machine.
 
 To use:
-  1. Ensure faster-whisper is installed: pip install faster-whisper
-  2. Update speech_recognition_test.py to import and use WhisperTranscriptionService
+  1. Ensure faster-whisper is installed
+  2. Update speech_recognition_test.py to use WhisperDistilledTranscriptionService
   3. Change: service = MockTranscriptionService()
-     To:     service = WhisperTranscriptionService("tiny")
+     To:     service = WhisperDistilledTranscriptionService("distil-small.en")
 """
 
 import numpy as np
@@ -20,8 +28,10 @@ from .base import TranscriptionService
 from faster_whisper import WhisperModel
 
 
-class WhisperTranscriptionService(TranscriptionService):
-    """Whisper transcription service using faster-whisper.
+class WhisperDistilledTranscriptionService(TranscriptionService):
+    """Distilled Whisper transcription service using faster-whisper.
+
+    Distilled models offer a good balance between speed and accuracy.
 
     Required dependencies: faster-whisper, torch, huggingface-hub
     Install with: pip install -r services/requirements-whisper.txt
@@ -33,11 +43,11 @@ class WhisperTranscriptionService(TranscriptionService):
     REQUIRES_DEPS = ["faster_whisper", "torch", "huggingface_hub"]
     REQUIREMENTS_FILE = "requirements-whisper.txt"
 
-    def __init__(self, model_name="tiny"):
-        """Initialize Whisper model.
+    def __init__(self, model_name="distil-small.en"):
+        """Initialize Distilled Whisper model.
 
         Args:
-            model_name: Model size (tiny, base, small, medium, large-v3)
+            model_name: Model size (distil-small.en, distil-medium.en, distil-large-v3)
         """
         self.model_name = model_name
         self.model = self._load_model(model_name)
@@ -53,20 +63,22 @@ class WhisperTranscriptionService(TranscriptionService):
             return "cpu", "int8"
 
     @staticmethod
-    def _check_model_cached(model_name="base"):
+    def _check_model_cached(model_name="distil-small.en"):
         """Check if Whisper model is cached"""
         cache_dir = os.path.expanduser("~/.cache/huggingface/hub")
-        model_cache = os.path.join(cache_dir, f"models--openai--whisper-{model_name}")
+        # Convert model name to cache directory name
+        cache_name = model_name.replace(".", "-")
+        model_cache = os.path.join(cache_dir, f"models--distil-whisper--{cache_name}")
         return os.path.exists(model_cache)
 
     @staticmethod
-    def _download_model(model_name="base"):
-        """Download Whisper model"""
+    def _download_model(model_name="distil-small.en"):
+        """Download Distilled Whisper model"""
         print(f"\n{'='*60}")
-        print(f"📥 Downloading Whisper '{model_name}' model")
+        print(f"📥 Downloading Whisper Distilled '{model_name}' model")
         print(f"{'='*60}")
 
-        repo_id = f"openai/whisper-{model_name}"
+        repo_id = f"distil-whisper/{model_name}"
         cache_dir = os.path.expanduser("~/.cache/huggingface/hub")
 
         start_time = time.time()
@@ -79,9 +91,9 @@ class WhisperTranscriptionService(TranscriptionService):
         elapsed = time.time() - start_time
         print(f"✓ Download complete in {elapsed:.1f}s\n")
 
-    def _load_model(self, model_name="base"):
-        """Load Whisper model with automatic device fallback"""
-        print(f"[{time.strftime('%H:%M:%S')}] Loading Whisper '{model_name}'...")
+    def _load_model(self, model_name="distil-small.en"):
+        """Load Distilled Whisper model with automatic device fallback"""
+        print(f"[{time.strftime('%H:%M:%S')}] Loading Whisper Distilled '{model_name}'...")
 
         if not self._check_model_cached(model_name):
             self._download_model(model_name)
@@ -101,7 +113,7 @@ class WhisperTranscriptionService(TranscriptionService):
         return model
 
     def transcribe(self, audio_data: np.ndarray) -> tuple[str, str, float]:
-        """Transcribe audio using Whisper.
+        """Transcribe audio using Distilled Whisper.
 
         Args:
             audio_data: numpy array of audio samples (float32)

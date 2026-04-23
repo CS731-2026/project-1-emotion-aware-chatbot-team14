@@ -15,6 +15,7 @@
 #
 # Sandbox/Experiments targets:
 #   make sandbox-init              Initialize sandbox student environment venv
+#   make sandbox-init-whisper      Install Whisper service dependencies
 #   make sandbox-activate          Activate sandbox student environment
 #   make sandbox-test-face         Run face detection test in sandbox
 #   make sandbox-test-speech       Run speech recognition test in sandbox
@@ -33,7 +34,8 @@ EXP_PYTHON := $(EXP_VENV)/bin/python
 
 .PHONY: web-install web-dev web-typecheck web-build \
         report report-docx report-clean report-deps \
-        sandbox-init sandbox-activate sandbox-test-face sandbox-test-speech experiments-init experiments-dev
+        sandbox-init sandbox-init-whisper sandbox-activate sandbox-test-face sandbox-test-speech \
+        experiments-init experiments-dev
 
 # ── Web application ───────────────────────────────────────────────────────────
 
@@ -83,6 +85,10 @@ sandbox-init: $(SANDBOX_VENV)
 	$(SANDBOX_PYTHON) -m pip install --upgrade pip
 	$(SANDBOX_PYTHON) -m pip install -r sandbox/student_taurajgreig/requirements.txt
 	@echo "✓ Sandbox environment initialized"
+
+sandbox-init-whisper: sandbox-init
+	$(SANDBOX_PYTHON) -m pip install -r sandbox/student_taurajgreig/services/requirements-whisper.txt
+	@echo "✓ Whisper service dependencies installed"
 
 sandbox-activate:
 	bash --init-file sandbox-activate.sh -i
