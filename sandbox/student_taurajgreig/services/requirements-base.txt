@@ -1,0 +1,2 @@
+# Base dependencies - required for all services
+numpy>=1.24.0
