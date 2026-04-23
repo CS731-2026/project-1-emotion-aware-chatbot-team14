@@ -16,7 +16,7 @@ SILENCE_DURATION = 0.6  # Seconds of silence to stop recording
 # ── Recording Duration Limits ──────────────────────────────────────────────
 # Constraints on how long recordings can be
 
-MIN_SPEECH_DURATION = 0.4  # Minimum recording duration to process (seconds)
+MIN_SPEECH_DURATION = 1.2  # Minimum recording duration to process (seconds)
 MAX_SPEECH_DURATION = 30  # Maximum recording duration (seconds)
 
 # ── Debug Mode ─────────────────────────────────────────────────────────────

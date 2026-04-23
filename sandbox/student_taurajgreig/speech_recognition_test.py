@@ -1,30 +1,20 @@
 """
-Real-time speech recognition with voice activation detection.
+Real-time speech recognition with voice activity detection (VAD).
 
-Records audio and transcribes it using local Whisper models in real-time.
-Results appear in GUI window as they complete, with confidence scores.
+Records audio, transcribes speech locally with Whisper-based models, and shows
+results in a GUI as each model finishes.
 
 Press Ctrl+C to quit.
 
-Usage:
-  python speech_recognition_test.py              # Uses config (MODEL_SERVICE)
-  python speech_recognition_test.py --service mock --duration 5   # Mock service with fixed recording
-  python speech_recognition_test.py --service whisper --model tiny --duration 5  # Whisper tiny
-  python speech_recognition_test.py --service whisper-distilled --model distil-small.en  # Distilled model
-  python speech_recognition_test.py --save-audio ./audio_debug   # Save audio for inspection
+Examples:
+  python speech_recognition_test.py
+  python speech_recognition_test.py --service mock --duration 5
+  python speech_recognition_test.py --service whisper --model tiny --duration 5
+  python speech_recognition_test.py --service whisper-distilled --model distil-small.en
+  python speech_recognition_test.py --save-audio ./audio_debug
 
-Configuration:
-  Edit cli/config.py to:
-    - Change LOCAL_MODELS_TO_TEST to test different models
-    - Adjust VAD thresholds (SPEECH_THRESHOLD, SILENCE_DURATION)
-    - Set DEBUG_MODE to use manual recording or VAD
-
-Real-time Flow:
-  1. Audio is recorded using VAD (voice activation detection)
-  2. Each detected speech clip is queued for transcription
-  3. Models from LOCAL_MODELS_TO_TEST transcribe in parallel
-  4. Results appear in GUI as soon as they complete with confidence scores
-  5. Recording continues unblocked while transcription happens
+Config:
+  Edit cli/config.py to change tested models, VAD settings, and debug mode.
 """
 
 import os
@@ -32,9 +22,10 @@ import time
 import queue
 import threading
 from datetime import datetime
-from dotenv import load_dotenv
+
 import tkinter as tk
 from tkinter import scrolledtext
+from dotenv import load_dotenv
 
 from audio import AudioRecorder, save_audio
 from cli import (
@@ -54,430 +45,253 @@ from cli import (
 )
 
 
-# ── Mode Selection ────────────────────────────────────────────────────────
-
-
 def choose_recording_mode():
-    """Ask user to choose between manual or automatic recording mode.
-
-    Returns:
-        bool: True for manual mode (DEBUG), False for automatic mode (VAD)
-    """
-    print("\n" + "="*60)
+    """Return True for manual mode, False for automatic VAD mode."""
+    print("\n" + "=" * 60)
     print("🎤 RECORDING MODE")
-    print("="*60)
-    print("\nChoose recording mode:\n")
-    print("  [1] MANUAL MODE   - Press ENTER to record/stop (DEBUG)")
-    print("  [2] AUTO MODE     - Records when threshold is exceeded (VAD)")
-    print()
+    print("=" * 60)
+    print("\n[1] Manual  - press ENTER to start/stop")
+    print("[2] Auto    - record when speech is detected\n")
 
     while True:
-        choice = input("Enter choice (1 or 2): ").strip()
-        if choice == "1":
-            print("\n→ Manual mode selected (press ENTER to start/stop recording)\n")
-            return True
-        elif choice == "2":
-            print("\n→ Auto mode selected (will record when sound level exceeds threshold)\n")
-            return False
-        else:
-            print("Invalid choice. Please enter 1 or 2.")
-
-
-# ── Initialization ─────────────────────────────────────────────────────────
+        choice = input("Choose 1 or 2: ").strip()
+        if choice in {"1", "2"}:
+            manual = choice == "1"
+            mode = "Manual" if manual else "Auto"
+            print(f"\n→ {mode} mode selected\n")
+            return manual
+        print("Invalid choice. Enter 1 or 2.")
 
 
 def load_env_token():
-    """Load Hugging Face token from .env file."""
+    """Load Hugging Face token from ../../.env into HF_TOKEN."""
     env_path = os.path.join(os.path.dirname(__file__), "../../.env")
     if not os.path.exists(env_path):
         return False
 
     load_dotenv(env_path)
     token = os.getenv("HUGGING_FACE")
-    if token:
-        os.environ["HF_TOKEN"] = token
-        print("[INIT] ✓ HF token loaded")
-        return True
-    return False
+    if not token:
+        return False
 
-
-# ── UI / Display ────────────────────────────────────────────────────────────
+    os.environ["HF_TOKEN"] = token
+    print("[INIT] ✓ HF token loaded")
+    return True
 
 
 def print_startup_info(service, record_duration=None, save_audio_dir=None):
-    """Print application startup information."""
+    """Print startup configuration."""
+    if record_duration:
+        mode = f"FIXED DURATION ({record_duration}s)"
+    elif DEBUG_MODE:
+        mode = "DEBUG (manual recording)"
+    else:
+        mode = "VAD"
+
     print("=" * 60)
     print("🎤 SPEECH RECOGNITION")
     print("=" * 60)
     print(f"Service: {service.__class__.__name__}")
-    if record_duration:
-        print(f"Mode: FIXED DURATION ({record_duration}s auto-record)")
-    elif DEBUG_MODE:
-        print(f"Mode: DEBUG (key press to record)")
-    else:
-        print(f"Mode: VAD (voice activation detection)")
-    print(f"Config:")
+    print(f"Mode: {mode}")
+    print("Config:")
     print(f"  • Speech Threshold: {SPEECH_THRESHOLD:.4f}")
     print(f"  • Min Duration: {MIN_SPEECH_DURATION}s")
     print(f"  • Max Duration: {MAX_SPEECH_DURATION}s")
     print(f"  • Silence Timeout: {SILENCE_DURATION}s")
     if save_audio_dir:
-        print(f"  • Saving audio to: {save_audio_dir}")
-    print(f"\nPress Ctrl+C to quit\n")
+        print(f"  • Save Audio: {save_audio_dir}")
+    print("\nPress Ctrl+C to quit\n")
 
 
-def display_results_table(results, recording_start_time=None, recording_duration=None):
-    """Display transcription results in a formatted table.
+def format_result(model, transcript, elapsed, confidence=None):
+    """Build a result payload for the GUI queue."""
+    return {
+        "model": model,
+        "transcript": transcript,
+        "elapsed_time": elapsed,
+        "confidence": confidence,
+        "timestamp": time.time(),
+    }
 
-    Args:
-        results: List of dicts with keys: 'model', 'transcript', 'elapsed_time'
-        recording_start_time: Unix timestamp when recording started
-        recording_duration: Duration of recording in seconds
-    """
-    if not results:
+
+def enqueue_recording(recording, clip_queue, save_audio_dir):
+    """Add a recording to the transcription queue."""
+    if recording is None:
+        return
+    clip_queue.put(
+        (recording.audio_data, recording.start_time, recording.duration, save_audio_dir)
+    )
+
+
+def iter_recordings(recorder, record_duration=None, manual_mode=None):
+    """Yield recordings for the selected mode."""
+    if record_duration:
+        yield recorder.record_for_duration(record_duration)
         return
 
-    # Clear line and show results
-    print("\n")
-    print("╔" + "═"*78 + "╗")
-    print("║ ✅ RESULTS" + " "*67 + "║")
-    print("╠" + "═"*78 + "╣")
+    if manual_mode is True or (manual_mode is None and DEBUG_MODE):
+        yield recorder.record_with_key_press()
+        return
 
-    # Show recording metadata
-    if recording_start_time and recording_duration:
-        from datetime import datetime
-        start_dt = datetime.fromtimestamp(recording_start_time).strftime("%H:%M:%S")
-        print(f"║ ⏱️  Recorded at {start_dt} | Duration: {recording_duration:.2f}s" + " "*37 + "║")
-        print("╠" + "═"*78 + "╣")
+    if manual_mode is False:
+        yield from recorder.record_with_vad_continuous()
+        return
 
-    # Results table
-    for i, result in enumerate(results, 1):
-        model_name = result['model']
-        transcript = result['transcript']
-        elapsed = result['elapsed_time']
+    yield recorder.record_with_vad()
 
-        if i == 1:
-            icon = "☁️ "
+
+def transcribe_with_model(service_name, model_name, audio_data, results_queue):
+    """Run one transcription model and push its result to the queue."""
+    label = f"{service_name} - {model_name}"
+    service = create_service(service_name, model_name)
+
+    try:
+        start = time.time()
+        result = service.transcribe(audio_data)
+        elapsed = time.time() - start
+
+        if len(result) == 3:
+            transcript, _language, confidence = result
         else:
-            icon = "🔬"
+            transcript, _language = result
+            confidence = None
 
-        print(f"║ {icon} {model_name:38} {elapsed:6.2f}s" + " "*24 + "║")
-
-        if transcript:
-            # Wrap long transcripts
-            text = f"    {transcript}"
-            if len(text) > 76:
-                print(f"║ {text[:76]}" + " "*(78-len(text[:76])) + "║")
-                remaining = text[76:]
-                while remaining:
-                    chunk = remaining[:76]
-                    print(f"║ {chunk}" + " "*(78-len(chunk)) + "║")
-                    remaining = remaining[76:]
-            else:
-                print(f"║ {text}" + " "*(78-len(text)) + "║")
-        else:
-            print(f"║     ⚠️ NO SPEECH DETECTED" + " "*51 + "║")
-
-        if i < len(results):
-            print("╟" + "─"*78 + "╢")
-
-    print("╚" + "═"*78 + "╝\n")
+        results_queue.put(format_result(label, transcript, elapsed, confidence))
+    except Exception as exc:
+        results_queue.put(
+            format_result(label, f"❌ Error: {str(exc)[:60]}", 0, None)
+        )
 
 
-# ── Transcription Cycle ────────────────────────────────────────────────────
-
-
-def transcription_worker(service, queue_in, results_queue, stop_event):
-    """Background worker thread that processes audio clips from queue.
-
-    Spawns parallel transcription threads so models don't block each other.
-
-    Args:
-        service: OpenAI TranscriptionService instance
-        queue_in: Queue of (audio_data, start_time, duration, save_dir) tuples
-        results_queue: Queue to put results for GUI
-        stop_event: Threading event to signal when to stop
-    """
-    def transcribe_model(model_name, service_instance, audio_data, start_proc):
-        """Transcribe with a single model in a thread."""
-        try:
-            start_time = time.time()
-            result = service_instance.transcribe(audio_data)
-            elapsed = time.time() - start_time
-
-            # Handle both 2-tuple (legacy) and 3-tuple (with confidence) returns
-            if len(result) == 3:
-                transcript, language, confidence = result
-            else:
-                transcript, language = result
-                confidence = None
-
-            results_queue.put({
-                "model": model_name,
-                "transcript": transcript,
-                "elapsed_time": elapsed,
-                "confidence": confidence,
-                "timestamp": time.time(),
-            })
-        except Exception as e:
-            results_queue.put({
-                "model": model_name,
-                "transcript": f"❌ Error: {str(e)[:60]}",
-                "elapsed_time": 0,
-                "confidence": None,
-                "timestamp": time.time(),
-            })
-
+def transcription_worker(clip_queue, results_queue, stop_event):
+    """Process audio clips and run all configured models in parallel."""
     while not stop_event.is_set():
         try:
-            # Wait for next clip
-            audio_data, start_time, duration, save_dir = queue_in.get(timeout=0.5)
+            audio_data, _start_time, duration, save_dir = clip_queue.get(timeout=0.5)
+        except queue.Empty:
+            continue
 
-            # Save audio if requested
+        try:
             if save_dir:
                 save_audio(audio_data, save_dir, SAMPLE_RATE)
 
             print(f"\n⏳ Processing audio clip ({duration:.2f}s)...")
 
-            # Spawn parallel threads for each model
             threads = []
-
-            # Start local models in parallel
             for service_name, model_name in LOCAL_MODELS_TO_TEST:
-                local_service = create_service(service_name, model_name)
-                t = threading.Thread(
-                    target=transcribe_model,
-                    args=(
-                        f"{service_name} - {model_name}",
-                        local_service,
-                        audio_data,
-                        time.time(),
-                    ),
+                thread = threading.Thread(
+                    target=transcribe_with_model,
+                    args=(service_name, model_name, audio_data, results_queue),
+                    daemon=True,
                 )
-                t.daemon = True
-                t.start()
-                threads.append(t)
+                thread.start()
+                threads.append(thread)
 
-            # Wait for all threads to complete
-            for t in threads:
-                t.join()
+            for thread in threads:
+                thread.join()
 
-            # Signal completion
             results_queue.put({"type": "clip_complete"})
-            queue_in.task_done()
-
-        except queue.Empty:
-            continue
+        finally:
+            clip_queue.task_done()
 
 
-def process_recording(service, recorder, record_duration=None, save_audio_dir=None, manual_mode=None, results_queue=None):
-    """Record audio and queue it for transcription (background processing).
-
-    Args:
-        service: OpenAI TranscriptionService instance (reference)
-        recorder: AudioRecorder instance
-        record_duration: Fixed duration in seconds (overrides manual/VAD mode)
-        save_audio_dir: Directory to save audio files for debugging
-        manual_mode: If True use manual mode, if False use continuous VAD
-        results_queue: Queue to put results for GUI display
-
-    Returns:
-        bool: True if completed successfully
-    """
-    if results_queue is None:
-        results_queue = queue.Queue()
-
-    # Create queue and start background worker
+def process_recording(
+    recorder,
+    record_duration=None,
+    save_audio_dir=None,
+    manual_mode=None,
+    results_queue=None,
+):
+    """Record audio and send clips to the background transcription worker."""
+    results_queue = results_queue or queue.Queue()
     clip_queue = queue.Queue()
     stop_event = threading.Event()
 
-    worker_thread = threading.Thread(
+    worker = threading.Thread(
         target=transcription_worker,
-        args=(service, clip_queue, results_queue, stop_event),
+        args=(clip_queue, results_queue, stop_event),
         daemon=True,
     )
-    worker_thread.start()
+    worker.start()
 
     try:
-        # Determine which recording mode to use
-        if record_duration:
-            recording = recorder.record_for_duration(record_duration)
-            if recording is not None:
-                clip_queue.put(
-                    (
-                        recording.audio_data,
-                        recording.start_time,
-                        recording.duration,
-                        save_audio_dir,
-                    )
-                )
-            clip_queue.join()  # Wait for processing to complete
+        for recording in iter_recordings(recorder, record_duration, manual_mode):
+            enqueue_recording(recording, clip_queue, save_audio_dir)
 
-        elif manual_mode is not None:
-            if manual_mode:
-                # Manual mode - single recording
-                recording = recorder.record_with_key_press()
-                if recording is not None:
-                    clip_queue.put(
-                        (
-                            recording.audio_data,
-                            recording.start_time,
-                            recording.duration,
-                            save_audio_dir,
-                        )
-                    )
-                clip_queue.join()
-            else:
-                # Continuous VAD mode - queue clips as they come in
-                for recording in recorder.record_with_vad_continuous():
-                    clip_queue.put(
-                        (
-                            recording.audio_data,
-                            recording.start_time,
-                            recording.duration,
-                            save_audio_dir,
-                        )
-                    )
+            # Wait only for single-shot modes.
+            if record_duration or manual_mode is True or (manual_mode is None and DEBUG_MODE):
+                break
 
-        elif DEBUG_MODE:
-            # Debug mode - single recording
-            recording = recorder.record_with_key_press()
-            if recording is not None:
-                clip_queue.put(
-                    (
-                        recording.audio_data,
-                        recording.start_time,
-                        recording.duration,
-                        save_audio_dir,
-                    )
-                )
-            clip_queue.join()
-
-        else:
-            # Default VAD mode - single recording
-            recording = recorder.record_with_vad()
-            if recording is not None:
-                clip_queue.put(
-                    (
-                        recording.audio_data,
-                        recording.start_time,
-                        recording.duration,
-                        save_audio_dir,
-                    )
-                )
-            clip_queue.join()
-
+        clip_queue.join()
     finally:
         stop_event.set()
-        worker_thread.join(timeout=2.0)
+        worker.join(timeout=2.0)
 
     return True
 
 
-# ── Main Loop ──────────────────────────────────────────────────────────────
-
-
 class TranscriptionGUI:
-    """Simple GUI to display transcription results as they arrive."""
+    """Simple GUI that shows transcription results as they arrive."""
 
     def __init__(self, root, results_queue):
-        """Initialize GUI.
-
-        Args:
-            root: tkinter root window
-            results_queue: Queue of results from transcription worker
-        """
         self.root = root
         self.results_queue = results_queue
+
         self.root.title("Speech Recognition - Live Results")
         self.root.geometry("900x600")
+        self.root.protocol("WM_DELETE_WINDOW", self.root.destroy)
 
-        # Create text display
         self.text = scrolledtext.ScrolledText(
-            self.root, wrap=tk.WORD, font=("Courier", 11), bg="#1e1e1e", fg="#00ff00"
+            root,
+            wrap=tk.WORD,
+            font=("Courier", 11),
+            bg="#1e1e1e",
+            fg="#00ff00",
         )
         self.text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        self.text.tag_config("openai", foreground="#00ccff")
+
         self.text.tag_config("local", foreground="#ffaa00")
         self.text.tag_config("time", foreground="#888888")
-        self.text.tag_config("header", foreground="#00ff00", font=("Courier", 12, "bold"))
 
-        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.update_display()
 
+    def append_result(self, result):
+        """Render one result entry."""
+        model = result["model"]
+        transcript = result["transcript"]
+        elapsed = result["elapsed_time"]
+        confidence = result.get("confidence")
+        timestamp = datetime.now().strftime("%H:%M:%S")
+
+        self.text.insert(tk.END, f"[{timestamp}] ", "time")
+
+        if confidence is None:
+            header = f"{model:45} ({elapsed:5.2f}s)\n"
+        else:
+            header = f"{model:40} ({elapsed:5.2f}s, {confidence * 100:.1f}%)\n"
+
+        self.text.insert(tk.END, header, "local")
+        self.text.insert(tk.END, f"  → {transcript}\n\n")
+        self.text.see(tk.END)
+
     def update_display(self):
-        """Update display with new results from queue."""
+        """Drain the queue and refresh the text view."""
         try:
             while True:
                 result = self.results_queue.get_nowait()
-
                 if result.get("type") == "clip_complete":
                     self.text.insert(tk.END, "\n" + "─" * 80 + "\n", "time")
-                    self.text.see(tk.END)
                 else:
-                    # Display individual result
-                    model = result["model"]
-                    transcript = result["transcript"]
-                    elapsed = result["elapsed_time"]
-                    confidence = result.get("confidence")
-
-                    # Format output
-                    tag = "local"
-
-                    timestamp = datetime.now().strftime("%H:%M:%S")
-                    self.text.insert(
-                        tk.END, f"[{timestamp}] ", "time"
-                    )
-
-                    # Show confidence if available
-                    if confidence is not None:
-                        conf_pct = f"{confidence*100:.1f}%"
-                        self.text.insert(
-                            tk.END, f"{model:40} ({elapsed:5.2f}s, {conf_pct})\n", tag
-                        )
-                    else:
-                        self.text.insert(
-                            tk.END, f"{model:45} ({elapsed:5.2f}s)\n", tag
-                        )
-                    self.text.insert(tk.END, f"  → {transcript}\n\n")
-                    self.text.see(tk.END)
-
+                    self.append_result(result)
         except queue.Empty:
             pass
 
-        # Schedule next update
         self.root.after(100, self.update_display)
 
-    def on_closing(self):
-        """Handle window close."""
-        self.root.destroy()
 
-
-def main(service, record_duration=None, save_audio_dir=None):
-    """Main application loop with GUI.
-
-    Args:
-        service: TranscriptionService instance
-        record_duration: Fixed duration in seconds (overrides manual/VAD)
-        save_audio_dir: Directory to save audio files for debugging
-    """
-    print()  # Blank line after init
-    print_startup_info(service, record_duration, save_audio_dir)
-
-    # Choose recording mode if not using fixed duration
-    manual_mode = None
-    if not record_duration:
-        manual_mode = choose_recording_mode()
-
-    # Create results queue for GUI
-    results_queue = queue.Queue()
-
-    # Start GUI in separate thread
-    root = tk.Tk()
-    gui = TranscriptionGUI(root, results_queue)
-
-    # Create recorder with configured settings
-    recorder = AudioRecorder(
+def create_recorder():
+    """Create an AudioRecorder from config."""
+    return AudioRecorder(
         sample_rate=SAMPLE_RATE,
         channels=CHANNELS,
         chunk_size=CHUNK_SIZE,
@@ -487,35 +301,35 @@ def main(service, record_duration=None, save_audio_dir=None):
         max_speech_duration=MAX_SPEECH_DURATION,
     )
 
+
+def main(service, record_duration=None, save_audio_dir=None):
+    """Start the GUI and background recording/transcription pipeline."""
+    print()
+    print_startup_info(service, record_duration, save_audio_dir)
+
+    manual_mode = None if record_duration else choose_recording_mode()
+    results_queue = queue.Queue()
+    recorder = create_recorder()
+
+    root = tk.Tk()
+    TranscriptionGUI(root, results_queue)
+
+    worker = threading.Thread(
+        target=process_recording,
+        args=(recorder, record_duration, save_audio_dir, manual_mode, results_queue),
+        daemon=True,
+    )
+    worker.start()
+
     try:
-        # Start processing in a background thread
-        process_thread = threading.Thread(
-            target=process_recording,
-            args=(service, recorder, record_duration, save_audio_dir, manual_mode, results_queue),
-            daemon=True,
-        )
-        process_thread.start()
-
-        # Run GUI main loop
         root.mainloop()
-
     except KeyboardInterrupt:
         print(f"\n[{time.strftime('%H:%M:%S')}] Shutting down...")
         print(f"[{time.strftime('%H:%M:%S')}] ✓ Goodbye!\n")
 
 
-# ── Entry Point ────────────────────────────────────────────────────────────
-
-
 if __name__ == "__main__":
-    # Load environment variables before creating service
     load_env_token()
-
-    # Parse command-line arguments
     args = parse_arguments()
-
-    # Create service (uses config defaults or CLI args)
-    # The LOCAL_MODELS_TO_TEST are spawned in parallel threads
     service = create_service(MODEL_SERVICE, MODEL_NAME)
-
     main(service, args.duration, args.save_audio)
