@@ -136,7 +136,7 @@ sandbox-activate:
 sandbox-test-face: sandbox-init
 	$(SANDBOX_PYTHON) $(SANDBOX_DIR)/face_detection_test.py
 
-sandbox-test-speech: sandbox-init sandbox-whispercpp-init
+sandbox-test-speech: sandbox-init 
 	$(SANDBOX_PYTHON) $(SANDBOX_DIR)/speech_recognition_test.py
 
 # ── Experiments Environment ──────────────────────────────────────────────────

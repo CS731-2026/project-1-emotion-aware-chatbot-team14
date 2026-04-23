@@ -10,7 +10,7 @@ CHUNK_SIZE = 512  # Samples per recording chunk
 # ── Voice Activation Detection (VAD) ───────────────────────────────────────
 # Thresholds for automatic speech detection
 
-SPEECH_THRESHOLD = 0.0005  # RMS level to trigger recording (0.0 - 1.0)
+SPEECH_THRESHOLD = 0.00075  # RMS level to trigger recording (0.0 - 1.0)
 SILENCE_DURATION = 0.6  # Seconds of silence to stop recording
 
 # ── Recording Duration Limits ──────────────────────────────────────────────
