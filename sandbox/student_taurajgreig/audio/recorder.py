@@ -1,29 +1,24 @@
-"""Audio recording with multiple modes (VAD, key press, fixed duration)."""
+"""Audio recording with fixed-duration, manual, and VAD modes."""
 
 import time
 import threading
 from dataclasses import dataclass
-import sounddevice as sd
+
 import numpy as np
+import sounddevice as sd
+
 from .utils import get_rms_level
 
 
 @dataclass
 class Recording:
-    """Audio recording with metadata."""
     audio_data: np.ndarray
-    start_time: float  # Timestamp when recording started (seconds since epoch)
-    duration: float    # Duration of recording in seconds
+    start_time: float
+    duration: float
 
 
 class AudioRecorder:
-    """Record audio in different modes.
-
-    Supports three recording modes:
-    - Fixed duration: Records for a specified number of seconds
-    - Key press (debug): Press ENTER to start/stop recording
-    - VAD: Voice activation detection with silence threshold
-    """
+    """Record audio using fixed duration, manual start/stop, or VAD."""
 
     def __init__(
         self,
@@ -32,20 +27,9 @@ class AudioRecorder:
         chunk_size=512,
         speech_threshold=0.0005,
         silence_duration=0.6,
-        min_speech_duration=0.4,
+        min_speech_duration=0.8,
         max_speech_duration=30,
     ):
-        """Initialize audio recorder with configuration.
-
-        Args:
-            sample_rate: Audio sample rate in Hz
-            channels: Number of audio channels (1=mono, 2=stereo)
-            chunk_size: Number of samples per chunk
-            speech_threshold: RMS level to trigger recording (0.0-1.0)
-            silence_duration: Seconds of silence to stop recording
-            min_speech_duration: Minimum recording duration to process
-            max_speech_duration: Maximum recording duration
-        """
         self.sample_rate = sample_rate
         self.channels = channels
         self.chunk_size = chunk_size
@@ -54,255 +38,167 @@ class AudioRecorder:
         self.min_speech_duration = min_speech_duration
         self.max_speech_duration = max_speech_duration
 
+    def _log(self, message):
+        print(f"[{time.strftime('%H:%M:%S')}] {message}")
+
+    def _chunk_seconds(self, chunk):
+        return len(chunk) / self.sample_rate
+
+    def _finalize_recording(self, audio_data, start_time, enforce_min=True):
+        if audio_data is None or len(audio_data) == 0:
+            return None
+
+        duration = len(audio_data) / self.sample_rate
+        size_kb = len(audio_data) * 4 / 1024
+
+        if enforce_min and duration < self.min_speech_duration:
+            self._log(
+                f"⚠️ DISCARDED ({duration:.2f}s < {self.min_speech_duration}s minimum)\n"
+            )
+            return None
+
+        self._log(f"✓ READY ({size_kb:.1f} KB, {duration:.2f}s)\n")
+        return Recording(audio_data=audio_data, start_time=start_time, duration=duration)
+
+    def _input_stream(self):
+        return sd.InputStream(
+            samplerate=self.sample_rate,
+            channels=self.channels,
+            dtype=np.float32,
+            blocksize=self.chunk_size,
+        )
+
     def record_for_duration(self, duration):
-        """Record audio for a fixed duration (continuous stream, no flickering).
+        """Record audio for a fixed duration."""
+        self._log(f"🎤 Recording for {duration}s...")
+        start_time = time.time()
 
-        Args:
-            duration: Duration to record in seconds
-
-        Returns:
-            Recording object with audio data and timestamps
-        """
-        print(f"[{time.strftime('%H:%M:%S')}] 🎤 Recording for {duration}s...")
-
-        recording_start_time = time.time()
-
-        # Record entire duration in ONE continuous stream (no on/off flickering)
-        duration_samples = int(duration * self.sample_rate)
+        frames = int(duration * self.sample_rate)
         audio_data = sd.rec(
-            duration_samples,
+            frames,
             samplerate=self.sample_rate,
             channels=self.channels,
             dtype=np.float32,
         )
 
-        # Monitor progress while recording
-        start_time = time.time()
+        monitor_start = time.time()
         while sd.get_stream().active:
-            elapsed = time.time() - start_time
+            elapsed = time.time() - monitor_start
             if elapsed >= duration:
                 break
             level = get_rms_level(audio_data[: int(elapsed * self.sample_rate)])
             print(f"\r[ ] {level:.5f} │ {elapsed:.1f}s", end="", flush=True)
-            time.sleep(0.1)  # Update display every 100ms
+            time.sleep(0.1)
 
-        sd.wait()  # Wait for recording to finish
-        print(f"\n[{time.strftime('%H:%M:%S')}] ⏹ STOPPED")
-
-        # Process audio
-        total_duration = len(audio_data) / self.sample_rate
-        audio_kb = len(audio_data) * 4 / 1024
-
-        print(
-            f"[{time.strftime('%H:%M:%S')}] ✓ READY ({audio_kb:.1f} KB, {total_duration:.2f}s)\n"
-        )
-        return Recording(
-            audio_data=audio_data,
-            start_time=recording_start_time,
-            duration=total_duration,
-        )
+        sd.wait()
+        self._log("⏹ STOPPED")
+        return self._finalize_recording(audio_data, start_time, enforce_min=True)
 
     def record_with_key_press(self):
-        """Record audio triggered by key press (DEBUG MODE).
+        """Record until ENTER is pressed again."""
+        self._log("🎤 DEBUG MODE - Press ENTER to START recording...")
+        input()
 
-        Instructions:
-          1. Press ENTER to START recording
-          2. Press ENTER again to STOP recording
+        start_time = time.time()
+        self._log("🎙 RECORDING ▶ (Press ENTER to stop)")
 
-        Uses continuous audio stream (no flickering).
-
-        Returns:
-            Recording object with audio data and timestamps, or None
-        """
-        print(
-            f"[{time.strftime('%H:%M:%S')}] 🎤 DEBUG MODE - Press ENTER to START recording..."
-        )
-
-        # Wait for key press to start
-        input()  # Blocking wait for Enter key
-
-        recording_start_time = time.time()
-
-        print(
-            f"[{time.strftime('%H:%M:%S')}] 🎙 RECORDING ▶ (Press ENTER to stop)"
-        )
-
-        # Use continuous input stream (keeps mic open without flickering)
         audio_buffer = []
-        stop_recording = threading.Event()
+        stop_event = threading.Event()
 
-        with sd.InputStream(
-            samplerate=self.sample_rate,
-            channels=self.channels,
-            dtype=np.float32,
-            blocksize=self.chunk_size,
-        ) as stream:
+        with self._input_stream() as stream:
 
-            def monitor_recording():
-                """Monitor recording progress in background"""
-                while not stop_recording.is_set():
-                    # Read continuously from stream
+            def read_audio():
+                while not stop_event.is_set():
                     chunk, overflowed = stream.read(self.chunk_size)
-                    if not overflowed:
-                        audio_buffer.append(chunk)
-                        level = get_rms_level(chunk)
-                        print(f"\r[ ] {level:.5f}", end="", flush=True)
-                    time.sleep(0.01)  # Small sleep to prevent busy waiting
+                    if overflowed:
+                        continue
+                    audio_buffer.append(chunk)
+                    print(f"\r[ ] {get_rms_level(chunk):.5f}", end="", flush=True)
+                    time.sleep(0.01)
 
-            # Start monitoring thread
-            thread = threading.Thread(target=monitor_recording, daemon=True)
+            thread = threading.Thread(target=read_audio, daemon=True)
             thread.start()
 
-            # Wait for key press to stop
             input()
-            stop_recording.set()
+            stop_event.set()
             thread.join(timeout=2.0)
 
-        print(f"\n[{time.strftime('%H:%M:%S')}] ⏹ STOPPED")
-
-        # Process audio
+        self._log("⏹ STOPPED")
         if not audio_buffer:
             return None
 
         audio_data = np.concatenate(audio_buffer)
-        total_duration = len(audio_data) / self.sample_rate
-        audio_kb = len(audio_data) * 4 / 1024
-
-        print(
-            f"[{time.strftime('%H:%M:%S')}] ✓ READY ({audio_kb:.1f} KB, {total_duration:.2f}s)\n"
-        )
-        return Recording(
-            audio_data=audio_data,
-            start_time=recording_start_time,
-            duration=total_duration,
-        )
+        return self._finalize_recording(audio_data, start_time, enforce_min=True)
 
     def record_with_vad_continuous(self):
-        """Record audio using voice activation detection with continuous stream.
-
-        Uses a single continuous audio stream (no flickering).
-        Yields Recording objects as speech clips are detected.
-
-        Yields:
-            Recording object when a speech clip is detected and silence follows
-        """
-        print(
-            f"[{time.strftime('%H:%M:%S')}] 🎤 LISTENING (threshold: {self.speech_threshold:.4f})"
-        )
+        """Yield recordings whenever VAD detects a complete speech clip."""
+        self._log(f"🎤 LISTENING (threshold: {self.speech_threshold:.4f})")
         print("Press Ctrl+C to stop listening\n")
 
-        # Open ONE continuous stream (no flickering!)
-        with sd.InputStream(
-            samplerate=self.sample_rate,
-            channels=self.channels,
-            dtype=np.float32,
-            blocksize=self.chunk_size,
-        ) as stream:
+        state = "listening"
+        audio_buffer = []
+        silence_time = 0.0
+        speech_time = 0.0
+        recording_start_time = None
 
-            # ── State machine for VAD ──────────────────────────────────────────
-            state = "LISTENING"  # LISTENING, RECORDING, SILENCE_DETECTED
-            audio_buffer = []
-            silence_counter = 0
-            speech_duration = 0
-            recording_start_time = None
-
+        with self._input_stream() as stream:
             while True:
-                # Read continuous chunk from stream
                 chunk, overflowed = stream.read(self.chunk_size)
                 if overflowed:
                     continue
 
                 level = get_rms_level(chunk)
+                chunk_seconds = self._chunk_seconds(chunk)
+                speaking = level > self.speech_threshold
+                status = "🎙" if speaking else " "
 
-                # ── STATE: LISTENING ──────────────────────────────────────────
-                if state == "LISTENING":
-                    status = "🎙" if level > self.speech_threshold else " "
-                    print(
-                        f"\r[{status}] {level:.5f}",
-                        end="",
-                        flush=True,
-                    )
+                if state == "listening":
+                    print(f"\r[{status}] {level:.5f}", end="", flush=True)
 
-                    if level > self.speech_threshold:
-                        # Threshold crossed! Start recording
-                        state = "RECORDING"
+                    if speaking:
+                        state = "recording"
                         recording_start_time = time.time()
                         audio_buffer = [chunk]
-                        silence_counter = 0
-                        speech_duration = len(chunk) / self.sample_rate
-                        print(
-                            f"\n[{time.strftime('%H:%M:%S')}] 🎙 RECORDING ▶ (will stop after {self.silence_duration}s silence)"
+                        silence_time = 0.0
+                        speech_time = chunk_seconds
+                        self._log(
+                            f"🎙 RECORDING ▶ (will stop after {self.silence_duration}s silence)"
                         )
 
-                # ── STATE: RECORDING ──────────────────────────────────────────
-                elif state == "RECORDING":
+                elif state == "recording":
                     audio_buffer.append(chunk)
-                    speech_duration += len(chunk) / self.sample_rate
+                    speech_time += chunk_seconds
+                    silence_time = 0.0 if speaking else silence_time + chunk_seconds
 
-                    status = "🎙" if level > self.speech_threshold else " "
                     print(
-                        f"\r[{status}] {level:.5f} │ {speech_duration:.1f}s",
+                        f"\r[{status}] {level:.5f} │ {speech_time:.1f}s",
                         end="",
                         flush=True,
                     )
 
-                    # Check if still speaking or silence started
-                    if level > self.speech_threshold:
-                        silence_counter = 0
-                    else:
-                        silence_counter += len(chunk) / self.sample_rate
+                    if silence_time > self.silence_duration:
+                        self._log("⏹ STOPPED (silence detected)")
+                        state = "finalizing"
+                    elif speech_time > self.max_speech_duration:
+                        self._log("⏹ STOPPED (max duration reached)")
+                        state = "finalizing"
 
-                    # Stop conditions
-                    if silence_counter > self.silence_duration:
-                        state = "SILENCE_DETECTED"
-                        print(
-                            f"\n[{time.strftime('%H:%M:%S')}] ⏹ STOPPED (silence detected)"
-                        )
-
-                    elif speech_duration > self.max_speech_duration:
-                        state = "SILENCE_DETECTED"
-                        print(
-                            f"\n[{time.strftime('%H:%M:%S')}] ⏹ STOPPED (max duration reached)"
-                        )
-
-                # ── STATE: SILENCE_DETECTED ───────────────────────────────────
-                elif state == "SILENCE_DETECTED":
-                    # Process the clip
-                    audio_data = np.concatenate(audio_buffer)
-                    total_duration = len(audio_data) / self.sample_rate
-                    audio_kb = len(audio_data) * 4 / 1024
-
-                    # Check minimum duration
-                    if total_duration >= self.min_speech_duration:
-                        print(
-                            f"[{time.strftime('%H:%M:%S')}] ✓ READY ({audio_kb:.1f} KB, {total_duration:.2f}s)\n"
-                        )
-                        yield Recording(
-                            audio_data=audio_data,
-                            start_time=recording_start_time,
-                            duration=total_duration,
-                        )
-                    else:
-                        print(
-                            f"[{time.strftime('%H:%M:%S')}] ⚠️ DISCARDED ({total_duration:.2f}s < {self.min_speech_duration}s minimum)\n"
-                        )
-
-                    # Reset to listening state
-                    state = "LISTENING"
-                    audio_buffer = []
-                    silence_counter = 0
-                    speech_duration = 0
-                    recording_start_time = None
-                    print(
-                        f"[{time.strftime('%H:%M:%S')}] 🎤 LISTENING (threshold: {self.speech_threshold:.4f})"
+                if state == "finalizing":
+                    recording = self._finalize_recording(
+                        np.concatenate(audio_buffer),
+                        recording_start_time,
+                        enforce_min=True,
                     )
+                    if recording:
+                        yield recording
+
+                    state = "listening"
+                    audio_buffer = []
+                    silence_time = 0.0
+                    speech_time = 0.0
+                    recording_start_time = None
+                    self._log(f"🎤 LISTENING (threshold: {self.speech_threshold:.4f})")
 
     def record_with_vad(self):
-        """Record audio using voice activation detection (single clip mode).
-
-        Returns:
-            Recording object with first detected speech clip, or None
-        """
-        for recording in self.record_with_vad_continuous():
-            return recording
-        return None
+        """Return the first VAD-detected speech clip."""
+        return next(self.record_with_vad_continuous(), None)
