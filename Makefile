@@ -14,10 +14,12 @@
 #   make report-deps      Install report dependencies
 #
 # Sandbox/Experiments targets:
-#   make sandbox-init     Initialize sandbox student environment venv
-#   make sandbox-activate Activate sandbox student environment
-#   make experiments-init Initialize experiments venv
-#   make experiments-dev  Enter experiments development environment
+#   make sandbox-init              Initialize sandbox student environment venv
+#   make sandbox-activate          Activate sandbox student environment
+#   make sandbox-test-face         Run face detection test in sandbox
+#   make sandbox-test-speech       Run speech recognition test in sandbox
+#   make experiments-init          Initialize experiments venv
+#   make experiments-dev           Enter experiments development environment
 
 VENV       := web_application/model_service/.venv
 PYTHON     := $(VENV)/bin/python
@@ -31,7 +33,7 @@ EXP_PYTHON := $(EXP_VENV)/bin/python
 
 .PHONY: web-install web-dev web-typecheck web-build \
         report report-docx report-clean report-deps \
-        sandbox-init sandbox-activate sandbox-test-face experiments-init experiments-dev
+        sandbox-init sandbox-activate sandbox-test-face sandbox-test-speech experiments-init experiments-dev
 
 # ── Web application ───────────────────────────────────────────────────────────
 
@@ -87,6 +89,9 @@ sandbox-activate:
 
 sandbox-test-face:
 	$(SANDBOX_PYTHON) sandbox/student_taurajgreig/face_detection_test.py
+
+sandbox-test-speech:
+	$(SANDBOX_PYTHON) sandbox/student_taurajgreig/speech_recognition_test.py
 
 # ── Experiments Environment ────────────────────────────────────────────────────
 

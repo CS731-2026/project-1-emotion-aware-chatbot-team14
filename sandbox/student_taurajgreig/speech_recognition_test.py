@@ -1,168 +1,98 @@
 """
-Speech recognition test script using FasterWhisper and SpeechRecognition.
-Tests transcription quality, speed, and accuracy across different phrases.
+Speech recognition test script using FasterWhisper.
+Captures audio from microphone and transcribes it in real-time.
 """
 
+import tempfile
 import os
-import json
-import time
-from pathlib import Path
-from typing import Dict, List, Tuple
-
-# TODO: Import speech recognition libraries
-# from faster_whisper import WhisperModel
-# import speech_recognition as sr
+from faster_whisper import WhisperModel
+import speech_recognition as sr
+import torch
 
 
-class SpeechRecognitionTester:
-    """Test speech recognition libraries with microphone input."""
+def select_device():
+    """
+    Select device in order of preference: mps -> cuda -> gpu -> cpu.
+    Returns the device name and compute type.
+    """
+    # Try MPS (Metal Performance Shaders for Apple Silicon)
+    if torch.backends.mps.is_available():
+        print("Using MPS (Apple Metal Performance Shaders)")
+        return "mps", "float32"
 
-    def __init__(self, method: str = "faster_whisper"):
-        """
-        Args:
-            method: "faster_whisper" or "speech_recognition"
-        """
-        self.method = method
-        self.results = []
-        # TODO: Initialize recognizer based on method
+    # Try CUDA (NVIDIA)
+    if torch.cuda.is_available():
+        print("Using CUDA (NVIDIA GPU)")
+        return "cuda", "int8_float16"
 
-    def load_test_phrases(self, file_path: str = "test_phrases.txt") -> List[str]:
-        """Load test phrases from file."""
-        if not Path(file_path).exists():
-            print(f"Warning: {file_path} not found")
-            return []
+    # Fallback to CPU
+    print("Using CPU")
+    return "cpu", "int8"
 
-        with open(file_path, 'r') as f:
-            phrases = [line.strip() for line in f if line.strip()]
-        return phrases
 
-    def record_audio(self, duration_seconds: int = 5) -> bytes:
-        """
-        Record audio from microphone.
+def record_audio(duration=10, output_path=None):
+    """Record audio from microphone and save to file."""
+    recognizer = sr.Recognizer()
 
-        Args:
-            duration_seconds: Duration to record
+    with sr.Microphone() as source:
+        print(f"Recording for {duration} seconds... Speak now!")
+        recognizer.adjust_for_ambient_noise(source, duration=1)
+        audio = recognizer.listen(source, timeout=duration)
 
-        Returns:
-            Audio data as bytes
-        """
-        # TODO: Implement microphone recording using SpeechRecognition
-        # recognizer = sr.Recognizer()
-        # with sr.Microphone() as source:
-        #     audio = recognizer.listen(source, timeout=duration_seconds)
-        # return audio.get_wav_data()
-        print(f"TODO: Record {duration_seconds} seconds of audio")
-        return b""
+    # Save audio to file
+    if output_path is None:
+        output_path = os.path.join(tempfile.gettempdir(), "audio_recording.wav")
 
-    def transcribe_audio(self, audio_data: bytes) -> Tuple[str, float]:
-        """
-        Transcribe audio using selected method.
+    with open(output_path, "wb") as f:
+        f.write(audio.get_wav_data())
 
-        Args:
-            audio_data: Audio bytes
+    print(f"Audio saved to {output_path}")
+    return output_path
 
-        Returns:
-            (transcription, processing_time)
-        """
-        start_time = time.time()
 
-        if self.method == "faster_whisper":
-            # TODO: Implement FasterWhisper transcription
-            # model = WhisperModel("base", device="cpu")
-            # segments, info = model.transcribe(audio_data)
-            # transcription = "".join([segment.text for segment in segments])
-            transcription = ""
+def test_faster_whisper(audio_path=None, duration=10, device=None, model_size="base"):
+    """
+    Test speech recognition with faster-whisper.
+
+    Args:
+        audio_path: Path to audio file. If None, records from microphone.
+        duration: Duration to record in seconds (only used if audio_path is None).
+        device: Device to use ("mps", "cuda", "cpu"). If None, auto-detects.
+        model_size: "tiny", "base", "small", "medium", or "large-v3".
+    """
+    # Record audio if no path provided
+    if audio_path is None:
+        audio_path = record_audio(duration=duration)
+
+    # Auto-select device if not specified
+    if device is None:
+        device, compute_type = select_device()
+    else:
+        # Map device preference
+        if device == "mps" and torch.backends.mps.is_available():
+            compute_type = "float32"
+        elif device == "cuda" and torch.cuda.is_available():
+            compute_type = "int8_float16"
         else:
-            # TODO: Implement SpeechRecognition transcription
-            transcription = ""
+            device = "cpu"
+            compute_type = "int8"
 
-        elapsed = time.time() - start_time
-        return transcription, elapsed
+    # Load model
+    print(f"Loading {model_size} model on {device}...")
+    model = WhisperModel(model_size, device=device, compute_type=compute_type)
 
-    def test_phrase(self, phrase: str, phrase_type: str) -> Dict:
-        """
-        Test transcription on a single phrase.
+    # Transcribe
+    print("Transcribing audio...")
+    segments, info = model.transcribe(audio_path, beam_size=5)
 
-        Args:
-            phrase: The phrase to read aloud
-            phrase_type: Type of phrase (normal, technical, command, etc.)
-
-        Returns:
-            Test result dictionary
-        """
-        print(f"\nTest: {phrase_type}")
-        print(f"Say this phrase: {phrase}")
-        print("Recording in 2 seconds...")
-
-        # TODO: Add countdown and recording
-        time.sleep(2)
-        audio_data = self.record_audio(duration_seconds=5)
-
-        if not audio_data:
-            return {"phrase": phrase, "type": phrase_type, "error": "No audio recorded"}
-
-        transcription, elapsed = self.transcribe_audio(audio_data)
-
-        result = {
-            "phrase": phrase,
-            "type": phrase_type,
-            "transcription": transcription,
-            "processing_time": elapsed,
-            "correct": transcription.lower() == phrase.lower(),
-        }
-        self.results.append(result)
-        return result
-
-    def run_test_suite(self):
-        """Run complete test suite with all phrases."""
-        phrases = self.load_test_phrases()
-        if not phrases:
-            print("No test phrases loaded")
-            return
-
-        phrase_types = ["normal_sentence", "technical_sentence", "short_command",
-                       "fast_sentence", "mumbled_sentence"]
-
-        print(f"Starting speech recognition tests with {self.method}")
-        print(f"Total phrases to test: {len(phrases)}")
-
-        for i, (phrase, phrase_type) in enumerate(zip(phrases, phrase_types)):
-            print(f"\n[{i+1}/{len(phrases)}] Testing {phrase_type}...")
-            result = self.test_phrase(phrase, phrase_type)
-            if result.get("error"):
-                print(f"  Error: {result['error']}")
-            else:
-                print(f"  Transcription: {result['transcription']}")
-                print(f"  Processing time: {result['processing_time']:.2f}s")
-                print(f"  Correct: {result['correct']}")
-
-    def save_results(self, output_path: str = "speech_recognition_results.json"):
-        """Save test results to JSON file."""
-        with open(output_path, 'w') as f:
-            json.dump(self.results, f, indent=2)
-        print(f"Results saved to {output_path}")
-
-    def print_summary(self):
-        """Print summary of test results."""
-        if not self.results:
-            print("No results to summarize")
-            return
-
-        correct_count = sum(1 for r in self.results if r.get("correct", False))
-        total_count = len(self.results)
-        avg_time = sum(r.get("processing_time", 0) for r in self.results) / total_count
-
-        print(f"\n--- Test Summary ({self.method}) ---")
-        print(f"Accuracy: {correct_count}/{total_count} ({100*correct_count/total_count:.1f}%)")
-        print(f"Average processing time: {avg_time:.2f}s")
+    print(f"\nDetected language: '{info.language}' (confidence: {info.language_probability:.2f})")
+    print("\nTranscription:")
+    for segment in segments:
+        print(f"[{segment.start:.2f}s -> {segment.end:.2f}s] {segment.text}")
 
 
 if __name__ == "__main__":
-    # TODO: Test with both methods
-    # tester = SpeechRecognitionTester(method="faster_whisper")
-    # tester.run_test_suite()
-    # tester.print_summary()
-    # tester.save_results()
+    print("Speech Recognition Test\n")
 
-    print("Speech recognition test skeleton ready")
-    print("TODO: Implement library initialization and transcription logic")
+    # Record for 10 seconds and transcribe (auto-detects best device)
+    test_faster_whisper(duration=10, model_size="base")
