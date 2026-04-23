@@ -1,8 +1,8 @@
 - Set up the Python face-detection test environment on the MacBook
   OpenCV webcam example:
   (DONE) https://www.geeksforgeeks.org/python/face-detection-using-python-and-opencv-with-webcam/
-  Ultralytics repo:
-  https://github.com/ultralytics/ultralytics
+  (DONE) Ultralytics repo:
+  (DONE) https://github.com/ultralytics/ultralytics
   MediaPipe face detection docs:
   https://mediapipe.readthedocs.io/en/latest/solutions/face_detection.html
   Face detection implementation walkthrough:
@@ -24,15 +24,15 @@
   YOLO-style practical example:
   https://denshub.com/en/face-detection-tracking-models/
 
-- Build a minimal Python webcam script that draws face boxes or landmarks
-  OpenCV webcam skeleton:
+- (done) Build a minimal Python webcam script that draws face boxes or landmarks
+  (done) OpenCV webcam skeleton:
   https://www.geeksforgeeks.org/python/face-detection-using-python-and-opencv-with-webcam/
   MediaPipe webcam example:
   https://mediapipe.readthedocs.io/en/latest/solutions/face_detection.html
   YOLO webcam example:
   https://denshub.com/en/face-detection-tracking-models/
 
-- Add rough timing or FPS output to the webcam test
+- (done) Add rough timing or FPS output to the webcam test
   Practical real-time implementation examples:
   https://denshub.com/en/face-detection-tracking-models/
 
