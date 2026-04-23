@@ -1,6 +1,6 @@
 - Set up the Python face-detection test environment on the MacBook
   OpenCV webcam example:
-  https://www.geeksforgeeks.org/python/face-detection-using-python-and-opencv-with-webcam/
+  (DONE) https://www.geeksforgeeks.org/python/face-detection-using-python-and-opencv-with-webcam/
   Ultralytics repo:
   https://github.com/ultralytics/ultralytics
   MediaPipe face detection docs:
