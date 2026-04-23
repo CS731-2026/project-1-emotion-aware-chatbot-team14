@@ -27,15 +27,16 @@ DEBUG_MODE = True  # Set to False to use VAD threshold detection
 # ── Model Configuration ────────────────────────────────────────────────────
 # Default model and service to use when CLI args are not provided
 
-MODEL_SERVICE = "whisper-distilled"  # "mock" | "whisper" | "whisper-distilled"
-MODEL_NAME = "distil-small.en"  # Model size depends on MODEL_SERVICE
+MODEL_SERVICE = "whisper-cpp" 
+MODEL_NAME = "base.en"
 
 # ── Local Models to Test ──────────────────────────────────────────────────
 # List of (service, model) tuples to test locally on each recording
 # Edit this list to control which models get tested
 
 LOCAL_MODELS_TO_TEST = [
-    ("whisper-distilled", "distil-small.en"),
+    ("whisper-cpp", "base.en"),
+    # ("whisper-distilled", "distil-small.en"),
     # ("whisper", "tiny"),
     # ("whisper", "base"),
     # ("whisper-distilled", "distil-medium.en"),
