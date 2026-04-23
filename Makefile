@@ -87,10 +87,10 @@ sandbox-init: $(SANDBOX_VENV)
 sandbox-activate:
 	bash --init-file sandbox-activate.sh -i
 
-sandbox-test-face:
+sandbox-test-face: sandbox-init
 	$(SANDBOX_PYTHON) sandbox/student_taurajgreig/face_detection_test.py
 
-sandbox-test-speech:
+sandbox-test-speech: sandbox-init
 	$(SANDBOX_PYTHON) sandbox/student_taurajgreig/speech_recognition_test.py
 
 # ── Experiments Environment ────────────────────────────────────────────────────
