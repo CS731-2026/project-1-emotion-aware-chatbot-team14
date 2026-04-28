@@ -82,19 +82,12 @@ def create_service(service_name, model_name=None):
 def create_service(service_name, model_name):
 
     if service_name == "mock":
-
         return MockTranscriptionService()
-
     if service_name == "whisper":
-
         return WhisperTranscriptionService(model_name)
-
     if service_name == "whisper-distilled":
-
         return WhisperDistilledTranscriptionService(model_name)
-
     if service_name == "whisper-cpp":
-
         return WhisperCppTranscriptionService(
             model_name=model_name,
             repo_dir="sandbox/student_taurajgreig/services/wisper.cpp/wpp",

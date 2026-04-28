@@ -5,15 +5,6 @@ import numpy as np
 
 
 class TranscriptionService(ABC):
-    """Abstract base class for transcription services.
-
-    Any transcription service (Whisper, OpenAI API, etc.) should inherit
-    from this and implement the transcribe method.
-
-    Each service subclass should define:
-        - REQUIRES_DEPS: list of required package names
-        - REQUIREMENTS_FILE: path to requirements file (relative to services/)
-    """
 
     REQUIRES_DEPS = []  # List of required packages
     REQUIREMENTS_FILE = None  # Path to requirements file
