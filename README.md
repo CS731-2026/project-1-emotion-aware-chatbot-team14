@@ -1,93 +1,140 @@
 # COMPSCI-731 Human-Robot Interaction — Team Project
 
-## Repository Structure
+## What we're building
+
+An **emotion-aware study companion** that watches a student's face via webcam and adapts its conversational behaviour in real time.
+
+Academic self-study is emotionally volatile — students cycle through frustration, helplessness, and anxiety, yet every AI study tool today responds the same way regardless of emotional state. This system treats the face as an honest, unfiltered signal of cognitive and emotional load. When the model detects frustration (anger, disgust, contempt, sadness) it shifts toward patient, scaffolded explanation. When it detects anxiety (fear) it moves to calming, confidence-building dialogue. The LLM prompt is dynamically conditioned on the detected emotion so that the *same question* receives a different answer depending on how the student looks.
+
+The target population is university students in independent study — approximately 40,000 enrolled at the University of Auckland alone.
+
+---
+
+## The journey
+
+This project moves through four stages. Each stage answered a question before the next one began.
+
+```
+Stage 1 — Research     What is the right approach? (sandbox/)
+Stage 2 — Integration  Does it work end-to-end? (application/mock_programs/)
+Stage 3 — Product      Can it be used by anyone? (application/)
+```
+
+---
+
+## Repository structure
 
 ```
 .
-├── report/               Academic paper (Markdown → LaTeX → PDF)
-├── training_pipeline/    ML experimentation harness and model training
-├── web_application/      Full-stack application (frontend, backend, model service)
-└── Makefile              Root orchestration — delegates to each sub-project
+├── application/          The application code for our final product: frontend + backend + python ai model service
+├── experiments/          any experiments we need to run (separate from our training pipeline)
+├── sandbox/              A place for us to dump our files as we are working on our individual tasks, files that are pre mature for the application code (there will be a lot of these)
+├── training_pipeline/    The training pipeline we are going to use for our hand trained models
+├── report/               where we will be writing our final report in markdown
+├── models/               Downloaded model weights (.gitignored TODO: we need to remove this)
+└── Makefile              Root orchestration
 ```
 
 ---
 
-## report/
+## Stage 1 — Research: `sandbox/`
 
-The report is written in Markdown and compiled to a formatted PDF via pandoc and LaTeX. A separate DOCX output is also available.
+Before building anything, each team member used their sandbox folder to answer a specific question.
 
-See [report/README.md](report/README.md) for full authoring instructions, citation syntax, and template switching.
+```
+sandbox/
+├── student_taurajgreig/     Face detection + speech recognition research
+├── student_preeti/
+└── student-kanishka/
+```
 
-**Common commands (run from repo root):**
+**Questions answered:**
 
-| Command | What it does |
-|---|---|
-| `make report` | Build PDF |
-| `make report-docx` | Build DOCX |
-| `make report-clean` | Remove build artefacts |
-| `make report-deps` | Install dependencies |
+| Question | Where | Result |
+|---|---|---|
+| Which face detector is fastest and most reliable? | `sandbox/student_taurajgreig/` | YOLOv8-face outperforms RetinaFace, MediaPipe, and Haar cascades |
+| Which speech-to-text backend fits our constraints? | `sandbox/student_taurajgreig/services/` | whisper.cpp gives the best speed/accuracy tradeoff without an API dependency |
+
+The sandbox follows a strict rule: exploratory work stays in `sandbox/student_[name]/` until it has answered its question.
+
+### Running sandbox work
+
+Each sandbox has its own setup. See `sandbox/student_[name]/README.md` for instructions.
+
+A convenience script activates the correct environment:
+
+```bash
+source sandbox-activate.sh
+```
 
 ---
 
-## training_pipeline/
+## `experiments/`
 
-A modular ML experimentation harness built on PyTorch. Handles CLI argument parsing, config merging (multiple YAML files deep-merged left to right), per-step persistence to disk, and automatic run resumption.
+A shared space for work that doesn't belong to any one person and isn't ready for the application. If something needs to be run, tested, or documented collaboratively but has no obvious home elsewhere, it lives here.
 
-See [training_pipeline/README.md](training_pipeline/README.md) for full documentation including Store, Steps, Routines, serialisation, and the working example pipeline.
-
-**Key concepts:**
-
-- **Store** — the only channel through which steps pass data; serialised to disk after each step
-- **Step** — a plain function `(store, config) -> Success | Failure`
-- **Routine** — ordered list of steps with a named `runs/` directory
+```bash
+source experiments-activate.sh
+```
 
 ---
 
-## web_application/
+## Stage 2 — Integration: `application/mock_programs/`
 
-A three-service web application. The frontend calls the backend, which forwards requests to the Python model service.
+With working face detection and a trained emotion model, the next question was: does the full pipeline work end-to-end?
+
+`mock_programs/` is a complete, runnable terminal chatbot that integrates every component:
+
+```
+application/mock_programs/
+├── main.py               Entry point (terminal UI, conversation loop)
+├── face_detector.py      YOLOv8-face detection with drawing utilities
+├── emotion_inferencer.py Inference wrapper + rolling-window emotion smoothing
+├── chatbot.py            LLM integration (OpenAI) + 3-way model comparison
+└── speech.py             FasterWhisper speech-to-text
+```
+
+### Running the mock chatbot
+
+```bash
+cd application/mock_programs
+pip install -r requirements.txt
+cp .env.example .env   # add OPENAI_API_KEY
+
+# Full pipeline: webcam + voice + chatbot
+python main.py --checkpoint path/to/emotion_model.pt --voice
+
+# No webcam (fixed mock emotion for testing)
+python main.py --no_webcam --mock_emotion happy
+
+# Text only
+python main.py --no_webcam --no_voice
+```
+
+**Terminal controls:**
+- Type a message and press Enter to send
+- Press Enter with empty input to record voice (if `--voice` enabled)
+- Type `reset` to clear history, `quit` to exit
+
+See [application/mock_programs/README.md](application/mock_programs/README.md) for full setup including dataset and model download instructions.
+
+---
+
+## Stage 3 — Product: `application/`
+
+The mock program proved the concept. The production application is a three-service web app that packages the same pipeline for real users.
 
 ### Request flow
 
 ```
 Browser
-  └─▶ SvelteKit (SSR server)         localhost:5173
-        └─▶ Express backend           localhost:3000
+  └─▶ SvelteKit frontend       localhost:5173
+        └─▶ Express backend    localhost:3000
               └─▶ FastAPI model service   localhost:8000
-                    └─▶ ML model (future)
+                    └─▶ Face detector + emotion classifier + LLM
 ```
 
-All three services run independently. The browser only ever talks to SvelteKit. SvelteKit's server-side load functions call Express. Express forwards to the model service.
-
-### Services
-
-#### frontend — SvelteKit (TypeScript)
-
-| Tool | Purpose | Docs |
-|---|---|---|
-| [SvelteKit](https://kit.svelte.dev) | Meta-framework (routing, SSR, build) | kit.svelte.dev |
-| [Svelte 5](https://svelte.dev) | UI component framework | svelte.dev |
-| [Vite 8](https://vite.dev) | Dev server and bundler | vite.dev |
-| [TypeScript](https://www.typescriptlang.org) | Type checking | typescriptlang.org |
-| [svelte-check](https://github.com/sveltejs/language-tools) | Svelte-aware type checking | github.com/sveltejs/language-tools |
-
-#### backend — Express (TypeScript)
-
-| Tool | Purpose | Docs |
-|---|---|---|
-| [Express 4](https://expressjs.com) | HTTP server and routing | expressjs.com |
-| [TypeScript](https://www.typescriptlang.org) | Type checking | typescriptlang.org |
-| [tsx](https://github.com/privatenumber/tsx) | Run TypeScript directly (dev) | github.com/privatenumber/tsx |
-| [dotenv](https://github.com/motdotla/dotenv) | Environment variable loading | github.com/motdotla/dotenv |
-
-#### model_service — FastAPI (Python)
-
-| Tool | Purpose | Docs |
-|---|---|---|
-| [FastAPI](https://fastapi.tiangolo.com) | HTTP server and routing | fastapi.tiangolo.com |
-| [Uvicorn](https://www.uvicorn.org) | ASGI server | uvicorn.org |
-| [Pydantic](https://docs.pydantic.dev) | Request/response validation (bundled with FastAPI) | docs.pydantic.dev |
-| [python-dotenv](https://github.com/theskumar/python-dotenv) | Environment variable loading | github.com/theskumar/python-dotenv |
+The browser only ever talks to SvelteKit. SvelteKit's server-side load functions call Express. Express forwards to the model service. The model service runs inference and calls the LLM.
 
 ### Getting started
 
@@ -99,7 +146,7 @@ make web-install
 make web-dev
 ```
 
-`make web-install` creates a Python virtual environment at `model_service/.venv` — Python packages are isolated from your system environment.
+`make web-install` creates a Python virtual environment at `application/model_service/.venv`.
 
 ### Environment variables
 
@@ -107,78 +154,127 @@ Each service has a `.env` file (gitignored) and a committed `.env.example`:
 
 | Service | File | Key variables |
 |---|---|---|
-| backend | `backend/.env` | `PORT`, `NODE_ENV`, `MODEL_SERVICE_URL` |
-| frontend | `frontend/.env` | `BACKEND_URL` |
-| model_service | `model_service/.env` | `PORT`, `HOST` |
+| backend | `application/backend/.env` | `PORT`, `NODE_ENV`, `MODEL_SERVICE_URL` |
+| frontend | `application/frontend/.env` | `BACKEND_URL` |
+| model_service | `application/model_service/.env` | `PORT`, `HOST` |
 
-Copy `.env.example` to `.env` when setting up a new environment.
+Copy `.env.example` to `.env` in each service directory when setting up a new environment.
+
+### Services
+
+#### frontend — SvelteKit (TypeScript)
+
+| Tool | Purpose |
+|---|---|
+| SvelteKit | Meta-framework (routing, SSR, build) |
+| Svelte 5 | UI component framework |
+| Vite | Dev server and bundler |
+
+#### backend — Express (TypeScript)
+
+| Tool | Purpose |
+|---|---|
+| Express 4 | HTTP server and routing |
+| tsx | Run TypeScript directly in dev |
+| dotenv | Environment variable loading |
+
+#### model_service — FastAPI (Python)
+
+| Tool | Purpose |
+|---|---|
+| FastAPI | HTTP server and routing |
+| Uvicorn | ASGI server |
+| Pydantic | Request/response validation |
+
+---
+
+## Support infrastructure
+
+### `training_pipeline/`
+
+A reusable ML harness used by `experiments/`. Handles config merging (multiple YAML files deep-merged left to right), step-level persistence to disk, and automatic run resumption after failures.
+
+**Key concepts:**
+- **Store** — the only channel through which steps pass data; serialised to disk after each step
+- **Step** — a plain function `(store, config) → Success | Failure`
+- **Routine** — ordered list of steps with a named `runs/` directory
+
+See [training_pipeline/README.md](training_pipeline/README.md) for full documentation.
+
+**Common commands:**
+
+| Command | What it does |
+|---|---|
+| `make train` | Run the training pipeline |
+
+### `report/`
+
+The academic paper is written in Markdown and compiled to PDF via pandoc and LaTeX.
+
+**Common commands:**
+
+| Command | What it does |
+|---|---|
+| `make report` | Build PDF |
+| `make report-docx` | Build DOCX |
+| `make report-clean` | Remove build artefacts |
+| `make report-deps` | Install dependencies |
+
+See [report/README.md](report/README.md) for authoring instructions and citation syntax.
 
 ---
 
-## Conventions
+## Workflow
 
-### Frontend (SvelteKit / Svelte 5)
+This project uses a **research-first workflow**. Every branch represents a question, not a task.
 
-**Svelte syntax — always use Svelte 5 runes:**
-- State: `let x = $state(value)` — never `let x = value` for reactive vars
-- Derived: `let y = $derived(expr)` — never `$: y = expr`
-- Side effects: `$effect(() => { ... })` — never `$: { ... }` blocks
-- Props: `let { prop } = $props()` — never `export let prop`
-- Event handlers: `onclick={fn}` — never `on:click={fn}`
-- Snippets: `{#snippet name()}{/snippet}` and `{@render name()}` — never named slots
+```
+invest/question-name     → explore and answer the question
+integration/result-name  → merge the answer into the main application
+```
 
-**File structure:**
-- Components live in `src/lib/components/`
-- Import components via the `$lib` alias: `import Foo from "$lib/components/Foo.svelte"`
-- Server-side logic (data loading, backend calls) goes in `+page.server.ts`
-- Client-side-only logic goes in `+page.ts`
-- The browser must never call the Express backend or model service directly
+- `main` — shared branch for the main application
+- `sandbox/student_[name]/` — each team member's exploratory space
+- `application/`, `training_pipeline/`, `report/` — production folders; changes require a PR and approval
 
-**TypeScript:**
-- All `.svelte` files use `<script lang="ts">`
-- Use `$env/static/private` for server-only env vars (e.g. `BACKEND_URL`)
-- Run `npx svelte-kit sync` after adding new env vars or routes to regenerate types
-
-**Reference:** see `src/.example/Svelte5Reference.svelte` for a local Svelte 5 cheat sheet (not built, not a route).
+See [CONTRIBUTIONS.md](CONTRIBUTIONS.md) for the full workflow.
 
 ---
+
+## Code conventions
+
+### Frontend (Svelte 5 runes — always)
+
+```svelte
+let x = $state(value)          // not: let x = value
+let y = $derived(expr)         // not: $: y = expr
+$effect(() => { ... })         // not: $: { ... }
+let { prop } = $props()        // not: export let prop
+onclick={fn}                   // not: on:click={fn}
+```
+
+- Components: `src/lib/components/`
+- Import via `$lib` alias: `import Foo from "$lib/components/Foo.svelte"`
+- Server-side logic (backend calls) goes in `+page.server.ts`
+- The browser must never call Express or the model service directly
+- See `src/.example/Svelte5Reference.svelte` for a local cheat sheet
 
 ### Backend (Express / TypeScript)
 
-**Project structure — one file per responsibility:**
-- `src/index.ts` — server startup only; no business logic
-- `src/app.ts` — Express app creation, middleware registration, route mounting
-- `src/config/env.ts` — all environment variables defined in one place
-- `src/routes/<domain>.router.ts` — one router file per domain (e.g. `prediction.router.ts`)
-- `src/routes/index.ts` — aggregates all routers; the only file that knows all route prefixes
-- `src/middleware/errorHandler.ts` — all `next(err)` calls land here
-
-**Routing conventions:**
-- All API routes are prefixed `/api/v1/`
-- Each router file defines routes relative to its mount point (e.g. `router.post("/")` not `router.post("/predict")`)
-- Every async route handler wraps its body in `try/catch` and calls `next(err)` on failure
-
-**TypeScript:**
-- `strict: true` is enforced
-- Run `npm run typecheck` (`tsc --noEmit`) before committing — no ESLint
-- Use `npm run dev` in development (`tsx watch`), `npm run build` + `npm start` for production
-
----
+- `src/index.ts` — server startup only
+- `src/app.ts` — app creation, middleware, route mounting
+- `src/config/env.ts` — all environment variables in one place
+- `src/routes/<domain>.router.ts` — one file per domain
+- All API routes prefixed `/api/v1/`
+- Every async route handler wraps in `try/catch` and calls `next(err)` on failure
+- Run `npm run typecheck` before committing
 
 ### Model Service (FastAPI / Python)
 
-**Project structure:**
-- `main.py` — entry point; runs uvicorn; no business logic
+- `main.py` — entry point only
 - `app.py` — FastAPI app creation and router registration
-- `config.py` — all environment variables; loads `.env` via `python-dotenv`
-- `routers/<domain>.py` — one router file per domain (e.g. `prediction.py`)
-
-**Routing conventions:**
-- All routes are prefixed `/api/v1/` (mounted in `app.py`)
-- Use Pydantic `BaseModel` for all request and response bodies — no raw `dict`
-- Route functions are `async def`
-
-**Python environment:**
-- Always work inside the virtual environment at `model_service/.venv`
-- Add new packages to `requirements.txt`; run `make web-install` to install
-- Never install packages globally or into conda base for this project
+- `config.py` — all environment variables
+- `routers/<domain>.py` — one file per domain
+- All routes prefixed `/api/v1/`
+- Use Pydantic `BaseModel` for all request/response bodies
+- Always work inside `model_service/.venv`; never install packages globally
