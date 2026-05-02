@@ -12,6 +12,9 @@
     api.getProfiles().then((p) => {
       profiles = p;
       loading = false;
+    }).catch(() => {
+      error = "Could not load profiles from backend";
+      loading = false;
     });
   });
 
@@ -28,7 +31,7 @@
       const profile = await api.createProfile(name);
       await api.selectProfile(profile.id);
       onSelected(profile);
-    } catch (e) {
+    } catch {
       error = "Failed to create profile";
     }
   }
@@ -40,7 +43,7 @@
     <p class="sub">Select a profile to continue, or create a new one.</p>
 
     {#if loading}
-      <p class="loading">Loading…</p>
+      <p class="loading">Loading...</p>
     {:else}
       {#if profiles.length > 0}
         <ul class="profile-list">
@@ -84,7 +87,7 @@
   .modal {
     background: hsl(220, 15%, 14%);
     border: 1px solid var(--color-border);
-    border-radius: calc(var(--radius) * 1.5);
+    border-radius: calc(var(--radius) * 1.1);
     padding: 2rem;
     width: min(380px, 90vw);
     display: flex;
@@ -96,12 +99,9 @@
     font-size: 1.3rem;
   }
 
-  .sub {
-    font-size: 0.85rem;
-    color: var(--color-text-muted);
-  }
-
+  .sub,
   .loading {
+    font-size: 0.9rem;
     color: var(--color-text-muted);
   }
 
@@ -109,23 +109,28 @@
     list-style: none;
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
+    gap: 0.45rem;
   }
 
-  .profile-list button {
+  .profile-list button,
+  .create-btn,
+  input {
     width: 100%;
-    text-align: left;
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius);
     color: var(--color-text);
-    cursor: pointer;
     font-size: 0.95rem;
-    padding: 0.6rem 0.9rem;
-    transition: background 0.15s;
+    padding: 0.65rem 0.85rem;
   }
 
-  .profile-list button:hover {
+  .profile-list button {
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .profile-list button:hover,
+  .create-btn:hover:not(:disabled) {
     background: var(--color-surface-hover);
   }
 
@@ -141,34 +146,12 @@
 
   input {
     flex: 1;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    color: var(--color-text);
-    font-size: 0.95rem;
-    padding: 0.55rem 0.8rem;
-    outline: none;
-    font-family: var(--font);
-  }
-
-  input:focus {
-    border-color: rgba(255, 255, 255, 0.3);
   }
 
   .create-btn {
-    background: rgba(255, 255, 255, 0.15);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    color: var(--color-text);
-    cursor: pointer;
-    font-size: 0.9rem;
-    padding: 0.55rem 0.9rem;
+    width: auto;
     white-space: nowrap;
-    transition: background 0.15s;
-  }
-
-  .create-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.22);
+    cursor: pointer;
   }
 
   .create-btn:disabled {

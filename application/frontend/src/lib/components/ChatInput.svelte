@@ -32,7 +32,7 @@
   <textarea
     bind:value={text}
     onkeydown={handleKeydown}
-    placeholder="Type a message…"
+    placeholder="Type a message..."
     rows="1"
     {disabled}
   ></textarea>
@@ -43,7 +43,7 @@
     title={isListening ? "Stop mic" : "Start mic"}
     type="button"
   >
-    {isListening ? "🔴" : "🎤"}
+    {isListening ? "Listening" : "Mic"}
   </button>
   <button class="send-btn" onclick={submit} {disabled} type="button">Send</button>
 </div>
@@ -53,9 +53,8 @@
     display: flex;
     align-items: flex-end;
     gap: 0.5rem;
-    padding: 0.75rem 1rem;
+    padding-top: 0.85rem;
     border-top: 1px solid var(--color-border);
-    background: rgba(0, 0, 0, 0.2);
   }
 
   textarea {
@@ -64,34 +63,27 @@
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius);
-    color: var(--color-text);
-    font-family: var(--font);
     font-size: 0.95rem;
-    padding: 0.6rem 0.8rem;
-    min-height: 2.5rem;
+    padding: 0.7rem 0.85rem;
+    min-height: 2.75rem;
     max-height: 8rem;
     overflow-y: auto;
-    outline: none;
     line-height: 1.4;
   }
 
-  textarea:focus {
-    border-color: rgba(255, 255, 255, 0.3);
-  }
-
-  .mic-btn, .send-btn {
+  .mic-btn,
+  .send-btn {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius);
-    color: var(--color-text);
     cursor: pointer;
     font-size: 0.9rem;
-    padding: 0.55rem 0.85rem;
+    padding: 0.7rem 0.9rem;
     white-space: nowrap;
-    transition: background 0.15s;
   }
 
-  .mic-btn:hover, .send-btn:hover {
+  .mic-btn:hover,
+  .send-btn:hover {
     background: var(--color-surface-hover);
   }
 
@@ -101,7 +93,7 @@
   }
 
   .mic-btn.active {
-    border-color: rgba(255, 80, 80, 0.6);
+    border-color: rgba(255, 80, 80, 0.55);
     background: rgba(255, 60, 60, 0.15);
   }
 </style>

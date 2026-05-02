@@ -14,21 +14,22 @@
   {#if stream}
     <video bind:this={videoEl} autoplay muted playsinline></video>
   {:else}
-    <div class="placeholder">📷</div>
+    <div class="placeholder">Camera off</div>
   {/if}
 </div>
 
 <style>
   .preview {
     position: fixed;
-    bottom: 5.5rem;
+    bottom: 1rem;
     right: 1rem;
-    width: 140px;
-    height: 105px;
+    width: 168px;
+    height: 126px;
     border-radius: var(--radius);
     overflow: hidden;
     border: 1px solid var(--color-border);
-    background: rgba(0, 0, 0, 0.4);
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 5;
   }
 
   video {
@@ -43,7 +44,7 @@
     align-items: center;
     justify-content: center;
     height: 100%;
-    font-size: 2rem;
-    opacity: 0.4;
+    font-size: 0.9rem;
+    color: var(--color-text-muted);
   }
 </style>

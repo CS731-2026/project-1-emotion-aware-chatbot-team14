@@ -13,16 +13,17 @@
   .circle-wrap {
     display: flex;
     justify-content: center;
-    padding: 2rem 0 1rem;
+    padding: 1.5rem 0 0.8rem;
   }
 
   .circle {
     position: relative;
-    width: 64px;
-    height: 64px;
+    width: 74px;
+    height: 74px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.85);
+    background: rgba(255, 255, 255, 0.88);
     flex-shrink: 0;
+    box-shadow: 0 0 35px rgba(255, 255, 255, 0.12);
   }
 
   .ring {
@@ -42,7 +43,7 @@
   }
 
   @keyframes pulse {
-    0%   { transform: scale(1);   opacity: 0.7; }
-    100% { transform: scale(2.4); opacity: 0; }
+    0% { transform: scale(1); opacity: 0.68; }
+    100% { transform: scale(2.5); opacity: 0; }
   }
 </style>

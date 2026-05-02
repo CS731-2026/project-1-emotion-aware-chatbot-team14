@@ -9,6 +9,10 @@ const router = Router();
 
 const HISTORY_WINDOW = 10;
 
+function buildFallbackResponse(text: string): string {
+  return `Backend fallback reply: I received "${text}". The backend is working, but the model service or LLM is unavailable.`;
+}
+
 router.post("/", async (req, res, next) => {
   try {
     const profileId = req.session.profileId;
@@ -27,18 +31,22 @@ router.post("/", async (req, res, next) => {
     const windowed = fullHistory.slice(-(HISTORY_WINDOW * 2));
     const harnessHistory = windowed.map((m) => ({ role: m.role === "agent" ? "assistant" : m.role, content: m.content }));
 
-    const harnessRes = await fetch(`${env.MODEL_SERVICE_URL}/api/v1/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ profile_id: profileId, message: text, history: harnessHistory }),
-    });
+    let response = buildFallbackResponse(text);
 
-    if (!harnessRes.ok) {
-      const err: AppError = Object.assign(new Error("Harness error"), { statusCode: 502 });
-      return next(err);
+    try {
+      const harnessRes = await fetch(`${env.MODEL_SERVICE_URL}/api/v1/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profile_id: profileId, message: text, history: harnessHistory }),
+      });
+
+      if (harnessRes.ok) {
+        const data = (await harnessRes.json()) as { response?: string };
+        if (data.response) response = data.response;
+      }
+    } catch {
+      // Keep the backend usable locally even when the model service is down.
     }
-
-    const { response } = (await harnessRes.json()) as { response: string };
 
     const userMsg: Message = { id: randomUUID(), role: "user", content: text, timestamp: new Date().toISOString() };
     const agentMsg: Message = { id: randomUUID(), role: "agent", content: response, timestamp: new Date().toISOString() };

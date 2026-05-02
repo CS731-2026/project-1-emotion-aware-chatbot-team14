@@ -1,16 +1,19 @@
-.PHONY: dev dev-harness dev-backend dev-frontend install open
+SHELL := /bin/bash
 
-dev:
-	make -j3 --keep-going dev-harness dev-backend dev-frontend
+.PHONY: dev dev-services dev-harness dev-backend dev-frontend install open kill
+
+dev: kill
+	$(MAKE) -j3 --keep-going dev-harness dev-backend dev-frontend
 
 dev-harness:
-	cd application/model_service && uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+	set -o pipefail; cd application/model_service && PYTHONUNBUFFERED=1 uvicorn app:app --host 0.0.0.0 --port 8000 --reload 2>&1 | awk '{ print "[harness] " $$0; fflush(); }'
 
 dev-backend:
-	cd application/backend && npm run dev
+	lsof -ti tcp:3001 | xargs kill -9 2>/dev/null || true
+	set -o pipefail; cd application/backend && npm run dev 2>&1 | awk '{ print "[backend] " $$0; fflush(); }'
 
 dev-frontend:
-	cd application/frontend && npm run dev
+	set -o pipefail; cd application/frontend && npm run dev 2>&1 | awk '{ print "[frontend] " $$0; fflush(); }'
 
 install:
 	cd application/backend && npm install
@@ -25,6 +28,7 @@ open:
 
 kill:
 	lsof -ti tcp:3000 | xargs kill -9 2>/dev/null || true
+	lsof -ti tcp:3001 | xargs kill -9 2>/dev/null || true
 	lsof -ti tcp:5173 | xargs kill -9 2>/dev/null || true
 	lsof -ti tcp:8000 | xargs kill -9 2>/dev/null || true
-	@echo "Ports 3000 / 5173 / 8000 cleared"
+	@echo "Ports 3000 / 3001 / 5173 / 8000 cleared"
