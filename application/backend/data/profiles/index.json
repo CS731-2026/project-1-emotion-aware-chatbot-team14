@@ -1,0 +1,12 @@
+[
+  {
+    "id": "b12c327b-65e3-4fb7-8d06-281cc76e6719",
+    "name": "Alice",
+    "createdAt": "2026-05-02T10:54:39.995Z"
+  },
+  {
+    "id": "c1cf0fcd-20d1-4667-ada3-8b40821f577b",
+    "name": "TestUser",
+    "createdAt": "2026-05-02T11:00:58.724Z"
+  }
+]

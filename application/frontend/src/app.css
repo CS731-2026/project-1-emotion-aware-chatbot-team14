@@ -1,0 +1,33 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --font: system-ui, -apple-system, sans-serif;
+  --color-text: #f0f0f0;
+  --color-text-muted: rgba(240, 240, 240, 0.5);
+  --color-surface: rgba(255, 255, 255, 0.06);
+  --color-surface-hover: rgba(255, 255, 255, 0.1);
+  --color-border: rgba(255, 255, 255, 0.12);
+  --color-user-bubble: rgba(255, 255, 255, 0.12);
+  --color-agent-bubble: rgba(255, 255, 255, 0.06);
+  --radius: 12px;
+
+  /* Emotion colours (HSL, dark) */
+  --emotion-neutral:   hsl(220, 15%, 10%);
+  --emotion-happy:     hsl(45, 70%, 15%);
+  --emotion-sad:       hsl(210, 60%, 12%);
+  --emotion-angry:     hsl(0, 65%, 15%);
+  --emotion-fearful:   hsl(275, 50%, 13%);
+  --emotion-disgusted: hsl(120, 35%, 11%);
+  --emotion-surprised: hsl(180, 55%, 13%);
+}
+
+html, body {
+  height: 100%;
+  font-family: var(--font);
+  color: var(--color-text);
+  background: var(--emotion-neutral);
+}
