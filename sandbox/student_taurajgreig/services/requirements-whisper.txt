@@ -1,0 +1,6 @@
+# Whisper transcription service dependencies
+# Install with: pip install -r services/requirements-whisper.txt
+
+faster-whisper>=0.10.0
+torch>=2.0.0
+huggingface-hub>=0.16.0

@@ -1,0 +1,6 @@
+# Optional dependencies for testing specific libraries
+# Install with: pip install -r requirements-optional.txt
+
+# RetinaFace - Face detection library
+# Note: Has TensorFlow dependency, may require different Python version
+retinaface>=0.0.13
