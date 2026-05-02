@@ -27,9 +27,10 @@ from sklearn.metrics import (classification_report, confusion_matrix,
                               f1_score, precision_score, recall_score)
 
 import sys
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from data.emotion_dataset import EmotionDataset, get_transforms
-from models.model import build_model
+sys.path.insert(0, str(Path(__file__).resolve().parents[0]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'application' / 'mock_programs'))
+from emotion_dataset import EmotionDataset, get_transforms
+from model import build_model
 from torch.utils.data import DataLoader
 
 

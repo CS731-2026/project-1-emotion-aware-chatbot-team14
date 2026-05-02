@@ -32,9 +32,10 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 
 # Project imports
 import sys
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from data.emotion_dataset import get_loaders, mixup_data, mixup_criterion, cutmix_data
-from models.model import build_model, AVAILABLE_MODELS
+sys.path.insert(0, str(Path(__file__).resolve().parents[0]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'application' / 'mock_programs'))
+from emotion_dataset import get_loaders, mixup_data, mixup_criterion, cutmix_data
+from model import build_model, AVAILABLE_MODELS
 
 # ── Defaults (match exemplar configs) ─────────────────────────────────────────
 DEFAULT_LR          = 1e-4
