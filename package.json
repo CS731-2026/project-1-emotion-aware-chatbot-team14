@@ -1,0 +1,14 @@
+{
+  "name": "hri-team-project",
+  "version": "1.0.0",
+  "description": "## Repository Structure",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "git-weave": "^0.1.0"
+  }
+}

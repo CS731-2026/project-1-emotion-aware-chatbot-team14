@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "scan": [".", "sandbox/student_taurajgreig/services/wisper.cpp/"],
+  "syncStrategy": "latest",
+  "hooks": {
+    "postMerge": true,
+    "postCheckout": true,
+    "prePush": true
+  },
+  "exclude": "git-info"
+}
