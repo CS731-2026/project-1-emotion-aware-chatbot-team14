@@ -1,3 +1,5 @@
 node_modules/
 dist/
 .env
+data/profiles/*.json
+!data/profiles/index.json
