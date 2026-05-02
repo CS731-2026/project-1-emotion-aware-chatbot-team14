@@ -7,6 +7,7 @@ Uses supervision.Detections.from_ultralytics() to parse results.
 from __future__ import annotations
 
 from pathlib import Path
+import time
 
 import numpy as np
 
@@ -29,6 +30,7 @@ class FaceDetector:
 
     def __init__(self) -> None:
         from huggingface_hub import hf_hub_download
+        import torch
         from ultralytics import YOLO
 
         _MODELS_DIR.mkdir(parents=True, exist_ok=True)
@@ -42,6 +44,32 @@ class FaceDetector:
         )
 
         self._model = YOLO(model_path)
+        self.torch_version = getattr(torch, "__version__", "unknown")
+        self.mps_built = bool(
+            getattr(torch.backends, "mps", None) and torch.backends.mps.is_built()
+        )
+        self.mps_available = bool(
+            getattr(torch.backends, "mps", None) and torch.backends.mps.is_available()
+        )
+        self.device = self._select_device(torch)
+        self.device_reason = self._describe_device(torch)
+        self.last_inference_ms: float | None = None
+
+    def _select_device(self, torch) -> str:
+        if self.mps_available:
+            return "mps"
+        if torch.cuda.is_available():
+            return "cuda"
+        return "cpu"
+
+    def _describe_device(self, torch) -> str:
+        if self.device == "mps":
+            return "PyTorch MPS is available"
+        if self.device == "cuda":
+            return "CUDA is available"
+        if self.mps_built and not self.mps_available:
+            return "PyTorch was built with MPS but reports MPS unavailable"
+        return "No GPU backend reported by PyTorch"
 
     def detect_best(
         self, frame_bgr: np.ndarray
@@ -60,7 +88,14 @@ class FaceDetector:
         """
         from supervision import Detections
 
-        results = self._model(frame_bgr, conf=self.CONF_THRESHOLD, verbose=False)
+        start = time.perf_counter()
+        results = self._model(
+            frame_bgr,
+            conf=self.CONF_THRESHOLD,
+            verbose=False,
+            device=self.device,
+        )
+        self.last_inference_ms = (time.perf_counter() - start) * 1000
         r = results[0]
 
         detections = Detections.from_ultralytics(r)

@@ -1,11 +1,12 @@
 import { PUBLIC_BACKEND_URL } from "$env/static/public";
 
-const BASE = PUBLIC_BACKEND_URL;
+const BASE = PUBLIC_BACKEND_URL || "http://localhost:3001";
 
 export type Profile = { id: string; name: string; createdAt: string };
 export type Message = { id: string; role: "user" | "agent"; content: string; timestamp: string };
 
 export const api = {
+  getHealth: () => fetch(`${BASE}/health`, { credentials: "include" }).then((r) => r.json()) as Promise<{ status: string }>,
   getSession: () => fetch(`${BASE}/api/v1/session`, { credentials: "include" }).then((r) => r.json()) as Promise<{ profileId: string | null }>,
   getProfiles: () => fetch(`${BASE}/api/v1/profiles`, { credentials: "include" }).then((r) => r.json()) as Promise<Profile[]>,
   createProfile: (name: string) =>
