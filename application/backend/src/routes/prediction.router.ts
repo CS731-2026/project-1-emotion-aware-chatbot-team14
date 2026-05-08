@@ -13,14 +13,23 @@ router.post(
   "/",
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const response = await fetch(`${env.MODEL_SERVICE_URL}/api/v1/predict`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(req.body),
-      });
+      try {
+        const response = await fetch(`${env.MODEL_SERVICE_URL}/api/v1/predict`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(req.body),
+        });
 
-      const data = await response.json();
-      res.status(response.status).json(data);
+        const data = await response.json();
+        return res.status(response.status).json(data);
+      } catch {
+        return res.json({
+          message: "predict fallback from backend",
+          backend: "ok",
+          modelService: "offline",
+          input: req.body?.input ?? null,
+        });
+      }
     } catch (err) {
       next(err);
     }

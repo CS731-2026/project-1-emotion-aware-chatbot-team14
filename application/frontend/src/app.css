@@ -1,0 +1,51 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --font: system-ui, -apple-system, sans-serif;
+  --color-text: #f0f0f0;
+  --color-text-muted: rgba(240, 240, 240, 0.6);
+  --color-surface: rgba(255, 255, 255, 0.06);
+  --color-surface-hover: rgba(255, 255, 255, 0.1);
+  --color-border: rgba(255, 255, 255, 0.12);
+  --color-user-bubble: rgba(255, 255, 255, 0.12);
+  --color-agent-bubble: rgba(255, 255, 255, 0.06);
+  --radius: 18px;
+}
+
+html, body {
+  height: 100%;
+  font-family: var(--font);
+  color: var(--color-text);
+  background: hsl(220, 15%, 10%);
+}
+
+body {
+  min-height: 100vh;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button,
+input,
+textarea {
+  color: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.28);
+  outline-offset: 2px;
+}
+
+#svelte {
+  min-height: 100%;
+}

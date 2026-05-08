@@ -1,0 +1,21 @@
+{
+  "profile": {
+    "id": "c1cf0fcd-20d1-4667-ada3-8b40821f577b",
+    "name": "TestUser",
+    "createdAt": "2026-05-02T11:00:58.724Z"
+  },
+  "messages": [
+    {
+      "id": "c58dc9a1-1352-40f6-a1c9-dc3baa275939",
+      "role": "user",
+      "content": "hello there",
+      "timestamp": "2026-05-02T11:00:58.809Z"
+    },
+    {
+      "id": "0d1a2001-901f-46c6-8860-c4aad3da9d4c",
+      "role": "agent",
+      "content": "stub response from harness",
+      "timestamp": "2026-05-02T11:00:58.809Z"
+    }
+  ]
+}
