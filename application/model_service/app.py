@@ -18,6 +18,13 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """FastAPI lifespan handler — loads all ML components once at startup.
+
+    Each component (face detector, STT, emotion model, LLM) is loaded
+    independently so a missing dependency only disables that component;
+    the service remains partially functional. Loaded instances are stored
+    on app.state so every request handler can access them without globals.
+    """
     # Load inference components based on config.
     # Non-stub stages only: models load when their env vars select real backends.
 

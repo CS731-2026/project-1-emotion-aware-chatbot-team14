@@ -15,6 +15,14 @@ type BrowserVadCallbacks = {
   onDebug: (message: string) => void;
 };
 
+/**
+ * Voice Activity Detection controller that runs entirely in the browser.
+ *
+ * Uses Web Audio API's AnalyserNode to compute RMS level every 100 ms. When
+ * level exceeds SPEECH_THRESHOLD it starts a MediaRecorder; when silence is
+ * detected for SILENCE_DURATION_MS it stops, encodes the clip to base64, and
+ * sends an audio_chunk message over the WebSocket to the model service.
+ */
 export class BrowserVadController {
   private mediaRecorder: MediaRecorder | null = null;
   private audioContext: AudioContext | null = null;
@@ -81,6 +89,7 @@ export class BrowserVadController {
     this.stop(false);
   }
 
+  /** Called every 100 ms: measure audio level and drive the recording state machine. */
   private tick() {
     this.currentAudioLevel = this.getAudioLevel();
     this.callbacks.onAudioLevel(this.currentAudioLevel);
@@ -112,6 +121,7 @@ export class BrowserVadController {
     }
   }
 
+  /** Create AudioContext + AnalyserNode from the mic stream (idempotent). */
   private ensureAudioAnalyser(micStream: MediaStream) {
     if (this.audioAnalyser) return true;
 
@@ -125,6 +135,7 @@ export class BrowserVadController {
     return true;
   }
 
+  /** Compute the RMS amplitude of the current audio frame from the analyser. */
   private getAudioLevel() {
     if (!this.audioAnalyser) return 0;
 
@@ -138,6 +149,7 @@ export class BrowserVadController {
     return Math.sqrt(sum / samples.length);
   }
 
+  /** Start a MediaRecorder session; on stop, encode the blob and send it over WS. */
   private startSpeechRecording() {
     const micStream = this.callbacks.getMicStream();
     const socket = this.callbacks.getSocket();
@@ -193,6 +205,7 @@ export class BrowserVadController {
     }, MAX_SPEECH_DURATION_MS);
   }
 
+  /** Stop the active MediaRecorder, clearing both the silence and max-duration timers. */
   private stopSpeechRecording(reason: string) {
     if (this.speechStopTimeout) {
       clearTimeout(this.speechStopTimeout);

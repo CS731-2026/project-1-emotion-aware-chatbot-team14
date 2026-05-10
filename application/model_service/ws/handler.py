@@ -39,15 +39,27 @@ _sessions: dict[str, HarnessSession] = {}
 
 
 def emit_debug(message: str) -> None:
+    """Write a timestamped debug line to both logger and stdout."""
     logger.info(message)
     print(f"[harness] {message}", flush=True)
 
 
 def get_session(profile_id: str) -> HarnessSession | None:
+    """Look up an active session by profile ID; returns None if not found.
+
+    Used by the HTTP /chat route to read the emotion buffer from the
+    corresponding WebSocket session without sharing any global state directly.
+    """
     return _sessions.get(profile_id)
 
 
 def decode_browser_audio_to_numpy(data: str):
+    """Convert a base64-encoded WebM/Opus blob to a float32 PCM numpy array.
+
+    The browser records audio as WebM; ffmpeg re-encodes it to raw 16-bit
+    PCM at 16 kHz mono (the format whisper.cpp expects), which is then
+    normalised to the [-1.0, 1.0] float32 range.
+    """
     import numpy as np
 
     with tempfile.TemporaryDirectory(prefix="hri_audio_") as tmp:
@@ -91,6 +103,11 @@ def decode_browser_audio_to_numpy(data: str):
 
 
 def encode_jpeg_b64(frame_bgr) -> str | None:
+    """JPEG-encode a BGR frame and return it as a base64 ASCII string.
+
+    Quality is set to 70 — enough for debug display; reduces WS payload size.
+    Returns None if encoding fails.
+    """
     import cv2
 
     ok, encoded = cv2.imencode(".jpg", frame_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
@@ -107,6 +124,12 @@ async def process_audio_chunk(
     data: str,
     timestamp: float,
 ) -> None:
+    """Decode and transcribe one audio chunk, then push the result back over WS.
+
+    Runs STT in a worker thread via asyncio.to_thread so the event loop stays
+    unblocked. Sends two messages: transcript_chunk (the text) and audio_debug
+    (timing metadata for the debug dashboard).
+    """
     text = ""
     stt_error = None
     audio_timings_ms: dict[str, float] = {}
@@ -176,6 +199,16 @@ async def process_audio_chunk(
 
 
 async def handle_websocket(websocket: WebSocket) -> None:
+    """Main WebSocket handler — multiplexes all real-time data for one browser tab.
+
+    Message protocol (all JSON):
+      Inbound:  session_start | session_end | video_frame | audio_chunk
+      Outbound: connection_ack | message_ack | harness_status | face_detection
+                | frame_debug | emotion_update | transcript_chunk | audio_debug | error
+
+    A HarnessSession is created on session_start and stored in _sessions so the
+    HTTP /chat route can read its emotion buffer when generating LLM responses.
+    """
     await websocket.accept()
     await websocket.send_text(json.dumps({
         "type": "connection_ack",
