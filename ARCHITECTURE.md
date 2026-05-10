@@ -66,31 +66,22 @@ application/model_service/ws/handler.py
     │    frame_bgr[y1:y2, x1:x2] → face_crop (BGR uint8)
     │    returns (face_crop, box_xyxy) or (None, None)
     │
-    │  ┌─────────────────────────────────────────────────────────────────┐
-    │  │  ⚠ EMOTION MODEL INTEGRATION POINT (handler.py lines ~311–315) │
-    │  │                                                                 │
-    │  │  CURRENT (placeholder):                                         │
-    │  │    if config.TEST_EMOTIONS:                                     │
-    │  │        emotion = random.choice(EMOTIONS)   # always random      │
-    │  │    else:                                                         │
-    │  │        emotion = "happy" if detected else random.choice(EMOTIONS)│
-    │  │    confidence = 0.95 if detected else random.uniform(0.5, 0.8)  │
-    │  │                                                                 │
-    │  │  REPLACE WITH:                                                  │
-    │  │    emotion_model = getattr(app.state, "emotion_model", None)    │
-    │  │    if detected and face_crop is not None and emotion_model:      │
-    │  │        emotion, confidence = emotion_model.predict(face_crop)   │
-    │  │        # predict() lives in core/emotion/base.py (ABC)          │
-    │  │        # real implementation goes in core/emotion/<name>.py      │
-    │  │        # register it in core/emotion/factory.py                 │
-    │  │        # set EMOTION_VARIANT=<name> in .env                     │
-    │  │    elif config.TEST_EMOTIONS:                                    │
-    │  │        emotion = random.choice(EMOTIONS)                        │
-    │  │        confidence = random.uniform(0.5, 0.8)                    │
-    │  │    else:                                                         │
-    │  │        emotion = "neutral"                                       │
-    │  │        confidence = 0.5                                          │
-    │  └─────────────────────────────────────────────────────────────────┘
+    │  ┌──────────────────────────────────────────────────────────────────────┐
+    │  │  ⚠ EMOTION MODEL INTEGRATION POINT                                  │
+    │  │  ws/handler.py  pick_emotion(face_crop, emotion_model, detected)     │
+    │  │                                                                      │
+    │  │  CURRENT (placeholder):                                              │
+    │  │    if config.TEST_EMOTIONS:  → random.choice(EMOTIONS)  (default)   │
+    │  │    else:                     → "neutral", 0.5                        │
+    │  │                                                                      │
+    │  │  TO INTEGRATE A REAL MODEL:                                          │
+    │  │    1. Implement EmotionModel ABC → core/emotion/<name>.py            │
+    │  │       def predict(face_bgr: np.ndarray) → (label: str, conf: float) │
+    │  │    2. Register in core/emotion/factory.py                            │
+    │  │    3. Set EMOTION_VARIANT=<name>, TEST_EMOTIONS=false in .env        │
+    │  │    pick_emotion() will call emotion_model.predict(face_crop)         │
+    │  │    automatically — no other changes needed.                          │
+    │  └──────────────────────────────────────────────────────────────────────┘
     │
     ├─ core/emotion/buffer.py  EmotionBuffer.update(emotion, confidence, timestamp)
     │    deque(maxlen=10).append(EmotionObservation(...))
@@ -114,7 +105,7 @@ application/model_service/ws/handler.py
 
 ### Flow 2 — Microphone → VAD → STT → Transcript Buffer
 
-This flow captures what the student says between keystrokes and stores it as transcript segments. The transcript buffer is passed to `EmotionalReasoningAgent` when a chat message is sent (currently not used in reasoning — see expansion point below).
+This flow captures what the user says and stores it as timestamped transcript segments. The transcript buffer is passed to `EmotionalReasoningAgent` when a chat message is sent.
 
 ```
 frontend/src/lib/harness/browserVad.ts
@@ -246,9 +237,9 @@ frontend: ChatHistory.svelte renders the new messages
 
 ### 1. Real Emotion Model (`⚠ highest priority`)
 
-**Where:** `application/model_service/ws/video.py`, function `_pick_emotion()`.
+**Where:** `application/model_service/ws/handler.py`, function `pick_emotion()`.
 
-**Current state:** ignores `face_crop` entirely and returns a random emotion label when `TEST_EMOTIONS=true` (default), or `"neutral"` otherwise.
+**Current state:** returns a random emotion when `TEST_EMOTIONS=true` (default), or `"neutral"` otherwise. `face_crop` is prepared by `ws/video.py` but `emotion_model.predict()` is only called when a real model is loaded.
 
 **What to do:**
 
@@ -272,16 +263,14 @@ if variant == "your_model_name":
     return YourEmotionModel()
 ```
 
-Step 3 — Set the env var:
+Step 3 — Set the env vars:
 ```
 # application/model_service/.env
 EMOTION_VARIANT=your_model_name
 TEST_EMOTIONS=false
 ```
 
-Step 4 — `_pick_emotion()` in `ws/video.py` already has the right structure. Just ensure `EMOTION_VARIANT` points to your new model and `TEST_EMOTIONS=false` in `.env` — the function will call `emotion_model.predict(face_crop)` automatically when the model is loaded.
-
-The face crop is already in BGR uint8 format from the face detector — resize it to match your model's expected input inside `predict()`.
+`pick_emotion()` in `ws/handler.py` already calls `emotion_model.predict(face_crop)` when the model is loaded — no other changes needed. The face crop arrives as BGR uint8 from the face detector; resize inside `predict()` to match your model's expected input.
 
 ---
 
@@ -296,14 +285,14 @@ There are three layers where reasoning can be expanded, ordered from easiest to 
 **Expand to:**
 - Weight recent observations more heavily (recency-biased mode or exponential moving average)
 - Factor in confidence: low-confidence observations should count less
-- Use `transcript_segments` (currently passed in but unused): scan for verbal frustration cues ("I don't understand", "this doesn't make sense") to reinforce the emotional signal
+- Use `transcript_segments` (currently passed in but unused): scan for verbal cues to reinforce the emotional signal
 - Produce richer context: include confidence, duration, trend (improving/worsening), and key transcript phrases
 
 Example of a richer output:
 ```
-"The student has appeared frustrated (angry/sad) for ~18s (confidence 0.82, worsening).
+"The user has appeared frustrated (angry/sad) for ~18s (confidence 0.82, worsening).
 They recently said: 'I don't understand why this works'.
-Slow down significantly. Offer a simpler analogy before re-explaining."
+Slow down. Offer a simpler framing before continuing."
 ```
 
 This string is injected verbatim as a `system` role message directly before the user's turn — so more specific language translates directly into more tailored LLM behaviour.
@@ -313,7 +302,7 @@ This string is injected verbatim as a `system` role message directly before the 
 **Current:** static 10-message history window; emotional context is a single sentence injected as a system message.
 
 **Expand to:**
-- Dynamically adjust `history_window` based on emotional state: frustrated students benefit from a longer window (more context on what's confused them); anxious students may benefit from a shorter, more focused window
+- Dynamically adjust `history_window` based on emotional state
 - Instead of a single context string, pass structured data (emotion, confidence, duration, transcript excerpt) and let the prompt template format it
 - Add a second `EmotionalReasoningAgent` call that uses the full transcript history, not just the 20-segment window
 
@@ -333,30 +322,30 @@ This string is injected verbatim as a `system` role message directly before the 
 ```
 ws/handler.py: handle_websocket()           — thin dispatcher only
   │
-  ├─ "video_frame" → ws/video.py: process_video_frame()
-  │    ws/video.py: _run_face_detection()
-  │      core/face_detector.py: detect_best()             [WORKING]
-  │        └─ returns face_crop (BGR uint8)
-  │    ws/video.py: _pick_emotion()                        [PLACEHOLDER → NEEDS REAL MODEL]
-  │      core/emotion/*.py: emotion_model.predict(face_crop)
-  │        └─ returns (emotion, confidence)
-  │    core/emotion/buffer.py: EmotionBuffer.update()      [WORKING]
+  ├─ "video_frame" → on_video_frame()       — composition point; all steps explicit here
+  │    ws/video.py: detect_from_message()
+  │      decode_frame()                         decode base64 JPEG → BGR numpy
+  │      run_face_detection()                   YOLO → face_crop, box, annotated frame
+  │        core/face_detector.py: detect_best() [WORKING]
+  │    ws/handler.py: pick_emotion()            [PLACEHOLDER → NEEDS REAL MODEL]
+  │      emotion_model.predict(face_crop)       only invocation point in the codebase
+  │    core/emotion/buffer.py: EmotionBuffer.update()   [WORKING]
+  │    _send_frame_messages()                   face_detection + frame_debug + emotion_update
   │
-  └─ "audio_chunk" → ws/audio.py: process_audio_chunk()
-       ws/audio.py: decode_browser_audio_to_numpy()        [WORKING]
-         └─ ffmpeg WebM → float32 PCM
-       core/stt/whisper_cpp.py: stt.transcribe(audio_np)  [WORKING]
-         └─ returns (text, lang, conf)
-       session.transcript_buffer.append()                  [WORKING, unused in reasoning]
+  └─ "audio_chunk" → on_audio_chunk()
+       ws/audio.py: process_audio_chunk()
+         decode_browser_audio_to_numpy()        [WORKING] ffmpeg WebM → float32 PCM
+         stt.transcribe(audio_np)               [WORKING] → (text, lang, conf)
+         session.transcript_buffer.append()     [WORKING]
 
 routers/chat.py: chat()
   │
   ├─ ws/session.py: get_session(profile_id)
-  ├─ emotion_agent.analyse()                core/emotional_reasoning_agent.py  [BASIC → EXPAND]
+  ├─ emotion_agent.analyse()    core/emotional_reasoning_agent.py  [BASIC → EXPAND]
   │    uses: emotion_buffer.history()
-  │    ignores: transcript_buffer           ← LOW-HANGING FRUIT: use this
+  │    ignores: transcript_buffer              ← low-hanging fruit: use this
   │
-  └─ llm_agent.reason()                    core/llm/reasoning_agent.py        [WORKING → EXPAND]
+  └─ llm_agent.reason()         core/llm/reasoning_agent.py        [WORKING → EXPAND]
        assembles prompt → LLMProvider.chat()
        └─ openai.py / ollama.py / anthropic.py (stub)
 ```
@@ -409,8 +398,7 @@ src/
     ├── chat.router.ts         POST / → proxies to model service; fallback on failure
     ├── profiles.router.ts     GET / list, POST / create, POST /:id/select → sets session
     ├── history.router.ts      GET / read history, POST / append message
-    ├── session.router.ts      GET / → returns {profileId} from session
-    └── prediction.router.ts   Stub (returns static string)
+    └── session.router.ts      GET / → returns {profileId} from session
 ```
 
 **Profile storage:** each profile gets `data/profiles/<uuid>.json` → `{profile, messages[]}`. `data/profiles/index.json` is a flat list of profile metadata only. The index is read on every list/lookup call (no in-memory cache).
@@ -422,31 +410,32 @@ FastAPI + Python. All ML work happens here.
 ```
 app.py           FastAPI app creation, lifespan (loads all ML components), WS + router mounting
 config.py        All env vars (STT_ENGINE, EMOTION_VARIANT, LLM_PROVIDER, TEST_EMOTIONS…)
-main.py          Uvicorn entry point (used for direct python main.py; make dev uses uvicorn directly)
+main.py          Uvicorn entry point
 routers/
-├── chat.py      POST /api/v1/chat  — emotion-aware LLM reply
-└── chat.py        POST /api/v1/chat — the only HTTP route in the model service
+└── chat.py      POST /api/v1/chat — the only HTTP route; reads WS session state, calls LLM
 ws/
-├── handler.py   Thin dispatcher — accepts WS connection, routes messages to audio/video handlers
+├── handler.py   Dispatcher + composition — routes WS messages; on_video_frame composes the pipeline
+│                  pick_emotion() lives here — the only point emotion_model.predict() is called
 ├── session.py   HarnessSession dataclass, _sessions store, get_session, emit_debug
 ├── audio.py     decode_browser_audio_to_numpy (ffmpeg) + process_audio_chunk (STT pipeline)
-├── video.py     encode_jpeg_b64, _run_face_detection, _pick_emotion, process_video_frame
+└── video.py     Pure frame utilities — decode_frame, run_face_detection, encode_jpeg_b64,
+│                  detect_from_message, FrameDetectionResult — no emotion logic
 └── protocol.py  Dataclass definitions for all WS message types (documentation reference)
 core/
 ├── face_detector.py             YOLOv8 face detector (HuggingFace, auto-downloaded + cached)
 ├── emotional_reasoning_agent.py EmotionObservation[] + transcript[] → context string
 ├── emotion/
-│   ├── base.py       EmotionModel ABC  — implement this to add a real model
-│   ├── buffer.py     EmotionBuffer (deque, window=10) + EmotionObservation dataclass
-│   ├── factory.py    create_emotion_model(variant) — add new variants here
-│   └── placeholder.py  Returns random emotion; used until real model is integrated
+│   ├── base.py        EmotionModel ABC — implement this to add a real model
+│   ├── buffer.py      EmotionBuffer (deque, window=10) + EmotionObservation dataclass
+│   ├── factory.py     create_emotion_model(variant) — add new variants here
+│   └── placeholder.py Returns random emotion; used until real model is integrated
 ├── llm/
-│   ├── base.py           LLMProvider ABC + Message TypedDict
-│   ├── openai.py         OpenAI Chat Completions (working)
-│   ├── anthropic.py      Stub — raises NotImplementedError
-│   ├── ollama.py         Ollama local LLM (implemented, untested)
-│   ├── factory.py        create_llm(provider, model)
-│   └── reasoning_agent.py  LLMReasoningAgent — assembles full message list per turn
+│   ├── base.py            LLMProvider ABC + Message TypedDict
+│   ├── openai.py          OpenAI Chat Completions (working)
+│   ├── anthropic.py       Stub — raises NotImplementedError
+│   ├── ollama.py          Ollama local LLM (implemented, untested)
+│   ├── factory.py         create_llm(provider, model)
+│   └── reasoning_agent.py LLMReasoningAgent — assembles full message list per turn
 └── stt/
     ├── base.py              TranscriptionService ABC
     ├── whisper_cpp.py       whisper.cpp backend (default; requires WHISPER_CPP_DIR)
