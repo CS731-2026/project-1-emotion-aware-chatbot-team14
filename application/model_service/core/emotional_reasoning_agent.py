@@ -10,7 +10,7 @@ from __future__ import annotations
 import statistics
 
 from core.emotion.buffer import EmotionObservation
-from ws.handler import TranscriptSegment
+from ws.session import TranscriptSegment
 
 
 class EmotionalReasoningAgent:
