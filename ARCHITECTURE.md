@@ -425,7 +425,7 @@ config.py        All env vars (STT_ENGINE, EMOTION_VARIANT, LLM_PROVIDER, TEST_E
 main.py          Uvicorn entry point (used for direct python main.py; make dev uses uvicorn directly)
 routers/
 ├── chat.py      POST /api/v1/chat  — emotion-aware LLM reply
-└── prediction.py  Stub
+└── chat.py        POST /api/v1/chat — the only HTTP route in the model service
 ws/
 ├── handler.py   Thin dispatcher — accepts WS connection, routes messages to audio/video handlers
 ├── session.py   HarnessSession dataclass, _sessions store, get_session, emit_debug
