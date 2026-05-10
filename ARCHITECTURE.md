@@ -6,7 +6,7 @@ A walkthrough of how the system is structured and how data flows through it — 
 
 ## The Big Picture
 
-This system is an **emotion-aware study companion**. The core idea: read the student's face via webcam, classify their emotional state in real time, and condition the LLM's responses on that emotion — so a frustrated student gets more patient explanations, not faster ones.
+This system is an **emotion-aware empathy bot**. The core idea: read the user's face via webcam, classify their emotional state in real time, and combine that signal with a live speech transcript to condition the LLM's responses — two separate inputs converging at LLM Reasoning.
 
 Three services run together:
 
@@ -33,7 +33,11 @@ Three services run together:
 
 ## Three Parallel Data Flows
 
-There are three simultaneous flows that all converge on the LLM when the user sends a chat message.
+Per the architecture spec, two inputs feed LLM Reasoning independently:
+- **Emotional context** (Face → YOLO → Emotional Affect Model → EmotionalReasoningAgent)
+- **Transcript with timestamps** (Mic → VAD → STT → transcript buffer)
+
+Both are injected as separate system messages into `LLMReasoningAgent.reason()`. The exact prompt engineering strategy for combining them is **TBD**.
 
 ### Flow 1 — Video → Face Detection → Emotion Buffer
 
@@ -168,7 +172,7 @@ application/model_service/ws/handler.py
 - Default engine: `whisper-cpp` (set via `STT_ENGINE` env var)
 - Audio format required: float32 PCM, mono, 16 kHz — this is why ffmpeg is needed (browser records WebM/Opus)
 - Both STT backends implement `TranscriptionService.transcribe(audio_np) → (text, lang, confidence)`
-- The transcript buffer is accessible at `session.transcript_buffer[-20:]` — passed to `EmotionalReasoningAgent.analyse()` but **not yet used** in reasoning (see expansion point below)
+- The transcript buffer is accessible at `session.transcript_buffer[-20:]` — passed to both `EmotionalReasoningAgent.analyse()` and directly to `LLMReasoningAgent.reason()` as a separate system message input
 
 ---
 
@@ -206,17 +210,18 @@ application/model_service/routers/chat.py
     └─ core/emotional_reasoning_agent.py  EmotionalReasoningAgent.analyse()
          statistics.mode(obs.emotion for obs in emotion_observations)  → dominant
          max(timestamps) - min(timestamps)  → duration_seconds
-         returns: "The student appears to be feeling {dominant} (~{N}s).
+         returns: "The user appears to be feeling {dominant} (~{N}s).
                    Calibrate tone accordingly without referencing this directly."
 
-    llm_agent.reason(body.message, ctx, history)
+    llm_agent.reason(body.message, emotional_context, history, transcript_segments)
     └─ core/llm/reasoning_agent.py  LLMReasoningAgent.reason()
          messages = []
-         messages.append({role:"system", content: SYSTEM_PROMPT})   # static persona
+         messages.append({role:"system", content: SYSTEM_PROMPT})         # empathy bot persona (TBD)
          prior = [m for m in history if m["role"] in ("user","assistant")]
-         messages.extend(prior[-history_window:])                    # last 10 turns
-         messages.append({role:"system", content: emotional_context}) # emotion injection
-         messages.append({role:"user", content: message})            # current turn
+         messages.extend(prior[-history_window:])                          # last 10 turns
+         messages.append({role:"system", content: emotional_context})      # ← Emotional Affect Model output
+         messages.append({role:"system", content: transcript_context})     # ← STT output (separate input)
+         messages.append({role:"user", content: message})                  # current turn
          self._llm.chat(messages)
          └─ core/llm/openai.py  OpenAIProvider.chat()
               self._client.chat.completions.create(model=self._model, messages=messages)
@@ -491,8 +496,8 @@ core/
 5. Video frames stream every 500 ms → face detection + (placeholder) emotion → `emotion_buffer` fills up.
 6. Mic audio streams when speech detected → STT → `transcript_buffer` fills up.
 7. User sends chat message → browser → SvelteKit → Express → `POST /api/v1/chat` on model service.
-8. Chat handler calls `get_session(profile_id)` → reads `emotion_buffer.history()` + `transcript_buffer[-20:]`.
-9. `EmotionalReasoningAgent.analyse()` produces context string → `LLMReasoningAgent.reason()` calls LLM.
+8. Chat handler reads `emotion_buffer.history()` + `transcript_buffer[-20:]` from session.
+9. `EmotionalReasoningAgent.analyse()` produces emotional context string. Both it and the transcript segments are passed separately to `LLMReasoningAgent.reason()` → calls LLM.
 10. Reply flows back: model service → Express (persists both turns) → SvelteKit → browser.
 11. On page unload: WS sends `session_end` → `_sessions` entry deleted.
 

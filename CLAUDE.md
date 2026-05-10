@@ -2,7 +2,7 @@
 
 ## What this project is
 
-An emotion-aware study companion. A webcam reads the student's face, a trained emotion classifier labels their emotional state, and an LLM adapts its tone accordingly. Three services run in parallel:
+An **emotion-aware empathy bot**. A webcam reads the user's face, a trained emotion classifier labels their emotional state, and an LLM adapts its response using two separate inputs: (1) emotional context derived from the face signal, and (2) a timestamped transcript from speech-to-text. Three services run in parallel:
 
 ```
 Browser → SvelteKit (5173) → Express backend (3001) → FastAPI model service (8000)
@@ -75,7 +75,7 @@ All routes under `/api/v1/`. All async handlers use `try/catch → next(err)`.
 - `core/llm/anthropic.py` — Anthropic stub (not yet implemented)
 - `core/llm/ollama.py` — Ollama local provider
 - `core/llm/factory.py` — `create_llm(provider, model)`
-- `core/llm/reasoning_agent.py` — `LLMReasoningAgent`; assembles system prompt + history + emotion context
+- `core/llm/reasoning_agent.py` — `LLMReasoningAgent`; assembles system prompt + history + emotional context + transcript (two separate inputs per spec)
 - `core/emotional_reasoning_agent.py` — `EmotionalReasoningAgent`; produces emotion context string from buffer
 - `core/stt/base.py` — `TranscriptionService` ABC
 - `core/stt/whisper_cpp.py` — whisper.cpp backend (default)
