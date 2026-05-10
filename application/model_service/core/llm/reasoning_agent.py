@@ -37,6 +37,7 @@ PROMPT ENGINEERING — OPEN QUESTIONS (decisions needed before production):
 
 from __future__ import annotations
 
+from ws.session import TranscriptSegment
 from .base import LLMProvider, Message
 
 # TODO: decide empathy bot persona, tone directives, and constraints.
@@ -66,7 +67,7 @@ def _build_emotional_context_message(emotional_context: str) -> Message | None:
     return {"role": "system", "content": emotional_context}
 
 
-def _build_transcript_message(transcript_segments: list) -> Message | None:
+def _build_transcript_message(transcript_segments: list[TranscriptSegment]) -> Message | None:
     # TODO: decide how to format the transcript for the LLM.
     # TODO: decide whether timestamps should be included, and in what format.
     # TODO: decide whether to summarise long transcripts rather than truncate.
@@ -101,7 +102,7 @@ class LLMReasoningAgent:
         message: str,
         emotional_context: str,
         history: list[Message],
-        transcript_segments: list | None = None,
+        transcript_segments: list[TranscriptSegment] | None = None,
     ) -> str:
         """Assemble the prompt from all inputs and return the LLM reply.
 

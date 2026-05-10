@@ -1,7 +1,11 @@
-from fastapi import APIRouter, Request
-from pydantic import BaseModel
+from typing import cast
 import random
 
+from fastapi import APIRouter, Request
+from pydantic import BaseModel
+
+from core.app_state import HRIAppState
+from core.llm.base import Message
 from ws.session import get_session
 
 router = APIRouter()
@@ -39,24 +43,25 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
     feeds that context + message history into LLMReasoningAgent. Falls back to
     a noise reply if agents are not loaded (dev/stub mode).
     """
+    hri = cast(HRIAppState, request.app.state.hri)
     session = get_session(body.profile_id)
     emotion_observations = session.emotion_buffer.history() if session else []
 
-    emotion_agent = getattr(request.app.state, "emotion_agent", None)
-    llm_agent = getattr(request.app.state, "llm_agent", None)
-
-    if emotion_agent and llm_agent:
-        history = [{"role": m.role, "content": m.content} for m in body.history]
+    if hri.emotion_agent and hri.llm_agent:
+        history: list[Message] = [
+            cast(Message, {"role": m.role, "content": m.content})
+            for m in body.history
+        ]
         transcript_segments = session.transcript_buffer[-20:] if session else []
 
         # Emotional context: face-based signal → EmotionalReasoningAgent
-        emotional_context = emotion_agent.analyse(emotion_observations, transcript_segments)
+        emotional_context = hri.emotion_agent.analyse(emotion_observations, transcript_segments)
 
         # Both inputs (emotional_context + transcript_segments) feed LLM Reasoning
         # separately, as per the architecture spec.
-        response = llm_agent.reason(body.message, emotional_context, history, transcript_segments)
+        response = hri.llm_agent.reason(body.message, emotional_context, history, transcript_segments)
     else:
         latest_emotion = emotion_observations[-1].emotion if emotion_observations else "unknown"
-        response = f'{build_noise_reply()} Latest emotion: {latest_emotion}.'
+        response = f"{build_noise_reply()} Latest emotion: {latest_emotion}."
 
     return ChatResponse(response=response)
