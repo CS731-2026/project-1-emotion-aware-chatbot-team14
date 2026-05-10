@@ -79,8 +79,8 @@ All routes under `/api/v1/`. All async handlers use `try/catch → next(err)`.
 - `core/stt/whisper_faster.py` — faster-whisper backend
 - `core/stt/factory.py` — `create_stt(engine, model)`
 
-### `application/mock_programs/` — terminal chatbot prototype (Stage 2)
-Self-contained end-to-end demo: webcam → emotion → LLM in the terminal. Entry: `main.py`.
+### `application/mock_programs/` — **DEPRECATED**
+Do not use or extend. Superseded by the production application.
 
 ## Key env vars (model_service)
 
