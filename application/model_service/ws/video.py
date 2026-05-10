@@ -1,24 +1,39 @@
-"""Video frame processing: JPEG decode → face detection → emotion → WS responses."""
+"""Video frame utilities: JPEG decode, face detection, emotion selection.
+
+Pure processing functions — no WebSocket state, no orchestration.
+The caller (ws/handler.py:on_video_frame) composes these into the pipeline.
+"""
 
 import base64
-import json
 import logging
 import random
 import time
+from dataclasses import dataclass, field
 
 import numpy as np
-from fastapi import WebSocket
 
 import config
-from ws.session import HarnessSession, EMOTIONS, emit_debug
+from ws.session import EMOTIONS, emit_debug
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class FrameDetectionResult:
+    """Output of detect_from_message: everything the handler needs after frame processing."""
+    detected: bool = False
+    detector_loaded: bool = False
+    face_crop: np.ndarray | None = None
+    face_crop_data: str | None = None   # base64 JPEG of face crop, or None
+    box: list | None = None             # [x1, y1, x2, y2] or None
+    annotated_image_data: str = ""      # base64 JPEG with bounding box drawn, or original
+    timings_ms: dict = field(default_factory=dict)
 
 
 def encode_jpeg_b64(frame_bgr: np.ndarray) -> str | None:
     """JPEG-encode a BGR frame and return it as a base64 ASCII string.
 
-    Quality is set to 70 — enough for debug display; reduces WS payload size.
+    Quality 70 — enough for debug display; reduces WS payload size.
     Returns None if encoding fails.
     """
     import cv2
@@ -29,7 +44,23 @@ def encode_jpeg_b64(frame_bgr: np.ndarray) -> str | None:
     return base64.b64encode(encoded.tobytes()).decode("ascii")
 
 
-def _run_face_detection(
+def decode_frame(data: str) -> tuple[np.ndarray | None, float]:
+    """Decode a base64 JPEG string to a BGR numpy array.
+
+    Returns (frame_bgr, decode_ms). frame_bgr is None on decode failure.
+    """
+    import cv2
+
+    t0 = time.perf_counter()
+    try:
+        frame_bytes = base64.b64decode(data)
+        frame_bgr = cv2.imdecode(np.frombuffer(frame_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
+        return frame_bgr, round((time.perf_counter() - t0) * 1000, 1)
+    except Exception:
+        return None, 0.0
+
+
+def run_face_detection(
     face_detector,
     frame_bgr: np.ndarray,
     frame_count: int,
@@ -38,25 +69,22 @@ def _run_face_detection(
 
     Returns:
         face_crop:      BGR crop of the best face, or None
-        box:            [x1,y1,x2,y2] as a plain list, or None
+        box:            [x1, y1, x2, y2] as a plain list, or None
         annotated_bgr:  frame with bounding box drawn on it
         timings_ms:     dict of per-step latencies
     """
     import cv2
 
-    timings_ms: dict[str, float] = {}
-    face_crop = None
-    box = None
-
-    t0 = time.perf_counter()
     emit_debug(
-        f"Frame {frame_count}: decoded image shape={frame_bgr.shape}; "
+        f"Frame {frame_count}: shape={frame_bgr.shape}; "
         f"running YOLOv8 on {getattr(face_detector, 'device', 'unknown')}"
     )
 
+    t0 = time.perf_counter()
     face_crop, detected_box = face_detector.detect_best(frame_bgr)
-    timings_ms["yolo"] = round((time.perf_counter() - t0) * 1000, 1)
+    timings_ms = {"yolo": round((time.perf_counter() - t0) * 1000, 1)}
 
+    box = None
     if detected_box is not None:
         box = detected_box.tolist()
         x1, y1, x2, y2 = detected_box.astype(int)
@@ -70,129 +98,74 @@ def _run_face_detection(
     return face_crop, box, frame_bgr, timings_ms
 
 
-def _pick_emotion(
+def detect_from_message(face_detector, msg: dict, frame_count: int) -> FrameDetectionResult:
+    """Decode a video_frame WS message and run face detection.
+
+    Combines decode_frame → run_face_detection → encode annotated output into a
+    single call so the handler doesn't manage intermediate variables.
+    Returns a FrameDetectionResult regardless of whether detection succeeded.
+    """
+    result = FrameDetectionResult(
+        detector_loaded=face_detector is not None,
+        annotated_image_data=msg["data"],
+    )
+
+    emit_debug(
+        f"Frame {frame_count}: received {len(msg.get('data', ''))} base64 chars; decoding"
+    )
+
+    frame_bgr, decode_ms = decode_frame(msg["data"])
+    if decode_ms:
+        result.timings_ms["decode"] = decode_ms
+
+    if face_detector is None or frame_bgr is None:
+        return result
+
+    try:
+        face_crop, box, annotated_bgr, yolo_timings = run_face_detection(
+            face_detector, frame_bgr, frame_count
+        )
+        result.timings_ms.update(yolo_timings)
+
+        t_enc = time.perf_counter()
+        result.annotated_image_data = encode_jpeg_b64(annotated_bgr) or msg["data"]
+        result.timings_ms["jpeg_encode"] = round((time.perf_counter() - t_enc) * 1000, 1)
+
+        result.face_crop = face_crop
+        result.detected = face_crop is not None
+        result.box = box
+        if face_crop is not None:
+            result.face_crop_data = encode_jpeg_b64(face_crop)
+
+        emit_debug(
+            f"Frame {frame_count}: YOLO done; "
+            f"detected={result.detected}; box={box}; timings_ms={result.timings_ms}"
+        )
+    except Exception as exc:
+        logger.warning("Face detection failed for frame: %s", exc)
+
+    return result
+
+
+def pick_emotion(
     face_crop: np.ndarray | None,
     emotion_model,
     detected: bool,
 ) -> tuple[str, float]:
-    """THE only place the emotion model is invoked in the entire codebase.
+    """Map a face crop + model to an (emotion, confidence) pair.
 
     Priority:
       1. Real model  — face detected + model loaded + TEST_EMOTIONS=false
-      2. Random      — DEBUG: TEST_EMOTIONS=true (default); bypasses model entirely
-      3. Neutral     — face not detected and TEST_EMOTIONS=false
+      2. Random      — DEBUG: TEST_EMOTIONS=true; bypasses model entirely
+      3. Neutral     — no face and TEST_EMOTIONS=false
 
-    To integrate the real model:
-      - Implement EmotionModel ABC in core/emotion/<name>.py
-      - Register it in core/emotion/factory.py
-      - Set EMOTION_VARIANT=<name> and TEST_EMOTIONS=false in .env
+    Called explicitly by ws/handler.py after face detection — not buried inside
+    the video frame pipeline. emotion_model.predict() is the only model call here.
     """
-    # Real model path — emotion_model.predict() is the only invocation point.
     if detected and face_crop is not None and emotion_model is not None:
         return emotion_model.predict(face_crop)
 
-    # DEBUG fallback — random emotions for UI/LLM testing without a real model.
     if config.TEST_EMOTIONS:
         return random.choice(EMOTIONS), round(random.uniform(0.5, 0.8), 2)
 
     return "neutral", 0.5
-
-
-async def process_video_frame(
-    websocket: WebSocket,
-    session: HarnessSession,
-    face_detector,
-    emotion_model,
-    msg: dict,
-) -> None:
-    """Handle one video_frame WebSocket message end-to-end.
-
-    Steps:
-      1. Decode base64 JPEG → BGR numpy array
-      2. Run YOLO face detector → face crop + bounding box
-      3. Pick emotion (real model if available, otherwise placeholder)
-      4. Update emotion buffer
-      5. Send face_detection, frame_debug, and emotion_update WS messages
-    """
-    import cv2
-
-    timestamp = float(msg.get("timestamp", 0))
-    session.frame_count += 1
-
-    detected = False
-    box = None
-    annotated_image_data = msg["data"]
-    face_crop_data = None
-    face_crop = None
-    timings_ms: dict[str, float] = {}
-    detector_loaded = face_detector is not None
-
-    if face_detector is not None:
-        try:
-            t0 = time.perf_counter()
-            emit_debug(
-                f"Frame {session.frame_count}: received {len(msg.get('data', ''))} base64 chars; "
-                "decoding before YOLO"
-            )
-
-            frame_bytes = base64.b64decode(msg["data"])
-            frame_bgr = cv2.imdecode(np.frombuffer(frame_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
-            timings_ms["decode"] = round((time.perf_counter() - t0) * 1000, 1)
-
-            if frame_bgr is not None:
-                face_crop, box, frame_bgr, yolo_timings = _run_face_detection(
-                    face_detector, frame_bgr, session.frame_count
-                )
-                timings_ms.update(yolo_timings)
-                detected = face_crop is not None
-
-                t_enc = time.perf_counter()
-                annotated_image_data = encode_jpeg_b64(frame_bgr) or msg["data"]
-                if face_crop is not None:
-                    face_crop_data = encode_jpeg_b64(face_crop)
-                timings_ms["jpeg_encode"] = round((time.perf_counter() - t_enc) * 1000, 1)
-                timings_ms["total_before_send"] = round((time.perf_counter() - t0) * 1000, 1)
-
-                emit_debug(
-                    f"Frame {session.frame_count}: YOLO complete; "
-                    f"detected={detected}; box={box}; timings_ms={timings_ms}"
-                )
-            else:
-                emit_debug(f"Frame {session.frame_count}: cv2.imdecode returned None")
-
-        except Exception as exc:
-            logger.warning("Face detection failed for frame: %s", exc)
-
-    emotion, confidence = _pick_emotion(face_crop, emotion_model, detected)
-    session.emotion_buffer.update(emotion, confidence, timestamp)
-
-    if session.frame_count == 1 or session.frame_count % 10 == 0:
-        emit_debug(
-            f"Video frame {session.frame_count} for {session.profile_id}: "
-            f"detector_loaded={detector_loaded} detected={detected} emotion={emotion}"
-        )
-
-    await websocket.send_text(json.dumps({
-        "type": "face_detection",
-        "detected": detected,
-        "detector_loaded": detector_loaded,
-        "timestamp": timestamp,
-    }))
-    await websocket.send_text(json.dumps({
-        "type": "frame_debug",
-        "frame_count": session.frame_count,
-        "detected": detected,
-        "detector_loaded": detector_loaded,
-        "detector_device": getattr(face_detector, "device", None),
-        "box": box,
-        "timings_ms": timings_ms,
-        "image_data": annotated_image_data,
-        "face_crop_data": face_crop_data,
-        "timestamp": timestamp,
-    }))
-    await websocket.send_text(json.dumps({
-        "type": "emotion_update",
-        "emotion": emotion,
-        "confidence": confidence,
-        "timestamp": timestamp,
-    }))
