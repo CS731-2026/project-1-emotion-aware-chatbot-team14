@@ -241,9 +241,9 @@ frontend: ChatHistory.svelte renders the new messages
 
 ### 1. Real Emotion Model (`⚠ highest priority`)
 
-**Where:** `application/model_service/ws/handler.py`, inside the `video_frame` branch of `handle_websocket()`.
+**Where:** `application/model_service/ws/video.py`, function `_pick_emotion()`.
 
-**Current state:** lines ~311–315 ignore `face_crop` entirely and return a random emotion label.
+**Current state:** ignores `face_crop` entirely and returns a random emotion label when `TEST_EMOTIONS=true` (default), or `"neutral"` otherwise.
 
 **What to do:**
 
@@ -274,19 +274,7 @@ EMOTION_VARIANT=your_model_name
 TEST_EMOTIONS=false
 ```
 
-Step 4 — Replace the placeholder block in `handler.py`:
-```python
-# Replace the random-emotion block with:
-emotion_model = getattr(app.state, "emotion_model", None)
-if detected and face_crop is not None and emotion_model is not None:
-    emotion, confidence = emotion_model.predict(face_crop)
-elif config.TEST_EMOTIONS:
-    emotion = random.choice(EMOTIONS)
-    confidence = round(random.uniform(0.5, 0.8), 2)
-else:
-    emotion = "neutral"
-    confidence = 0.5
-```
+Step 4 — `_pick_emotion()` in `ws/video.py` already has the right structure. Just ensure `EMOTION_VARIANT` points to your new model and `TEST_EMOTIONS=false` in `.env` — the function will call `emotion_model.predict(face_crop)` automatically when the model is loaded.
 
 The face crop is already in BGR uint8 format from the face detector — resize it to match your model's expected input inside `predict()`.
 
@@ -338,24 +326,27 @@ This string is injected verbatim as a `system` role message directly before the 
 ## Component State Map
 
 ```
-ws/handler.py: handle_websocket()
+ws/handler.py: handle_websocket()           — thin dispatcher only
   │
-  ├─ "video_frame" branch
-  │    face_detector.detect_best()           core/face_detector.py     [WORKING]
-  │      └─ returns face_crop (BGR uint8)
-  │    emotion_model.predict(face_crop)      core/emotion/*.py         [PLACEHOLDER → NEEDS REAL MODEL]
-  │      └─ returns (emotion, confidence)
-  │    emotion_buffer.update()               core/emotion/buffer.py    [WORKING]
+  ├─ "video_frame" → ws/video.py: process_video_frame()
+  │    ws/video.py: _run_face_detection()
+  │      core/face_detector.py: detect_best()             [WORKING]
+  │        └─ returns face_crop (BGR uint8)
+  │    ws/video.py: _pick_emotion()                        [PLACEHOLDER → NEEDS REAL MODEL]
+  │      core/emotion/*.py: emotion_model.predict(face_crop)
+  │        └─ returns (emotion, confidence)
+  │    core/emotion/buffer.py: EmotionBuffer.update()      [WORKING]
   │
-  └─ "audio_chunk" branch
-       decode_browser_audio_to_numpy()       ws/handler.py             [WORKING]
+  └─ "audio_chunk" → ws/audio.py: process_audio_chunk()
+       ws/audio.py: decode_browser_audio_to_numpy()        [WORKING]
          └─ ffmpeg WebM → float32 PCM
-       stt.transcribe(audio_np)              core/stt/whisper_cpp.py   [WORKING]
+       core/stt/whisper_cpp.py: stt.transcribe(audio_np)  [WORKING]
          └─ returns (text, lang, conf)
-       session.transcript_buffer.append()   ws/handler.py             [WORKING, unused in reasoning]
+       session.transcript_buffer.append()                  [WORKING, unused in reasoning]
 
 routers/chat.py: chat()
   │
+  ├─ ws/session.py: get_session(profile_id)
   ├─ emotion_agent.analyse()                core/emotional_reasoning_agent.py  [BASIC → EXPAND]
   │    uses: emotion_buffer.history()
   │    ignores: transcript_buffer           ← LOW-HANGING FRUIT: use this
@@ -431,7 +422,10 @@ routers/
 ├── chat.py      POST /api/v1/chat  — emotion-aware LLM reply
 └── prediction.py  Stub
 ws/
-├── handler.py   WebSocket multiplexer — owns HarnessSession, runs face detection + STT
+├── handler.py   Thin dispatcher — accepts WS connection, routes messages to audio/video handlers
+├── session.py   HarnessSession dataclass, _sessions store, get_session, emit_debug
+├── audio.py     decode_browser_audio_to_numpy (ffmpeg) + process_audio_chunk (STT pipeline)
+├── video.py     encode_jpeg_b64, _run_face_detection, _pick_emotion, process_video_frame
 └── protocol.py  Dataclass definitions for all WS message types (documentation reference)
 core/
 ├── face_detector.py             YOLOv8 face detector (HuggingFace, auto-downloaded + cached)
