@@ -8,9 +8,11 @@ import base64
 import logging
 import time
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 
+from core.face_detector import FaceDetector
 from ws.session import emit_debug
 
 logger = logging.getLogger(__name__)
@@ -22,10 +24,10 @@ class FrameDetectionResult:
     detected: bool = False
     detector_loaded: bool = False
     face_crop: np.ndarray | None = None
-    face_crop_data: str | None = None   # base64 JPEG of face crop, or None
-    box: list | None = None             # [x1, y1, x2, y2] or None
-    annotated_image_data: str = ""      # base64 JPEG with bounding box drawn, or original
-    timings_ms: dict = field(default_factory=dict)
+    face_crop_data: str | None = None       # base64 JPEG of face crop, or None
+    box: list[float] | None = None          # [x1, y1, x2, y2] or None
+    annotated_image_data: str = ""          # base64 JPEG with bounding box drawn, or original
+    timings_ms: dict[str, float] = field(default_factory=dict)
 
 
 def encode_jpeg_b64(frame_bgr: np.ndarray) -> str | None:
@@ -59,10 +61,10 @@ def decode_frame(data: str) -> tuple[np.ndarray | None, float]:
 
 
 def run_face_detection(
-    face_detector,
+    face_detector: FaceDetector,
     frame_bgr: np.ndarray,
     frame_count: int,
-) -> tuple[np.ndarray | None, list | None, np.ndarray, dict]:
+) -> tuple[np.ndarray | None, list[float] | None, np.ndarray, dict[str, float]]:
     """Run YOLO face detection on a decoded frame.
 
     Returns:
@@ -75,14 +77,14 @@ def run_face_detection(
 
     emit_debug(
         f"Frame {frame_count}: shape={frame_bgr.shape}; "
-        f"running YOLOv8 on {getattr(face_detector, 'device', 'unknown')}"
+        f"running YOLOv8 on {face_detector.device}"
     )
 
     t0 = time.perf_counter()
     face_crop, detected_box = face_detector.detect_best(frame_bgr)
-    timings_ms = {"yolo": round((time.perf_counter() - t0) * 1000, 1)}
+    timings_ms: dict[str, float] = {"yolo": round((time.perf_counter() - t0) * 1000, 1)}
 
-    box = None
+    box: list[float] | None = None
     if detected_box is not None:
         box = detected_box.tolist()
         x1, y1, x2, y2 = detected_box.astype(int)
@@ -96,7 +98,11 @@ def run_face_detection(
     return face_crop, box, frame_bgr, timings_ms
 
 
-def detect_from_message(face_detector, msg: dict, frame_count: int) -> FrameDetectionResult:
+def detect_from_message(
+    face_detector: FaceDetector | None,
+    msg: dict[str, Any],
+    frame_count: int,
+) -> FrameDetectionResult:
     """Decode a video_frame WS message and run face detection.
 
     Combines decode_frame → run_face_detection → encode annotated output into a
@@ -143,5 +149,3 @@ def detect_from_message(face_detector, msg: dict, frame_count: int) -> FrameDete
         logger.warning("Face detection failed for frame: %s", exc)
 
     return result
-
-

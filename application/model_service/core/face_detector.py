@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import time
+from typing import Any
 
 import numpy as np
 
@@ -55,14 +56,14 @@ class FaceDetector:
         self.device_reason = self._describe_device(torch)
         self.last_inference_ms: float | None = None
 
-    def _select_device(self, torch) -> str:
+    def _select_device(self, torch: Any) -> str:
         if self.mps_available:
             return "mps"
         if torch.cuda.is_available():
             return "cuda"
         return "cpu"
 
-    def _describe_device(self, torch) -> str:
+    def _describe_device(self, torch: Any) -> str:
         if self.device == "mps":
             return "PyTorch MPS is available"
         if self.device == "cuda":
@@ -104,7 +105,9 @@ class FaceDetector:
             return None, None
 
         # Pick the detection with the highest confidence score.
-        confidences = detections.confidence  # shape (N,)
+        confidences = detections.confidence  # shape (N,) or None
+        if confidences is None:
+            return None, None
         best_idx = int(np.argmax(confidences))
         box = detections.xyxy[best_idx]  # [x1, y1, x2, y2]
 

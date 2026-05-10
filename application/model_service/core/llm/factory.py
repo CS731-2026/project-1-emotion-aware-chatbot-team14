@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from .base import LLMProvider
 
 
-def create_llm(provider: str, model: str, **kwargs) -> LLMProvider:
+def create_llm(provider: str, model: str, **kwargs: Any) -> LLMProvider:
     """Create and return an LLMProvider for the requested provider.
 
     Args:
@@ -21,17 +23,14 @@ def create_llm(provider: str, model: str, **kwargs) -> LLMProvider:
     """
     if provider == "openai":
         from .openai import OpenAIProvider
-
         return OpenAIProvider(model=model, **kwargs)
 
     elif provider == "anthropic":
         from .anthropic import AnthropicProvider
-
         return AnthropicProvider(model=model, **kwargs)
 
     elif provider == "ollama":
         from .ollama import OllamaProvider
-
         return OllamaProvider(model=model, **kwargs)
 
     else:

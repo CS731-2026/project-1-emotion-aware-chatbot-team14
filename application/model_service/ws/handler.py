@@ -4,12 +4,14 @@ import asyncio
 import json
 import logging
 import random
-from typing import Callable, Awaitable
+from typing import Any, Callable, Awaitable, cast
 
 import numpy as np
 from fastapi import WebSocket, WebSocketDisconnect
 
 import config
+from core.app_state import HRIAppState
+from core.emotion.base import EmotionModel
 from ws.session import (
     EMOTIONS,
     HarnessSession,
@@ -24,10 +26,10 @@ logger = logging.getLogger(__name__)
 
 # Type alias: every message handler is an async function that returns True to
 # continue the loop, or False to break (i.e. close the connection).
-MessageHandler = Callable[[dict], Awaitable[bool]]
+MessageHandler = Callable[[dict[str, Any]], Awaitable[bool]]
 
 
-def _send(websocket: WebSocket, payload: dict) -> Awaitable[None]:
+def _send(websocket: WebSocket, payload: dict[str, Any]) -> Awaitable[None]:
     return websocket.send_text(json.dumps(payload))
 
 
@@ -35,26 +37,25 @@ def _error(websocket: WebSocket, message: str) -> Awaitable[None]:
     return _send(websocket, {"type": "error", "message": message})
 
 
-def _harness_status(app_state) -> dict:
+def _harness_status(hri: HRIAppState) -> dict[str, Any]:
     """Build the harness_status payload sent to the frontend on session_start.
 
-    This is observability only — component flags for the debug dashboard.
-    The emotion_model is referenced here solely to report whether it loaded;
-    it is never invoked here. Invocation happens only in on_video_frame() below via pick_emotion().
+    Observability only — reports which components loaded. The emotion_model
+    is never invoked here; invocation is in pick_emotion() below.
     """
-    fd = getattr(app_state, "face_detector", None)
+    fd = hri.face_detector
     return {
         "type": "harness_status",
         "face_detector_loaded": fd is not None,
-        "face_detector_device": getattr(fd, "device", None),
-        "face_detector_device_reason": getattr(fd, "device_reason", None),
-        "torch_version": getattr(fd, "torch_version", None),
-        "mps_built": getattr(fd, "mps_built", None),
-        "mps_available": getattr(fd, "mps_available", None),
-        "stt_loaded": getattr(app_state, "stt", None) is not None,
-        "emotion_model_loaded": getattr(app_state, "emotion_model", None) is not None,  # status flag only
-        "llm_loaded": getattr(app_state, "llm", None) is not None,
-        "test_emotions": config.TEST_EMOTIONS,  # DEBUG: True = random emotions, model bypassed
+        "face_detector_device": fd.device if fd is not None else None,
+        "face_detector_device_reason": fd.device_reason if fd is not None else None,
+        "torch_version": fd.torch_version if fd is not None else None,
+        "mps_built": fd.mps_built if fd is not None else None,
+        "mps_available": fd.mps_available if fd is not None else None,
+        "stt_loaded": hri.stt is not None,
+        "emotion_model_loaded": hri.emotion_model is not None,
+        "llm_loaded": hri.llm is not None,
+        "test_emotions": config.TEST_EMOTIONS,
         "stt_engine": config.STT_ENGINE,
         "stt_model": config.STT_MODEL,
     }
@@ -62,7 +63,7 @@ def _harness_status(app_state) -> dict:
 
 def pick_emotion(
     face_crop: np.ndarray | None,
-    emotion_model,
+    emotion_model: EmotionModel | None,
     detected: bool,
 ) -> tuple[str, float]:
     """Invoke the emotion model or fall back to debug/neutral values.
@@ -87,7 +88,7 @@ def pick_emotion(
 
 async def _send_frame_messages(
     websocket: WebSocket,
-    session,
+    session: HarnessSession,
     result: FrameDetectionResult,
     emotion: str,
     confidence: float,
@@ -121,7 +122,7 @@ async def _send_frame_messages(
 
 def _make_handlers(
     websocket: WebSocket,
-    app_state,
+    hri: HRIAppState,
     get_session: Callable[[], HarnessSession | None],
     set_session: Callable[[HarnessSession | None], None],
 ) -> dict[str, MessageHandler]:
@@ -134,19 +135,19 @@ def _make_handlers(
     is a single dict entry — no touching the main loop.
     """
 
-    async def on_session_start(msg: dict) -> bool:
+    async def on_session_start(msg: dict[str, Any]) -> bool:
         profile_id = msg["profile_id"]
         session = create_session(profile_id)
         set_session(session)
         emit_debug(
             f"Session started: {profile_id} "
             f"(test_emotions={config.TEST_EMOTIONS}, "
-            f"face_detector_loaded={getattr(app_state, 'face_detector', None) is not None})"
+            f"face_detector_loaded={hri.face_detector is not None})"
         )
-        await _send(websocket, {**_harness_status(app_state), "profile_id": profile_id})
+        await _send(websocket, {**_harness_status(hri), "profile_id": profile_id})
         return True
 
-    async def on_session_end(_msg: dict) -> bool:
+    async def on_session_end(_msg: dict[str, Any]) -> bool:
         session = get_session()
         if session:
             remove_session(session.profile_id)
@@ -154,19 +155,17 @@ def _make_handlers(
             set_session(None)
         return False  # signal the loop to close
 
-    async def on_video_frame(msg: dict) -> bool:
+    async def on_video_frame(msg: dict[str, Any]) -> bool:
         session = get_session()
         if session is None:
             await _error(websocket, "video_frame received before session_start")
             return True
 
-        face_detector = getattr(app_state, "face_detector", None)
-        emotion_model = getattr(app_state, "emotion_model", None)
         timestamp = float(msg.get("timestamp", 0))
         session.frame_count += 1
 
-        result = detect_from_message(face_detector, msg, session.frame_count)
-        emotion, confidence = pick_emotion(result.face_crop, emotion_model, result.detected)
+        result = detect_from_message(hri.face_detector, msg, session.frame_count)
+        emotion, confidence = pick_emotion(result.face_crop, hri.emotion_model, result.detected)
         session.emotion_buffer.update(emotion, confidence, timestamp)
 
         if session.frame_count == 1 or session.frame_count % 10 == 0:
@@ -178,7 +177,7 @@ def _make_handlers(
         await _send_frame_messages(websocket, session, result, emotion, confidence, timestamp)
         return True
 
-    async def on_audio_chunk(msg: dict) -> bool:
+    async def on_audio_chunk(msg: dict[str, Any]) -> bool:
         session = get_session()
         if session is None:
             await _error(websocket, "audio_chunk received before session_start")
@@ -193,7 +192,7 @@ def _make_handlers(
         })
         asyncio.create_task(process_audio_chunk(
             websocket, session,
-            getattr(app_state, "stt", None),
+            hri.stt,
             session.audio_chunk_count,
             msg.get("data", ""),
             timestamp,
@@ -219,13 +218,15 @@ async def handle_websocket(websocket: WebSocket) -> None:
     await websocket.accept()
     await _send(websocket, {"type": "connection_ack", "message": "Harness websocket accepted"})
 
+    hri = cast(HRIAppState, websocket.app.state.hri)
+
     # One-element list acts as a mutable cell so handler closures can rebind
     # the session reference without needing nonlocal or a class.
     cell: list[HarnessSession | None] = [None]
 
     handlers = _make_handlers(
         websocket,
-        app_state=websocket.app.state,
+        hri,
         get_session=lambda: cell[0],
         set_session=lambda s: cell.__setitem__(0, s),
     )
@@ -233,12 +234,12 @@ async def handle_websocket(websocket: WebSocket) -> None:
     try:
         while True:
             raw = await websocket.receive_text()
-            msg = json.loads(raw)
-            msg_type = msg.get("type")
+            msg: dict[str, Any] = json.loads(raw)
+            msg_type: str | None = msg.get("type")
 
             await _send(websocket, {"type": "message_ack", "message_type": msg_type})
 
-            handler = handlers.get(msg_type)
+            handler = handlers.get(msg_type) if msg_type else None
             if handler is None:
                 await _error(websocket, f"Unknown message type: {msg_type}")
                 continue
