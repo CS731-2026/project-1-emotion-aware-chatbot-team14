@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 import random
 
-from ws.handler import get_session
+from ws.session import get_session
 
 router = APIRouter()
 
