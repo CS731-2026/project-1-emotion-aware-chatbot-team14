@@ -3,19 +3,22 @@
 import asyncio
 import json
 import logging
+import random
 from typing import Callable, Awaitable
 
+import numpy as np
 from fastapi import WebSocket, WebSocketDisconnect
 
 import config
 from ws.session import (
+    EMOTIONS,
     HarnessSession,
     create_session,
     remove_session,
     emit_debug,
 )
 from ws.audio import process_audio_chunk
-from ws.video import FrameDetectionResult, detect_from_message, pick_emotion
+from ws.video import FrameDetectionResult, detect_from_message
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +58,31 @@ def _harness_status(app_state) -> dict:
         "stt_engine": config.STT_ENGINE,
         "stt_model": config.STT_MODEL,
     }
+
+
+def pick_emotion(
+    face_crop: np.ndarray | None,
+    emotion_model,
+    detected: bool,
+) -> tuple[str, float]:
+    """Invoke the emotion model or fall back to debug/neutral values.
+
+    Priority:
+      1. Real model  — face detected + model loaded + TEST_EMOTIONS=false
+      2. Random      — DEBUG: TEST_EMOTIONS=true; bypasses model entirely
+      3. Neutral     — no face and TEST_EMOTIONS=false
+
+    emotion_model.predict() is the only model invocation point in the codebase.
+    Lives here (not in ws/video.py) because it owns the model call — video.py
+    only prepares the face crop.
+    """
+    if detected and face_crop is not None and emotion_model is not None:
+        return emotion_model.predict(face_crop)
+
+    if config.TEST_EMOTIONS:
+        return random.choice(EMOTIONS), round(random.uniform(0.5, 0.8), 2)
+
+    return "neutral", 0.5
 
 
 async def _send_frame_messages(
