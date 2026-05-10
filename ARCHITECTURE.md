@@ -534,4 +534,4 @@ core/
 | 2 — Integration | `application/mock_programs/` | Does the full pipeline work end-to-end? |
 | 3 — Product | `application/` | Can a real user use it? |
 
-The mock programs (`application/mock_programs/`) are a terminal chatbot that integrated the same components before the web app existed. Good reference for how `FaceDetector`, `EmotionInferencer`, `SpeechTranscriber`, and the OpenAI client were originally wired together.
+`application/mock_programs/` is **deprecated** — do not use it as a reference or add to it. The production application (`application/`) supersedes it entirely.
