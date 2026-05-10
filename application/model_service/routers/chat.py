@@ -25,12 +25,20 @@ class ChatResponse(BaseModel):
 
 
 def build_noise_reply() -> str:
+    """Return a random noise string used when LLM agents are not loaded."""
     burst = " ".join(random.choice(NOISE_SYLLABLES) for _ in range(random.randint(6, 10)))
     return f"Test harness reply: {burst}."
 
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(body: ChatRequest, request: Request) -> ChatResponse:
+    """POST /api/v1/chat — generate an emotion-aware LLM reply.
+
+    Reads the active WebSocket session's emotion buffer for the given profile,
+    passes it through EmotionalReasoningAgent to produce a context string, then
+    feeds that context + message history into LLMReasoningAgent. Falls back to
+    a noise reply if agents are not loaded (dev/stub mode).
+    """
     session = get_session(body.profile_id)
     emotion_observations = session.emotion_buffer.history() if session else []
 
