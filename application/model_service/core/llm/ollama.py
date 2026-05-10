@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from .base import LLMProvider, Message
 
 
 class OllamaProvider(LLMProvider):
     """Ollama LLM provider — not yet implemented."""
 
-    def __init__(self, model: str = "llama3", **kwargs) -> None:
+    def __init__(self, model: str = "llama3", **kwargs: Any) -> None:
         self._model = model
 
     def chat(self, messages: list[Message]) -> str:
