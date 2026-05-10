@@ -47,11 +47,14 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
 
     if emotion_agent and llm_agent:
         history = [{"role": m.role, "content": m.content} for m in body.history]
-        ctx = emotion_agent.analyse(
-            emotion_observations,
-            session.transcript_buffer[-20:] if session else [],
-        )
-        response = llm_agent.reason(body.message, ctx, history)
+        transcript_segments = session.transcript_buffer[-20:] if session else []
+
+        # Emotional context: face-based signal → EmotionalReasoningAgent
+        emotional_context = emotion_agent.analyse(emotion_observations, transcript_segments)
+
+        # Both inputs (emotional_context + transcript_segments) feed LLM Reasoning
+        # separately, as per the architecture spec.
+        response = llm_agent.reason(body.message, emotional_context, history, transcript_segments)
     else:
         latest_emotion = emotion_observations[-1].emotion if emotion_observations else "unknown"
         response = f'{build_noise_reply()} Latest emotion: {latest_emotion}.'
