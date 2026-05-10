@@ -33,7 +33,12 @@ def _error(websocket: WebSocket, message: str) -> Awaitable[None]:
 
 
 def _harness_status(app_state) -> dict:
-    """Build the harness_status payload from app.state component flags."""
+    """Build the harness_status payload sent to the frontend on session_start.
+
+    This is observability only — component flags for the debug dashboard.
+    The emotion_model is referenced here solely to report whether it loaded;
+    it is never invoked here. Invocation happens only in ws/video.py:_pick_emotion().
+    """
     fd = getattr(app_state, "face_detector", None)
     return {
         "type": "harness_status",
@@ -44,9 +49,9 @@ def _harness_status(app_state) -> dict:
         "mps_built": getattr(fd, "mps_built", None),
         "mps_available": getattr(fd, "mps_available", None),
         "stt_loaded": getattr(app_state, "stt", None) is not None,
-        "emotion_model_loaded": getattr(app_state, "emotion_model", None) is not None,
+        "emotion_model_loaded": getattr(app_state, "emotion_model", None) is not None,  # status flag only
         "llm_loaded": getattr(app_state, "llm", None) is not None,
-        "test_emotions": config.TEST_EMOTIONS,
+        "test_emotions": config.TEST_EMOTIONS,  # DEBUG: True = random emotions, model bypassed
         "stt_engine": config.STT_ENGINE,
         "stt_model": config.STT_MODEL,
     }
@@ -95,7 +100,7 @@ def _make_handlers(
         await process_video_frame(
             websocket, session,
             getattr(app_state, "face_detector", None),
-            getattr(app_state, "emotion_model", None),
+            getattr(app_state, "emotion_model", None),  # passed to ws/video.py:_pick_emotion() — only invocation point
             msg,
         )
         return True

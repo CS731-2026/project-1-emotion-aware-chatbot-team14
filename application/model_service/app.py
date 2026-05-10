@@ -4,7 +4,6 @@ from contextlib import asynccontextmanager
 import config
 from fastapi import FastAPI, WebSocket
 
-from routers import prediction
 from routers import chat
 from ws.handler import handle_websocket
 
@@ -51,10 +50,16 @@ async def lifespan(app: FastAPI):
         logger.warning("STT not loaded: %s", e)
         app.state.stt = None
 
+    # Emotion model — loaded here, passed into ws/video.py:process_video_frame()
+    # via app.state. The model is ONLY invoked in ws/video.py:_pick_emotion().
+    # To swap in a real model: set EMOTION_VARIANT in .env and add the
+    # implementation to core/emotion/ following the EmotionModel ABC.
+    # DEBUG: set TEST_EMOTIONS=true in .env to bypass the model entirely and
+    # emit random emotions — useful while the real model is not yet integrated.
     try:
         from core.emotion.factory import create_emotion_model
         app.state.emotion_model = create_emotion_model(config.EMOTION_VARIANT)
-        logger.info("Emotion model loaded: %s", config.EMOTION_VARIANT)
+        logger.info("Emotion model loaded: variant=%s (TEST_EMOTIONS=%s)", config.EMOTION_VARIANT, config.TEST_EMOTIONS)
     except Exception as e:
         logger.warning("Emotion model not loaded: %s", e)
         app.state.emotion_model = None
@@ -81,13 +86,14 @@ async def lifespan(app: FastAPI):
         app.state.emotion_agent = None
 
     logger.info(
-        "Startup summary: face_detector=%s face_device=%s emotion_model=%s stt=%s llm=%s test_emotions=%s",
+        "Startup summary — face_detector=%s (device=%s) | emotion_model=%s (variant=%s, test_mode=%s) | stt=%s | llm=%s",
         app.state.face_detector is not None,
         getattr(app.state.face_detector, "device", "none"),
         app.state.emotion_model is not None,
+        config.EMOTION_VARIANT,     # which model variant was requested
+        config.TEST_EMOTIONS,       # True = random emotions, model not invoked
         app.state.stt is not None,
         app.state.llm is not None,
-        config.TEST_EMOTIONS,
     )
 
     yield
@@ -118,5 +124,4 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     await handle_websocket(websocket)
 
 
-app.include_router(prediction.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
