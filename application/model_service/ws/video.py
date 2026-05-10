@@ -75,16 +75,23 @@ def _pick_emotion(
     emotion_model,
     detected: bool,
 ) -> tuple[str, float]:
-    """Select an emotion label and confidence from the available sources.
+    """THE only place the emotion model is invoked in the entire codebase.
 
     Priority:
-      1. Real emotion model (when loaded and a face crop is available)
-      2. Random placeholder (TEST_EMOTIONS=true, default)
-      3. Neutral fallback
+      1. Real model  — face detected + model loaded + TEST_EMOTIONS=false
+      2. Random      — DEBUG: TEST_EMOTIONS=true (default); bypasses model entirely
+      3. Neutral     — face not detected and TEST_EMOTIONS=false
+
+    To integrate the real model:
+      - Implement EmotionModel ABC in core/emotion/<name>.py
+      - Register it in core/emotion/factory.py
+      - Set EMOTION_VARIANT=<name> and TEST_EMOTIONS=false in .env
     """
+    # Real model path — emotion_model.predict() is the only invocation point.
     if detected and face_crop is not None and emotion_model is not None:
         return emotion_model.predict(face_crop)
 
+    # DEBUG fallback — random emotions for UI/LLM testing without a real model.
     if config.TEST_EMOTIONS:
         return random.choice(EMOTIONS), round(random.uniform(0.5, 0.8), 2)
 
