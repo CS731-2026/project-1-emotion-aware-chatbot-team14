@@ -59,7 +59,7 @@ All routes under `/api/v1/`. All async handlers use `try/catch → next(err)`.
 - `app.py` — FastAPI app creation, lifespan (loads ML components), WS + router mounting
 - `config.py` — all env vars (`STT_ENGINE`, `EMOTION_VARIANT`, `LLM_PROVIDER`, etc.)
 - `routers/chat.py` — POST `/api/v1/chat`; runs EmotionalReasoningAgent → LLMReasoningAgent
-- `routers/prediction.py` — stub
+- `routers/chat.py` — the only HTTP route; bridges WS session state → LLM
 - `ws/handler.py` — thin WS dispatcher; routes messages to audio/video handlers
 - `ws/session.py` — `HarnessSession`, session store (`_sessions`), `get_session`, `emit_debug`
 - `ws/audio.py` — ffmpeg decode + `process_audio_chunk` (STT pipeline)
