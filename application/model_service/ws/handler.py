@@ -15,7 +15,7 @@ from ws.session import (
     emit_debug,
 )
 from ws.audio import process_audio_chunk
-from ws.video import process_video_frame
+from ws.video import FrameDetectionResult, detect_from_message, pick_emotion
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ def _harness_status(app_state) -> dict:
 
     This is observability only — component flags for the debug dashboard.
     The emotion_model is referenced here solely to report whether it loaded;
-    it is never invoked here. Invocation happens only in ws/video.py:_pick_emotion().
+    it is never invoked here. Invocation happens only in on_video_frame() below via pick_emotion().
     """
     fd = getattr(app_state, "face_detector", None)
     return {
@@ -55,6 +55,40 @@ def _harness_status(app_state) -> dict:
         "stt_engine": config.STT_ENGINE,
         "stt_model": config.STT_MODEL,
     }
+
+
+async def _send_frame_messages(
+    websocket: WebSocket,
+    session,
+    result: FrameDetectionResult,
+    emotion: str,
+    confidence: float,
+    timestamp: float,
+) -> None:
+    """Send the three per-frame WS messages: face_detection, frame_debug, emotion_update."""
+    await websocket.send_text(json.dumps({
+        "type": "face_detection",
+        "detected": result.detected,
+        "detector_loaded": result.detector_loaded,
+        "timestamp": timestamp,
+    }))
+    await websocket.send_text(json.dumps({
+        "type": "frame_debug",
+        "frame_count": session.frame_count,
+        "detected": result.detected,
+        "detector_loaded": result.detector_loaded,
+        "box": result.box,
+        "timings_ms": result.timings_ms,
+        "image_data": result.annotated_image_data,
+        "face_crop_data": result.face_crop_data,
+        "timestamp": timestamp,
+    }))
+    await websocket.send_text(json.dumps({
+        "type": "emotion_update",
+        "emotion": emotion,
+        "confidence": confidence,
+        "timestamp": timestamp,
+    }))
 
 
 def _make_handlers(
@@ -97,12 +131,23 @@ def _make_handlers(
         if session is None:
             await _error(websocket, "video_frame received before session_start")
             return True
-        await process_video_frame(
-            websocket, session,
-            getattr(app_state, "face_detector", None),
-            getattr(app_state, "emotion_model", None),  # passed to ws/video.py:_pick_emotion() — only invocation point
-            msg,
-        )
+
+        face_detector = getattr(app_state, "face_detector", None)
+        emotion_model = getattr(app_state, "emotion_model", None)
+        timestamp = float(msg.get("timestamp", 0))
+        session.frame_count += 1
+
+        result = detect_from_message(face_detector, msg, session.frame_count)
+        emotion, confidence = pick_emotion(result.face_crop, emotion_model, result.detected)
+        session.emotion_buffer.update(emotion, confidence, timestamp)
+
+        if session.frame_count == 1 or session.frame_count % 10 == 0:
+            emit_debug(
+                f"Frame {session.frame_count} [{session.profile_id}]: "
+                f"detector_loaded={result.detector_loaded} detected={result.detected} emotion={emotion}"
+            )
+
+        await _send_frame_messages(websocket, session, result, emotion, confidence, timestamp)
         return True
 
     async def on_audio_chunk(msg: dict) -> bool:
