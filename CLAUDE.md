@@ -60,7 +60,10 @@ All routes under `/api/v1/`. All async handlers use `try/catch → next(err)`.
 - `config.py` — all env vars (`STT_ENGINE`, `EMOTION_VARIANT`, `LLM_PROVIDER`, etc.)
 - `routers/chat.py` — POST `/api/v1/chat`; runs EmotionalReasoningAgent → LLMReasoningAgent
 - `routers/prediction.py` — stub
-- `ws/handler.py` — WebSocket handler; drives face detection, emotion buffering, STT
+- `ws/handler.py` — thin WS dispatcher; routes messages to audio/video handlers
+- `ws/session.py` — `HarnessSession`, session store (`_sessions`), `get_session`, `emit_debug`
+- `ws/audio.py` — ffmpeg decode + `process_audio_chunk` (STT pipeline)
+- `ws/video.py` — JPEG encode, YOLO call, `_pick_emotion`, `process_video_frame`
 - `ws/protocol.py` — dataclass definitions for all WS message types
 - `core/face_detector.py` — YOLOv8 face detector (HuggingFace, auto-downloaded)
 - `core/emotion/base.py` — `EmotionModel` ABC
