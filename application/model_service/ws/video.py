@@ -1,19 +1,17 @@
-"""Video frame utilities: JPEG decode, face detection, emotion selection.
+"""Video frame utilities: JPEG decode, face detection, encoding.
 
-Pure processing functions — no WebSocket state, no orchestration.
+Pure frame-processing functions — no emotion logic, no WebSocket state.
 The caller (ws/handler.py:on_video_frame) composes these into the pipeline.
 """
 
 import base64
 import logging
-import random
 import time
 from dataclasses import dataclass, field
 
 import numpy as np
 
-import config
-from ws.session import EMOTIONS, emit_debug
+from ws.session import emit_debug
 
 logger = logging.getLogger(__name__)
 
@@ -147,25 +145,3 @@ def detect_from_message(face_detector, msg: dict, frame_count: int) -> FrameDete
     return result
 
 
-def pick_emotion(
-    face_crop: np.ndarray | None,
-    emotion_model,
-    detected: bool,
-) -> tuple[str, float]:
-    """Map a face crop + model to an (emotion, confidence) pair.
-
-    Priority:
-      1. Real model  — face detected + model loaded + TEST_EMOTIONS=false
-      2. Random      — DEBUG: TEST_EMOTIONS=true; bypasses model entirely
-      3. Neutral     — no face and TEST_EMOTIONS=false
-
-    Called explicitly by ws/handler.py after face detection — not buried inside
-    the video frame pipeline. emotion_model.predict() is the only model call here.
-    """
-    if detected and face_crop is not None and emotion_model is not None:
-        return emotion_model.predict(face_crop)
-
-    if config.TEST_EMOTIONS:
-        return random.choice(EMOTIONS), round(random.uniform(0.5, 0.8), 2)
-
-    return "neutral", 0.5
