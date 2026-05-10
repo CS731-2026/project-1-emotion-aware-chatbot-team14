@@ -1,8 +1,8 @@
 """Emotional reasoning agent.
 
-Analyses a window of emotion observations and transcript segments to produce
-a short emotional-context string that the LLMReasoningAgent injects as a
-system-level instruction before each student turn.
+Analyses a window of emotion observations to produce a short emotional-context
+string. This string is one of two inputs injected into LLMReasoningAgent per
+the architecture spec (the other being the timestamped transcript).
 """
 
 from __future__ import annotations
@@ -10,15 +10,16 @@ from __future__ import annotations
 import statistics
 
 from core.emotion.buffer import EmotionObservation
-from ws.handler import TranscriptSegment
+from ws.session import TranscriptSegment
 
 
 class EmotionalReasoningAgent:
-    """Derives a concise emotional-context description from recent observations.
+    """Derives a concise emotional-context string from recent face-based observations.
 
-    This is a placeholder implementation: it uses statistics.mode over the
-    raw emotion labels and computes duration from the earliest-to-latest
-    timestamp in the observation window.  No ML model is involved.
+    Placeholder implementation: uses statistics.mode over raw emotion labels and
+    computes duration from the earliest-to-latest timestamp in the window.
+    Transcript segments are accepted but not yet used — incorporating verbal cues
+    into the emotional context is a future prompt engineering decision.
     """
 
     def analyse(
@@ -26,42 +27,35 @@ class EmotionalReasoningAgent:
         emotion_observations: list[EmotionObservation],
         transcript_segments: list[TranscriptSegment],
     ) -> str:
-        """Summarise the student's emotional state for the LLM.
+        """Summarise the user's emotional state for the LLM.
 
         Args:
             emotion_observations: Recent EmotionObservation records from the
-                                  emotion buffer.
-            transcript_segments:  Recent TranscriptSegment records (unused in
-                                  this placeholder but kept for future use).
+                                  emotion buffer (face-based signal).
+            transcript_segments:  Recent TranscriptSegment records from the STT
+                                  pipeline. Accepted for future use; currently
+                                  not factored into the output string.
 
         Returns:
-            A single-sentence emotional context instruction, e.g.:
-            "The student appears to be feeling happy (~12s). Calibrate tone
+            A short emotional context instruction, e.g.:
+            "The user appears to be feeling happy (~12s). Calibrate tone
             accordingly without referencing this directly."
 
             Returns a neutral fallback if no observations are present.
         """
         if not emotion_observations:
-            return (
-                "No emotional signal detected. "
-                "Proceed with neutral tone."
-            )
+            return "No emotional signal detected. Proceed with neutral tone."
 
-        # Determine the dominant emotion via statistical mode.
+        # Dominant emotion via statistical mode; fall back to most recent on tie.
         try:
-            dominant = statistics.mode(
-                obs.emotion for obs in emotion_observations
-            )
+            dominant = statistics.mode(obs.emotion for obs in emotion_observations)
         except statistics.StatisticsError:
-            # No unique mode — fall back to the last observed emotion.
             dominant = emotion_observations[-1].emotion
 
-        # Compute duration from earliest to latest timestamp in the window.
         timestamps = [obs.timestamp for obs in emotion_observations]
         duration_seconds = int(max(timestamps) - min(timestamps))
 
         return (
-            f"The student appears to be feeling {dominant} "
-            f"(~{duration_seconds}s). "
+            f"The user appears to be feeling {dominant} (~{duration_seconds}s). "
             "Calibrate tone accordingly without referencing this directly."
         )

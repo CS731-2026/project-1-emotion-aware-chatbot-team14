@@ -7,12 +7,20 @@ import { randomUUID } from "crypto";
 
 const router = Router();
 
+// Number of prior turns (user + agent pairs) sent to the model service.
 const HISTORY_WINDOW = 10;
 
+/** Returns a safe fallback string when the model service is unreachable. */
 function buildFallbackResponse(text: string): string {
   return `Backend fallback reply: I received "${text}". The backend is working, but the model service or LLM is unavailable.`;
 }
 
+/**
+ * POST /api/v1/chat
+ * Forwards the user's message + windowed history to the model service, then
+ * persists both the user turn and the agent reply to the profile store.
+ * Falls back gracefully if the model service is down.
+ */
 router.post("/", async (req, res, next) => {
   try {
     const profileId = req.session.profileId;
