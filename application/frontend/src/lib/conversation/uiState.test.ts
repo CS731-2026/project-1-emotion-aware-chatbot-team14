@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { TranscriptEntry } from "$lib/harness/types";
-import { deriveAssistantPhase, phaseLabel, transcriptPreview } from "$lib/conversation/uiState";
+import {
+  deriveAssistantPhase,
+  phaseLabel,
+  shouldPromoteTranscript,
+  transcriptPreview,
+} from "$lib/conversation/uiState";
 
 function entry(text: string): TranscriptEntry {
   return {
@@ -68,5 +73,16 @@ describe("transcriptPreview", () => {
 
   it("returns a gentle prompt when there is no useful transcript yet", () => {
     expect(transcriptPreview("Mic idle", [])).toBe("Start speaking when you're ready.");
+  });
+});
+
+describe("shouldPromoteTranscript", () => {
+  it("accepts a fresh transcript", () => {
+    expect(shouldPromoteTranscript("Please stay with me for a second", null)).toBe(true);
+  });
+
+  it("rejects placeholder or duplicate transcript text", () => {
+    expect(shouldPromoteTranscript("Listening for harness transcript...", null)).toBe(false);
+    expect(shouldPromoteTranscript("Please stay with me for a second", "Please stay with me for a second")).toBe(false);
   });
 });
