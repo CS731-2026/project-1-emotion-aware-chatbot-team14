@@ -11,17 +11,14 @@ class TranscriptionService(ABC):
     REQUIREMENTS_FILE: str | None = None
 
     @abstractmethod
-    def transcribe(
-        self, audio_data: np.ndarray
-    ) -> tuple[str, str] | tuple[str, str, float | None]:
+    def transcribe(self, audio_data: np.ndarray) -> tuple[str, str, float | None]:
         """Transcribe audio data.
 
         Args:
             audio_data: numpy array of audio samples (float32).
 
         Returns:
-            (transcript, language) tuple, or
-            (transcript, language, confidence) tuple if confidence is available,
-            where confidence is 0.0-1.0 representing model confidence.
+            (transcript, language, confidence) where confidence is 0.0–1.0
+            or None if the backend does not expose a confidence score.
         """
         ...

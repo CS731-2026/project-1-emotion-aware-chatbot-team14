@@ -13,6 +13,7 @@ import numpy as np
 from fastapi import WebSocket
 
 import config
+from core.stt.base import TranscriptionService
 from ws.session import HarnessSession, TranscriptSegment, emit_debug
 
 logger = logging.getLogger(__name__)
@@ -96,7 +97,7 @@ def decode_browser_audio_to_numpy(data: str) -> np.ndarray:
 async def process_audio_chunk(
     websocket: WebSocket,
     session: HarnessSession,
-    stt,
+    stt: TranscriptionService | None,
     chunk_count: int,
     data: str,
     timestamp: float,
@@ -111,7 +112,7 @@ async def process_audio_chunk(
 
     text = ""
     confidence: float | None = None
-    stt_error = None
+    stt_error: str | None = None
     timings_ms: dict[str, float] = {}
 
     if stt is not None:

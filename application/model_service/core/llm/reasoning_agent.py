@@ -16,7 +16,7 @@ being threaded through the code ad hoc.
 from __future__ import annotations
 
 from dataclasses import dataclass
-
+from ws.session import TranscriptSegment
 from .base import LLMProvider, Message
 
 # TODO: decide empathy bot persona, tone directives, and constraints.
@@ -72,14 +72,13 @@ def _emotional_message(emotional_context: str) -> Message | None:
         return None
     return {"role": "system", "content": emotional_context}
 
-
 def _transcript_lines(transcript_segments: list) -> list[str]:
     if not transcript_segments:
         return []
     return [f"[{segment.timestamp:.1f}s] {segment.text}" for segment in transcript_segments]
 
 
-def _transcript_message(transcript_segments: list) -> Message | None:
+def _build_transcript_message(transcript_segments: list[TranscriptSegment]) -> Message | None:
     # TODO: decide how to format the transcript for the LLM.
     # TODO: decide whether timestamps should be included, and in what format.
     transcript_lines = _transcript_lines(transcript_segments)
@@ -124,7 +123,7 @@ class LLMReasoningAgent:
             system_prompt=SYSTEM_PROMPT,
             history_messages=_history_window(inputs.history, self._history_window),
             emotional_message=_emotional_message(inputs.emotional_context),
-            transcript_message=_transcript_message(inputs.transcript_segments),
+            transcript_message=_build_transcript_message(inputs.transcript_segments),
             transcript_lines=_transcript_lines(inputs.transcript_segments),
         )
 
@@ -175,7 +174,7 @@ class LLMReasoningAgent:
         message: str,
         emotional_context: str,
         history: list[Message],
-        transcript_segments: list | None = None,
+        transcript_segments: list[TranscriptSegment] | None = None,
     ) -> str:
         """Run the current reasoning pipeline and return the LLM response."""
         inputs = self.collect_inputs(message, emotional_context, history, transcript_segments)

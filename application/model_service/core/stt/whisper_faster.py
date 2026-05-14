@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import time
+from typing import Any
 
 import numpy as np
 
@@ -78,7 +79,7 @@ class FasterWhisperTranscriptionService(TranscriptionService):
         elapsed = time.time() - start_time
         print(f"Download complete in {elapsed:.1f}s")
 
-    def _load_model(self, model_name: str = "base"):
+    def _load_model(self, model_name: str = "base") -> Any:
         """Load WhisperModel with automatic device fallback."""
         from faster_whisper import WhisperModel
 
