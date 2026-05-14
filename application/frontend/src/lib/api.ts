@@ -4,6 +4,17 @@ const BASE = PUBLIC_BACKEND_URL || "http://localhost:3001";
 
 export type Profile = { id: string; name: string; createdAt: string };
 export type Message = { id: string; role: "user" | "agent"; content: string; timestamp: string };
+export type ChatDebug = {
+  provider: string | null;
+  model: string | null;
+  current_message: string;
+  system_prompt: string | null;
+  history_window: number;
+  history_messages: Array<{ role: string; content: string }>;
+  emotional_context: string;
+  transcript_lines: string[];
+  prompt_messages: Array<{ role: string; content: string }>;
+};
 
 export const api = {
   getHealth: () => fetch(`${BASE}/health`, { credentials: "include" }).then((r) => r.json()) as Promise<{ status: string }>,
@@ -25,5 +36,5 @@ export const api = {
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
-    }).then((r) => r.json()) as Promise<{ response: string }>,
+    }).then((r) => r.json()) as Promise<{ response: string; debug: ChatDebug | null }>,
 };

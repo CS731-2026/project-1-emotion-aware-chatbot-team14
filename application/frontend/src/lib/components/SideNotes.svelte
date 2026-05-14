@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { ChatDebug } from "$lib/api";
   import { SPEECH_THRESHOLD, type TranscriptEntry } from "$lib/harness/types";
   import TranscriptHistory from "$lib/components/TranscriptHistory.svelte";
 
@@ -19,6 +20,7 @@
     harnessAudioCount,
     latestAudioSummary,
     sttStatus,
+    reasoningDebug,
   }: {
     harnessStatus: string;
     websocketDebug: string;
@@ -36,6 +38,7 @@
     harnessAudioCount: number;
     latestAudioSummary: string;
     sttStatus: string;
+    reasoningDebug: ChatDebug | null;
   } = $props();
 </script>
 
@@ -89,6 +92,28 @@
     <p>{latestAudioSummary}</p>
     <p>{sttStatus}</p>
   </div>
+  {#if reasoningDebug}
+    <div class="note-card reasoning-card">
+      <p class="card-label">LLM reasoning</p>
+      <p class="reasoning-meta">{reasoningDebug.provider ?? "no-provider"} / {reasoningDebug.model ?? "no-model"}</p>
+
+      <p class="reasoning-heading">Current message</p>
+      <pre>{reasoningDebug.current_message}</pre>
+
+      <p class="reasoning-heading">Emotional context</p>
+      <pre>{reasoningDebug.emotional_context}</pre>
+
+      <p class="reasoning-heading">Transcript context</p>
+      <pre>{reasoningDebug.transcript_lines.length ? reasoningDebug.transcript_lines.join("\n") : "[no transcript context]"}</pre>
+
+      <p class="reasoning-heading">Prompt messages</p>
+      <div class="event-list">
+        {#each reasoningDebug.prompt_messages as prompt}
+          <span><strong>{prompt.role}</strong>: {prompt.content}</span>
+        {/each}
+      </div>
+    </div>
+  {/if}
 </aside>
 
 <style>
@@ -145,6 +170,22 @@
 
   .face-crop {
     border-color: rgba(74, 222, 128, 0.45);
+  }
+
+  .reasoning-card pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin-top: 0.35rem;
+    color: rgba(255, 255, 255, 0.84);
+    font-size: 0.8rem;
+    line-height: 1.45;
+  }
+
+  .reasoning-meta,
+  .reasoning-heading {
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.62);
+    margin-top: 0.45rem;
   }
 
   @media (max-width: 980px) {

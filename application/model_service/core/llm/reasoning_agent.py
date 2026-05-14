@@ -1,41 +1,21 @@
-"""LLM reasoning agent — assembles the prompt and calls the LLM.
+"""LLM reasoning agent — lays out the current reasoning pipeline explicitly.
 
-PROMPT ENGINEERING — OPEN QUESTIONS (decisions needed before production):
-─────────────────────────────────────────────────────────────────────────
-1. SYSTEM PROMPT
-   What persona, constraints, and tone directives should the empathy bot have?
-   → Edit SYSTEM_PROMPT below.
+This module is meant to be a planning surface for future reasoning work.
+The current implementation is intentionally simple, but the code is structured
+so the eventual reasoning steps are easy to discuss and replace:
 
-2. CONVERSATION HISTORY
-   - How many prior turns should be included?
-   - Should history be windowed (last N), summarised, or passed in full?
-   - Should system messages from prior turns be stripped or kept?
-   - How should the history be formatted (raw role/content, or compressed)?
-   → See _build_history_messages().
+1. Collect the current inputs for the turn.
+2. Derive the prompt context from those inputs.
+3. Assemble the final prompt messages.
+4. Call the LLM.
 
-3. EMOTIONAL CONTEXT REPRESENTATION
-   - How should the emotional signal be injected into the prompt?
-     Options: system message, prefix on user message, structured JSON block, etc.
-   - Should it appear before or after the transcript?
-   - Should low-confidence readings be suppressed or down-weighted?
-   → See _build_emotional_context_message().
-
-4. TRANSCRIPT REPRESENTATION
-   - How should timestamped transcript segments be formatted?
-   - Should timestamps be included, relative or absolute?
-   - Should older segments be trimmed or summarised?
-   → See _build_transcript_message().
-
-5. RESPONSE / HISTORY APPENDING
-   - After the LLM replies, how should that turn be stored?
-   - Should the emotional context and transcript be appended alongside it
-     so future turns have that context in history?
-   - Is history owned here, by the caller (routers/chat.py), or by the backend?
-   → Currently the backend (chat.router.ts) appends via profileStore.
-     Decide whether emotional metadata should also be persisted there.
+Future improvements should generally fit into one of those stages rather than
+being threaded through the code ad hoc.
 """
 
 from __future__ import annotations
+
+from dataclasses import dataclass
 
 from .base import LLMProvider, Message
 
@@ -49,52 +29,143 @@ SYSTEM_PROMPT = (
 )
 
 
-def _build_history_messages(history: list[Message], window: int) -> list[Message]:
+@dataclass(frozen=True)
+class ReasoningInputs:
+    """All raw inputs available to the reasoning layer for one turn."""
+
+    current_message: str
+    emotional_context: str
+    history: list[Message]
+    transcript_segments: list
+
+
+@dataclass(frozen=True)
+class PromptContext:
+    """Structured intermediate prompt context derived from ReasoningInputs.
+
+    This is the main place to extend later when we want richer reasoning:
+    summarised history, confidence-aware emotion handling, transcript pruning,
+    tool traces, chain-of-thought scaffolding, and so on.
+    """
+
+    system_prompt: str
+    history_messages: list[Message]
+    emotional_message: Message | None
+    transcript_message: Message | None
+    transcript_lines: list[str]
+
+
+def _history_window(history: list[Message], window: int) -> list[Message]:
     # TODO: decide history strategy — windowed, summarised, or full.
     # TODO: decide whether to filter out system-role messages from prior turns.
-    # TODO: decide window size (currently hardcoded to caller-supplied value).
-    prior = [m for m in history if m["role"] in ("user", "assistant")]
+    prior = [message for message in history if message["role"] in ("user", "assistant")]
     return prior[-window:]
 
 
-def _build_emotional_context_message(emotional_context: str) -> Message | None:
+def _emotional_message(emotional_context: str) -> Message | None:
     # TODO: decide how to represent emotional context in the prompt.
     # Options: system message, prefix on user message, structured block, omit entirely.
-    # TODO: decide whether to suppress when confidence is low (requires passing confidence here).
     if not emotional_context:
         return None
     return {"role": "system", "content": emotional_context}
 
 
-def _build_transcript_message(transcript_segments: list) -> Message | None:
+def _transcript_lines(transcript_segments: list) -> list[str]:
+    if not transcript_segments:
+        return []
+    return [f"[{segment.timestamp:.1f}s] {segment.text}" for segment in transcript_segments]
+
+
+def _transcript_message(transcript_segments: list) -> Message | None:
     # TODO: decide how to format the transcript for the LLM.
     # TODO: decide whether timestamps should be included, and in what format.
-    # TODO: decide whether to summarise long transcripts rather than truncate.
-    if not transcript_segments:
+    transcript_lines = _transcript_lines(transcript_segments)
+    if not transcript_lines:
         return None
-    lines = ["Recent speech (with timestamps):"]
-    for seg in transcript_segments:
-        lines.append(f"  [{seg.timestamp:.1f}s] {seg.text}")
+
+    lines = ["Recent speech (with timestamps):", *[f"  {line}" for line in transcript_lines]]
     return {"role": "system", "content": "\n".join(lines)}
 
 
 class LLMReasoningAgent:
-    """Calls the LLM with an assembled prompt.
-
-    The three inputs — conversation history, emotional context, and transcript —
-    are each built by a dedicated function above. All prompt engineering
-    decisions are isolated to those functions and SYSTEM_PROMPT; this class
-    only orchestrates the assembly order and the LLM call.
-
-    TODO: once the prompt engineering questions above are resolved, the
-    assembly order in reason() may also need to change.
-    """
+    """Owns the high-level reasoning pipeline for one conversational turn."""
 
     def __init__(self, llm: LLMProvider, history_window: int = 10) -> None:
         # TODO: history_window default is arbitrary — revisit once history
-        # strategy is decided (question 2 above).
+        # strategy is decided.
         self._llm = llm
         self._history_window = history_window
+
+    def collect_inputs(
+        self,
+        message: str,
+        emotional_context: str,
+        history: list[Message],
+        transcript_segments: list | None = None,
+    ) -> ReasoningInputs:
+        """Normalise raw inputs into one explicit turn object."""
+        return ReasoningInputs(
+            current_message=message,
+            emotional_context=emotional_context,
+            history=history,
+            transcript_segments=transcript_segments or [],
+        )
+
+    def derive_prompt_context(self, inputs: ReasoningInputs) -> PromptContext:
+        """Turn raw inputs into structured prompt context.
+
+        This is the best place to change future reasoning behavior without
+        touching the chat route or provider adapters.
+        """
+        return PromptContext(
+            system_prompt=SYSTEM_PROMPT,
+            history_messages=_history_window(inputs.history, self._history_window),
+            emotional_message=_emotional_message(inputs.emotional_context),
+            transcript_message=_transcript_message(inputs.transcript_segments),
+            transcript_lines=_transcript_lines(inputs.transcript_segments),
+        )
+
+    def assemble_messages(
+        self,
+        inputs: ReasoningInputs,
+        context: PromptContext,
+    ) -> list[Message]:
+        """Build the final provider-facing message list."""
+        messages: list[Message] = [{"role": "system", "content": context.system_prompt}]
+        messages.extend(context.history_messages)
+
+        if context.emotional_message:
+            messages.append(context.emotional_message)
+
+        if context.transcript_message:
+            messages.append(context.transcript_message)
+
+        messages.append({"role": "user", "content": inputs.current_message})
+        return messages
+
+    def debug_snapshot(
+        self,
+        message: str,
+        emotional_context: str,
+        history: list[Message],
+        transcript_segments: list | None = None,
+    ) -> dict:
+        """Return a structured snapshot of the current reasoning pipeline."""
+        inputs = self.collect_inputs(message, emotional_context, history, transcript_segments)
+        context = self.derive_prompt_context(inputs)
+        prompt_messages = self.assemble_messages(inputs, context)
+
+        return {
+            "provider": self._llm.provider_name,
+            "model": self._llm.model_name,
+            "current_message": inputs.current_message,
+            "system_prompt": context.system_prompt,
+            "history_window": self._history_window,
+            "history_messages": context.history_messages,
+            "emotional_context": inputs.emotional_context,
+            "transcript_lines": context.transcript_lines,
+            "prompt_messages": prompt_messages,
+        }
 
     def reason(
         self,
@@ -103,34 +174,8 @@ class LLMReasoningAgent:
         history: list[Message],
         transcript_segments: list | None = None,
     ) -> str:
-        """Assemble the prompt from all inputs and return the LLM reply.
-
-        Args:
-            message:             The user's current message.
-            emotional_context:   Output of EmotionalReasoningAgent.analyse().
-            history:             Prior conversation turns (user/assistant).
-            transcript_segments: Recent TranscriptSegment records from STT.
-
-        Returns:
-            The LLM's response string.
-
-        TODO: the assembly order below is a placeholder — revisit once
-        prompt engineering questions 2–4 above are decided.
-        """
-        messages: list[Message] = []
-
-        messages.append({"role": "system", "content": SYSTEM_PROMPT})
-
-        messages.extend(_build_history_messages(history, self._history_window))
-
-        emotional_msg = _build_emotional_context_message(emotional_context)
-        if emotional_msg:
-            messages.append(emotional_msg)
-
-        transcript_msg = _build_transcript_message(transcript_segments or [])
-        if transcript_msg:
-            messages.append(transcript_msg)
-
-        messages.append({"role": "user", "content": message})
-
-        return self._llm.chat(messages)
+        """Run the current reasoning pipeline and return the LLM response."""
+        inputs = self.collect_inputs(message, emotional_context, history, transcript_segments)
+        context = self.derive_prompt_context(inputs)
+        prompt_messages = self.assemble_messages(inputs, context)
+        return self._llm.chat(prompt_messages)
