@@ -2,11 +2,11 @@
 
 ## What we're building
 
-An **emotion-aware study companion** that watches a student's face via webcam and adapts its conversational behaviour in real time.
+An **emotion-aware empathy bot** that watches a person's face via webcam and adapts its conversational behaviour in real time.
 
-Academic self-study is emotionally volatile — students cycle through frustration, helplessness, and anxiety, yet every AI study tool today responds the same way regardless of emotional state. This system treats the face as an honest, unfiltered signal of cognitive and emotional load. When the model detects frustration (anger, disgust, contempt, sadness) it shifts toward patient, scaffolded explanation. When it detects anxiety (fear) it moves to calming, confidence-building dialogue. The LLM prompt is dynamically conditioned on the detected emotion so that the *same question* receives a different answer depending on how the student looks.
+Emotionally sensitive conversation is hard for conventional chatbots, which tend to respond the same way regardless of how a person feels. This system treats the face as an honest, unfiltered signal of emotional state. When the model detects frustration or sadness, it shifts toward patient, supportive dialogue. When it detects anxiety or fear, it moves toward calming, confidence-building responses. The LLM prompt is dynamically conditioned on the detected emotion so that the same input can receive a different answer depending on how the person appears.
 
-The target population is university students in independent study — approximately 40,000 enrolled at the University of Auckland alone.
+The target use case is live empathic conversation, where the bot can adapt its tone in real time based on non-verbal emotional cues.
 
 ---
 
@@ -99,7 +99,7 @@ application/mock_programs/
 ```bash
 cd application/mock_programs
 pip install -r requirements.txt
-cp .env.example .env   # add OPENAI_API_KEY
+cp .env.example .env   # add GEMINI_API_KEY or OPENAI_API_KEY
 
 # Full pipeline: webcam + voice + chatbot
 python main.py --checkpoint path/to/emotion_model.pt --voice
@@ -156,7 +156,7 @@ Each service has a `.env` file (gitignored) and a committed `.env.example`:
 |---|---|---|
 | backend | `application/backend/.env` | `PORT`, `NODE_ENV`, `MODEL_SERVICE_URL` |
 | frontend | `application/frontend/.env` | `BACKEND_URL` |
-| model_service | `application/model_service/.env` | `PORT`, `HOST` |
+| model_service | `application/model_service/.env` | `PORT`, `HOST`, `LLM_PROVIDER`, `LLM_MODEL`, `GEMINI_API_KEY`, `OPENAI_API_KEY` |
 
 Copy `.env.example` to `.env` in each service directory when setting up a new environment.
 

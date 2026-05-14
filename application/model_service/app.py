@@ -15,6 +15,14 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _llm_api_key_for(provider: str) -> str | None:
+    if provider == "openai":
+        return config.OPENAI_API_KEY
+    if provider == "gemini":
+        return config.GEMINI_API_KEY
+    return None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan handler — loads all ML components once at startup.
@@ -64,13 +72,16 @@ async def lifespan(app: FastAPI):
         logger.warning("Emotion model not loaded: %s", e)
         app.state.emotion_model = None
 
-    if config.LLM_PROVIDER and config.OPENAI_API_KEY or config.LLM_PROVIDER != "openai":
+    llm_api_key = _llm_api_key_for(config.LLM_PROVIDER)
+    provider_requires_key = config.LLM_PROVIDER in {"openai", "gemini"}
+
+    if config.LLM_PROVIDER and (llm_api_key or not provider_requires_key):
         try:
             from core.llm.factory import create_llm
             from core.llm.reasoning_agent import LLMReasoningAgent
             from core.emotional_reasoning_agent import EmotionalReasoningAgent
 
-            llm = create_llm(config.LLM_PROVIDER, config.LLM_MODEL, api_key=config.OPENAI_API_KEY)
+            llm = create_llm(config.LLM_PROVIDER, config.LLM_MODEL, api_key=llm_api_key)
             app.state.llm         = llm
             app.state.llm_agent   = LLMReasoningAgent(llm)
             app.state.emotion_agent = EmotionalReasoningAgent()
