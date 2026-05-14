@@ -83,7 +83,9 @@ describe("shouldPromoteTranscript", () => {
 
   it("rejects placeholder or duplicate transcript text", () => {
     expect(shouldPromoteTranscript("Listening for harness transcript...", null)).toBe(false);
+    expect(shouldPromoteTranscript("[BLANK_AUDIO]", null)).toBe(false);
     expect(shouldPromoteTranscript("[whisper.cpp returned no text]", null)).toBe(false);
+    expect(shouldPromoteTranscript("[whisper.cpp transcript filtered]", null)).toBe(false);
     expect(shouldPromoteTranscript("Please stay with me for a second", "Please stay with me for a second")).toBe(false);
   });
 });
