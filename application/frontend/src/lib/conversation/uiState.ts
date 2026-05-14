@@ -64,3 +64,9 @@ export function transcriptPreview(
 
   return "Start speaking when you're ready.";
 }
+
+export function shouldPromoteTranscript(text: string, previousTranscript: string | null): boolean {
+  const normalized = text.trim();
+  if (normalized === "" || normalized === previousTranscript) return false;
+  return !isPlaceholderTranscript(normalized);
+}
