@@ -1,5 +1,11 @@
 <script lang="ts">
-  let { stream }: { stream: MediaStream | null } = $props();
+  let {
+    stream,
+    hidden = false,
+  }: {
+    stream: MediaStream | null;
+    hidden?: boolean;
+  } = $props();
 
   let videoEl = $state<HTMLVideoElement | undefined>(undefined);
 
@@ -10,7 +16,7 @@
   });
 </script>
 
-<div class="preview">
+<div class="preview" class:hidden>
   {#if stream}
     <video bind:this={videoEl} autoplay muted playsinline></video>
   {:else}
@@ -30,6 +36,16 @@
     border: 1px solid var(--color-border);
     background: rgba(0, 0, 0, 0.45);
     z-index: 5;
+  }
+
+  .preview.hidden {
+    width: 1px;
+    height: 1px;
+    right: 0;
+    bottom: 0;
+    border: 0;
+    opacity: 0;
+    pointer-events: none;
   }
 
   video {

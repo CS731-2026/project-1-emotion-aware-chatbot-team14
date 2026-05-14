@@ -6,7 +6,6 @@
   import ChatInput from "$lib/components/ChatInput.svelte";
   import DebugDashboard from "$lib/components/DebugDashboard.svelte";
   import ProfileModal from "$lib/components/ProfileModal.svelte";
-  import SideNotes from "$lib/components/SideNotes.svelte";
   import SpeakingCircle from "$lib/components/SpeakingCircle.svelte";
   import WebcamPreview from "$lib/components/WebcamPreview.svelte";
   import {
@@ -77,6 +76,17 @@
     isSpeaking,
   }));
   const transcriptText = $derived(transcriptPreview(liveTranscript, transcriptEntries));
+  const isActivelyRecording = $derived(
+    isListening && (
+      vadState.startsWith("Recording speech")
+      || vadState.startsWith("Silence detected")
+      || vadState.startsWith("Stopping speech clip")
+      || vadState.startsWith("Clip sent")
+    )
+  );
+  const micPulse = $derived(
+    isListening ? Math.min(1, Math.max(0.08, currentAudioLevel / 0.012)) : 0
+  );
   const latestAssistantMessage = $derived.by(() =>
     [...messages].reverse().find((message) => message.role === "agent")?.content
       ?? "I’ll respond out loud here once the backend reply comes through."
@@ -456,101 +466,84 @@
     <ProfileModal onSelected={onProfileSelected} />
   {/if}
 
+  <header class="topbar">
+    <div class="title-block">
+      <p class="eyebrow">Emotion-aware empathy bot</p>
+      <h1>{profile?.name ?? "Empathy Bot"}</h1>
+      <p class="status-line">{statusText}</p>
+    </div>
+    <div class="status-pills">
+      <span class:ok={backendOnline} class="pill">Backend</span>
+      <span class:ok={harnessOnline} class="pill">Harness</span>
+      <span class:ok={faceDetected} class="pill">Face</span>
+    </div>
+  </header>
+
+  <main class="main-layout">
+    <section class="hero-shell">
+      <div class="hero-copy">
+        <p class="hero-kicker">{phaseLabel(assistantPhase)}</p>
+        <h2>A calmer, voice-first conversation.</h2>
+        <p class="helper-text">{bootMessage}</p>
+        <div
+          class="recording-subtitle"
+          class:listening={isListening}
+          class:recording={isActivelyRecording}
+          style={`--mic-pulse:${micPulse};`}
+        >
+          <span class="recording-dot" aria-hidden="true"></span>
+          <span class="recording-copy">
+            {#if isActivelyRecording}
+              Frontend is recording your voice
+            {:else if isListening}
+              Listening for a strong enough signal to record
+            {:else}
+              Voice capture is idle
+            {/if}
+          </span>
+          <span class="recording-bars" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+          </span>
+        </div>
+      </div>
+
+      <SpeakingCircle phase={assistantPhase} pulse={speechPulse} />
+
+      <div class="transcript-shell">
+        <p class="transcript-label">Live transcript</p>
+        <p class="transcript-text">{transcriptText}</p>
+      </div>
+
+      <div class="response-shell">
+        <p class="response-label">Latest response</p>
+        <p class="response-text">{latestAssistantMessage}</p>
+      </div>
+
+      <div class="composer-shell">
+        <ChatInput onSend={sendMessage} {isListening} onMicToggle={toggleMic} disabled={chatBusy || showModal} />
+        <p class="composer-hint">
+          Speak to send a voice prompt automatically, or type if you want a quieter fallback.
+        </p>
+      </div>
+    </section>
+  </main>
+
   {#if showDebugDashboard}
     <DebugDashboard
       {profile}
-      {backendOnline}
-      {harnessOnline}
       {faceDetected}
-      {bootMessage}
-      {harnessStatus}
       {lastDetection}
-      {liveTranscript}
-      {currentAudioLevel}
-      {vadState}
-      {harnessAudioCount}
-      {latestAudioSummary}
-      {sttStatus}
-      {isSpeaking}
-      {messages}
-      sendMessage={sendMessage}
-      {isListening}
-      toggleMic={toggleMic}
-      {chatBusy}
-      {showModal}
-      {transcriptEntries}
       {latestHarnessFrame}
       {latestFaceCrop}
       {latestFrameSummary}
-      {webcamStream}
-    />
-  {:else}
-    <header class="topbar">
-      <div class="title-block">
-        <p class="eyebrow">Emotion-aware empathy bot</p>
-        <h1>{profile?.name ?? "Empathy Bot"}</h1>
-        <p class="status-line">{statusText}</p>
-      </div>
-      <div class="status-pills">
-        <span class:ok={backendOnline} class="pill">Backend</span>
-        <span class:ok={harnessOnline} class="pill">Harness</span>
-        <span class:ok={faceDetected} class="pill">Face</span>
-      </div>
-    </header>
-
-    <main class="main-layout">
-      <section class="hero-shell">
-        <div class="hero-copy">
-          <p class="hero-kicker">{phaseLabel(assistantPhase)}</p>
-          <h2>A calmer, voice-first conversation.</h2>
-          <p class="helper-text">{bootMessage}</p>
-        </div>
-
-        <SpeakingCircle phase={assistantPhase} pulse={speechPulse} />
-
-        <div class="transcript-shell">
-          <p class="transcript-label">Live transcript</p>
-          <p class="transcript-text">{transcriptText}</p>
-        </div>
-
-        <div class="response-shell">
-          <p class="response-label">Latest response</p>
-          <p class="response-text">{latestAssistantMessage}</p>
-        </div>
-
-        <div class="composer-shell">
-          <ChatInput onSend={sendMessage} {isListening} onMicToggle={toggleMic} disabled={chatBusy || showModal} />
-          <p class="composer-hint">
-            Speak to send a voice prompt automatically, or type if you want a quieter fallback.
-          </p>
-        </div>
-      </section>
-    </main>
-  {/if}
-
-  {#if showDebugDashboard}
-    <SideNotes
-      {harnessStatus}
-      {websocketDebug}
-      {websocketEvents}
-      {liveTranscript}
-      {vadState}
-      {currentAudioLevel}
-      {audioDebugEvents}
-      {transcriptEntries}
-      {lastDetection}
-      {harnessFrameCount}
-      {latestHarnessFrame}
-      {latestFaceCrop}
-      {latestFrameSummary}
-      {harnessAudioCount}
-      {latestAudioSummary}
-      {sttStatus}
+      {emotion}
       reasoningDebug={latestReasoningDebug}
     />
-
-    <WebcamPreview stream={webcamStream} />
   {/if}
+
+  <WebcamPreview stream={webcamStream} hidden />
 </div>
 
 <style>
@@ -656,6 +649,94 @@
     letter-spacing: -0.04em;
   }
 
+  .recording-subtitle {
+    --mic-pulse: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.7rem;
+    align-self: center;
+    margin-top: 0.35rem;
+    padding: 0.55rem 0.85rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.68);
+    transition:
+      background 140ms ease,
+      border-color 140ms ease,
+      color 140ms ease,
+      transform 140ms ease;
+  }
+
+  .recording-subtitle.listening {
+    border-color: rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .recording-subtitle.recording {
+    border-color: rgba(255, 132, 132, 0.28);
+    background: rgba(255, 82, 82, 0.08);
+    color: rgba(255, 255, 255, 0.94);
+    transform: translateY(calc(var(--mic-pulse) * -1px));
+  }
+
+  .recording-dot {
+    width: 0.62rem;
+    height: 0.62rem;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.34);
+    box-shadow: 0 0 0 rgba(255, 92, 92, 0);
+    transition: background 140ms ease;
+  }
+
+  .recording-subtitle.listening .recording-dot {
+    background: rgba(255, 255, 255, 0.76);
+  }
+
+  .recording-subtitle.recording .recording-dot {
+    background: rgb(255, 108, 108);
+    animation: record-pulse 1s ease-out infinite;
+  }
+
+  .recording-copy {
+    font-size: 0.88rem;
+    line-height: 1.3;
+  }
+
+  .recording-bars {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 0.18rem;
+    height: 0.8rem;
+  }
+
+  .recording-bars span {
+    width: 0.16rem;
+    height: calc(0.28rem + var(--mic-pulse) * 0.55rem);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.26);
+    transform-origin: bottom;
+    transition: height 120ms linear, background 140ms ease;
+  }
+
+  .recording-subtitle.listening .recording-bars span {
+    background: rgba(255, 255, 255, 0.48);
+  }
+
+  .recording-subtitle.recording .recording-bars span:nth-child(1) {
+    animation: level-bounce 0.85s ease-in-out infinite;
+  }
+
+  .recording-subtitle.recording .recording-bars span:nth-child(2) {
+    animation: level-bounce 0.85s ease-in-out 0.12s infinite;
+  }
+
+  .recording-subtitle.recording .recording-bars span:nth-child(3) {
+    animation: level-bounce 0.85s ease-in-out 0.24s infinite;
+  }
+
   .transcript-shell,
   .response-shell {
     width: min(700px, 100%);
@@ -699,6 +780,24 @@
     max-width: 38rem;
   }
 
+  @keyframes record-pulse {
+    0% {
+      box-shadow: 0 0 0 0 rgba(255, 92, 92, 0.46);
+    }
+    100% {
+      box-shadow: 0 0 0 10px rgba(255, 92, 92, 0);
+    }
+  }
+
+  @keyframes level-bounce {
+    0%, 100% {
+      transform: scaleY(0.7);
+    }
+    50% {
+      transform: scaleY(calc(1 + var(--mic-pulse) * 0.6));
+    }
+  }
+
   @media (max-width: 720px) {
     .topbar {
       flex-direction: column;
@@ -715,6 +814,16 @@
 
     .hero-copy h2 {
       font-size: clamp(1.7rem, 9vw, 2.4rem);
+    }
+
+    .recording-subtitle {
+      width: 100%;
+      gap: 0.55rem;
+      padding: 0.5rem 0.7rem;
+    }
+
+    .recording-copy {
+      font-size: 0.82rem;
     }
 
     .transcript-shell,
