@@ -3,8 +3,9 @@
 import asyncio
 import json
 import logging
-import random
-from typing import Any, Callable, Awaitable, cast
+import time
+from typing import Callable, Awaitable
+from typing import Any, Awaitable, Callable, cast
 
 import numpy as np
 from fastapi import WebSocket, WebSocketDisconnect
@@ -65,23 +66,28 @@ def pick_emotion(
     face_crop: np.ndarray | None,
     emotion_model: EmotionModel | None,
     detected: bool,
+    session: HarnessSession | None,
 ) -> tuple[str, float]:
     """Invoke the emotion model or fall back to debug/neutral values.
 
     Priority:
       1. Real model  — face detected + model loaded + TEST_EMOTIONS=false
-      2. Random      — DEBUG: TEST_EMOTIONS=true; bypasses model entirely
+      2. Timed cycle  — DEBUG: TEST_EMOTIONS=true; steps through emotions on a fixed timer
       3. Neutral     — no face and TEST_EMOTIONS=false
 
     emotion_model.predict() is the only model invocation point in the codebase.
     Lives here (not in ws/video.py) because it owns the model call — video.py
     only prepares the face crop.
     """
+    if config.TEST_EMOTIONS:
+        started_at = session.emotion_cycle_started_at if session is not None else time.time()
+        elapsed = max(0.0, time.time() - started_at)
+        interval = max(1, config.TEST_EMOTION_INTERVAL_SECONDS)
+        emotion_index = int(elapsed // interval) % len(EMOTIONS)
+        return EMOTIONS[emotion_index], 0.75
+
     if detected and face_crop is not None and emotion_model is not None:
         return emotion_model.predict(face_crop)
-
-    if config.TEST_EMOTIONS:
-        return random.choice(EMOTIONS), round(random.uniform(0.5, 0.8), 2)
 
     return "neutral", 0.5
 
@@ -163,9 +169,8 @@ def _make_handlers(
 
         timestamp = float(msg.get("timestamp", 0))
         session.frame_count += 1
-
         result = detect_from_message(hri.face_detector, msg, session.frame_count)
-        emotion, confidence = pick_emotion(result.face_crop, hri.emotion_model, result.detected)
+        emotion, confidence = pick_emotion(result.face_crop, hri.emotion_model, result.detected, session)
         session.emotion_buffer.update(emotion, confidence, timestamp)
 
         if session.frame_count == 1 or session.frame_count % 10 == 0:

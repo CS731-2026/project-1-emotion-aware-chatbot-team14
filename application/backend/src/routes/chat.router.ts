@@ -15,6 +15,18 @@ function buildFallbackResponse(text: string): string {
   return `Backend fallback reply: I received "${text}". The backend is working, but the model service or LLM is unavailable.`;
 }
 
+type ChatDebug = {
+  provider: string | null;
+  model: string | null;
+  current_message: string;
+  system_prompt: string | null;
+  history_window: number;
+  history_messages: Array<{ role: string; content: string }>;
+  emotional_context: string;
+  transcript_lines: string[];
+  prompt_messages: Array<{ role: string; content: string }>;
+};
+
 /**
  * POST /api/v1/chat
  * Forwards the user's message + windowed history to the model service, then
@@ -40,6 +52,7 @@ router.post("/", async (req, res, next) => {
     const harnessHistory = windowed.map((m) => ({ role: m.role === "agent" ? "assistant" : m.role, content: m.content }));
 
     let response = buildFallbackResponse(text);
+    let debug: ChatDebug | null = null;
 
     try {
       const harnessRes = await fetch(`${env.MODEL_SERVICE_URL}/api/v1/chat`, {
@@ -49,8 +62,9 @@ router.post("/", async (req, res, next) => {
       });
 
       if (harnessRes.ok) {
-        const data = (await harnessRes.json()) as { response?: string };
+        const data = (await harnessRes.json()) as { response?: string; debug?: ChatDebug };
         if (data.response) response = data.response;
+        if (data.debug) debug = data.debug;
       }
     } catch {
       // Keep the backend usable locally even when the model service is down.
@@ -62,7 +76,7 @@ router.post("/", async (req, res, next) => {
     appendMessage(profileId, userMsg);
     appendMessage(profileId, agentMsg);
 
-    res.json({ response });
+    res.json({ response, debug });
   } catch (err) {
     next(err);
   }

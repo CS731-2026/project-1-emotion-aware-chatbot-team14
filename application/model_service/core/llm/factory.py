@@ -11,7 +11,7 @@ def create_llm(provider: str, model: str, **kwargs: Any) -> LLMProvider:
     """Create and return an LLMProvider for the requested provider.
 
     Args:
-        provider: Provider name. One of "openai", "anthropic", "ollama".
+        provider: Provider name. One of "openai", "gemini", "anthropic", "ollama".
         model:    Model identifier passed to the chosen provider.
         **kwargs: Additional keyword arguments forwarded to the provider class.
 
@@ -25,6 +25,11 @@ def create_llm(provider: str, model: str, **kwargs: Any) -> LLMProvider:
         from .openai import OpenAIProvider
         return OpenAIProvider(model=model, **kwargs)
 
+    elif provider == "gemini":
+        from .gemini import GeminiProvider
+
+        return GeminiProvider(model=model, **kwargs)
+
     elif provider == "anthropic":
         from .anthropic import AnthropicProvider
         return AnthropicProvider(model=model, **kwargs)
@@ -36,5 +41,5 @@ def create_llm(provider: str, model: str, **kwargs: Any) -> LLMProvider:
     else:
         raise ValueError(
             f"Unknown LLM provider: '{provider}'. "
-            "Valid options: 'openai', 'anthropic', 'ollama'."
+            "Valid options: 'openai', 'gemini', 'anthropic', 'ollama'."
         )

@@ -2,14 +2,18 @@
   import { browser } from "$app/environment";
   import { env as publicEnv } from "$env/dynamic/public";
   import { PUBLIC_HARNESS_WS_URL } from "$env/static/public";
-  import { api, type Message, type Profile } from "$lib/api";
-  import ChatHistory from "$lib/components/ChatHistory.svelte";
+  import { api, type ChatDebug, type Message, type Profile } from "$lib/api";
   import ChatInput from "$lib/components/ChatInput.svelte";
   import DebugDashboard from "$lib/components/DebugDashboard.svelte";
   import ProfileModal from "$lib/components/ProfileModal.svelte";
-  import SideNotes from "$lib/components/SideNotes.svelte";
   import SpeakingCircle from "$lib/components/SpeakingCircle.svelte";
   import WebcamPreview from "$lib/components/WebcamPreview.svelte";
+  import {
+    deriveAssistantPhase,
+    phaseLabel,
+    shouldPromoteTranscript,
+    transcriptPreview,
+  } from "$lib/conversation/uiState";
   import { BrowserVadController } from "$lib/harness/browserVad";
   import {
     EMOTION_COLOURS,
@@ -53,18 +57,49 @@
   let currentAudioLevel = $state(0);
   let vadState = $state("Mic idle");
   let showDebugDashboard = $state(DEBUG_ENV_ENABLED);
+  let pendingTranscript = $state<string | null>(null);
+  let lastPromotedTranscript = $state<string | null>(null);
+  let speechPulse = $state(0);
+  let latestReasoningDebug = $state<ChatDebug | null>(null);
 
   let ws = $state<WebSocket | null>(null);
   let frameInterval = $state<ReturnType<typeof setInterval> | null>(null);
+  let speechPulseTimeout = $state<ReturnType<typeof setTimeout> | null>(null);
   let browserVad: BrowserVadController | null = null;
 
   const bgColour = $derived(EMOTION_COLOURS[emotion]);
+  const assistantPhase = $derived(deriveAssistantPhase({
+    backendOnline,
+    profileReady: Boolean(profile),
+    isListening,
+    chatBusy,
+    isSpeaking,
+  }));
+  const transcriptText = $derived(transcriptPreview(liveTranscript, transcriptEntries));
+  const isActivelyRecording = $derived(
+    isListening && (
+      vadState.startsWith("Recording speech")
+      || vadState.startsWith("Silence detected")
+      || vadState.startsWith("Stopping speech clip")
+      || vadState.startsWith("Clip sent")
+    )
+  );
+  const micPulse = $derived(
+    isListening ? Math.min(1, Math.max(0.08, currentAudioLevel / 0.012)) : 0
+  );
+  const latestAssistantMessage = $derived.by(() =>
+    [...messages].reverse().find((message) => message.role === "agent")?.content
+      ?? "I’ll respond out loud here once the backend reply comes through."
+  );
   const statusText = $derived.by(() => {
     if (!backendOnline) return "Backend offline";
     if (!profile) return "Select a profile to begin";
     if (!harnessOnline) return "Backend ready, harness not connected";
+    if (!micStream) return "Allow microphone access to start speaking";
+    if (isListening) return "Listening for your voice";
     if (!faceDetected) return "Harness connected, waiting for face";
-    return "Frontend, backend, and harness connected";
+    if (chatBusy) return "Backend is forming a reply";
+    return "Ready for a live conversation";
   });
 
   async function init() {
@@ -138,9 +173,42 @@
   }
 
   function speak(text: string) {
+    if (!browser || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.onstart = () => (isSpeaking = true);
-    utterance.onend = () => (isSpeaking = false);
+    const preferredVoice = window.speechSynthesis.getVoices()
+      .find((voice) => voice.lang.toLowerCase().startsWith("en"));
+
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+    }
+
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+
+    utterance.onstart = () => {
+      isSpeaking = true;
+      speechPulse = 0.4;
+    };
+    utterance.onboundary = (event) => {
+      if (event.name === "word" || event.charLength) {
+        const emphasis = Math.min(1, Math.max(0.2, (event.charLength || 4) / 8));
+        speechPulse = emphasis;
+        if (speechPulseTimeout) clearTimeout(speechPulseTimeout);
+        speechPulseTimeout = setTimeout(() => {
+          speechPulse = 0.22;
+        }, 120);
+      }
+    };
+    utterance.onend = () => {
+      isSpeaking = false;
+      speechPulse = 0;
+    };
+    utterance.onerror = () => {
+      isSpeaking = false;
+      speechPulse = 0;
+    };
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utterance);
   }
@@ -158,8 +226,9 @@
     messages = [...messages, userMsg];
 
     try {
-      const { response } = await api.sendChat(text);
+      const { response, debug } = await api.sendChat(text);
       backendOnline = true;
+      latestReasoningDebug = debug;
       const agentMsg: Message = {
         id: crypto.randomUUID(),
         role: "agent",
@@ -185,6 +254,7 @@
   async function onProfileSelected(p: Profile) {
     profile = p;
     showModal = false;
+    bootMessage = `Profile selected: ${p.name}`;
     const hist = await api.getHistory();
     messages = hist;
     connectHarness(p.id);
@@ -206,6 +276,7 @@
 
     socket.onopen = () => {
       harnessOnline = true;
+      bootMessage = "Harness connected";
       socket.send(JSON.stringify({ type: "session_start", profile_id: profileId }));
       startFrameStreaming(socket);
       if (isListening) startAudioStreaming();
@@ -240,6 +311,10 @@
           : `No face detected at ${new Date().toLocaleTimeString()}`;
       } else if (msg.type === "transcript_chunk") {
         liveTranscript = msg.text || "Harness received audio but produced no transcript";
+        if (msg.text && shouldPromoteTranscript(msg.text, lastPromotedTranscript)) {
+          pendingTranscript = msg.text;
+          lastPromotedTranscript = msg.text;
+        }
       } else if (msg.type === "harness_status") {
         harnessStatus =
           `YOLO=${msg.face_detector_loaded ? "loaded" : "missing"} | ` +
@@ -347,6 +422,20 @@
   }
 
   $effect(() => {
+    if (pendingTranscript && !chatBusy) {
+      const nextTranscript = pendingTranscript;
+      pendingTranscript = null;
+      void sendMessage(nextTranscript);
+    }
+  });
+
+  $effect(() => {
+    if (!profile || !harnessOnline || !micStream || isListening) return;
+    isListening = true;
+    startAudioStreaming();
+  });
+
+  $effect(() => {
     init();
   });
 
@@ -361,6 +450,13 @@
         clearInterval(frameInterval);
         frameInterval = null;
       }
+      if (speechPulseTimeout) {
+        clearTimeout(speechPulseTimeout);
+        speechPulseTimeout = null;
+      }
+      if (browser && typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
     };
   });
 </script>
@@ -370,82 +466,84 @@
     <ProfileModal onSelected={onProfileSelected} />
   {/if}
 
+  <header class="topbar">
+    <div class="title-block">
+      <p class="eyebrow">Emotion-aware empathy bot</p>
+      <h1>{profile?.name ?? "Empathy Bot"}</h1>
+      <p class="status-line">{statusText}</p>
+    </div>
+    <div class="status-pills">
+      <span class:ok={backendOnline} class="pill">Backend</span>
+      <span class:ok={harnessOnline} class="pill">Harness</span>
+      <span class:ok={faceDetected} class="pill">Face</span>
+    </div>
+  </header>
+
+  <main class="main-layout">
+    <section class="hero-shell">
+      <div class="hero-copy">
+        <p class="hero-kicker">{phaseLabel(assistantPhase)}</p>
+        <h2>A calmer, voice-first conversation.</h2>
+        <p class="helper-text">{bootMessage}</p>
+        <div
+          class="recording-subtitle"
+          class:listening={isListening}
+          class:recording={isActivelyRecording}
+          style={`--mic-pulse:${micPulse};`}
+        >
+          <span class="recording-dot" aria-hidden="true"></span>
+          <span class="recording-copy">
+            {#if isActivelyRecording}
+              Frontend is recording your voice
+            {:else if isListening}
+              Listening for a strong enough signal to record
+            {:else}
+              Voice capture is idle
+            {/if}
+          </span>
+          <span class="recording-bars" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+          </span>
+        </div>
+      </div>
+
+      <SpeakingCircle phase={assistantPhase} pulse={speechPulse} />
+
+      <div class="transcript-shell">
+        <p class="transcript-label">Live transcript</p>
+        <p class="transcript-text">{transcriptText}</p>
+      </div>
+
+      <div class="response-shell">
+        <p class="response-label">Latest response</p>
+        <p class="response-text">{latestAssistantMessage}</p>
+      </div>
+
+      <div class="composer-shell">
+        <ChatInput onSend={sendMessage} {isListening} onMicToggle={toggleMic} disabled={chatBusy || showModal} />
+        <p class="composer-hint">
+          Speak to send a voice prompt automatically, or type if you want a quieter fallback.
+        </p>
+      </div>
+    </section>
+  </main>
+
   {#if showDebugDashboard}
     <DebugDashboard
       {profile}
-      {backendOnline}
-      {harnessOnline}
       {faceDetected}
-      {bootMessage}
-      {harnessStatus}
       {lastDetection}
-      {liveTranscript}
-      {currentAudioLevel}
-      {vadState}
-      {harnessAudioCount}
-      {latestAudioSummary}
-      {sttStatus}
-      {isSpeaking}
-      {messages}
-      sendMessage={sendMessage}
-      {isListening}
-      toggleMic={toggleMic}
-      {chatBusy}
-      {showModal}
-      {transcriptEntries}
       {latestHarnessFrame}
       {latestFaceCrop}
       {latestFrameSummary}
-      {webcamStream}
+      {emotion}
+      reasoningDebug={latestReasoningDebug}
     />
-  {:else}
-    <header class="topbar">
-      <div class="title-block">
-        <p class="eyebrow">Emotion-aware study companion</p>
-        <h1>{profile?.name ?? "Study Companion"}</h1>
-        <p class="status-line">{statusText}</p>
-      </div>
-      <div class="status-pills">
-        <span class:ok={backendOnline} class="pill">Backend</span>
-        <span class:ok={harnessOnline} class="pill">Harness</span>
-        <span class:ok={faceDetected} class="pill">Face</span>
-      </div>
-    </header>
-
-    <main class="main-layout">
-      <section class="circle-zone">
-        <SpeakingCircle {isSpeaking} />
-        <p class="speech-state">{isSpeaking ? "Agent speaking" : "Agent idle"}</p>
-        <p class="helper-text">{bootMessage}</p>
-      </section>
-
-      <section class="chat-shell">
-        <ChatHistory {messages} />
-        <ChatInput onSend={sendMessage} {isListening} onMicToggle={toggleMic} disabled={chatBusy || showModal} />
-      </section>
-    </main>
-
-    <SideNotes
-      {harnessStatus}
-      {websocketDebug}
-      {websocketEvents}
-      {liveTranscript}
-      {vadState}
-      {currentAudioLevel}
-      {audioDebugEvents}
-      {transcriptEntries}
-      {lastDetection}
-      {harnessFrameCount}
-      {latestHarnessFrame}
-      {latestFaceCrop}
-      {latestFrameSummary}
-      {harnessAudioCount}
-      {latestAudioSummary}
-      {sttStatus}
-    />
-
-    <WebcamPreview stream={webcamStream} />
   {/if}
+
+  <WebcamPreview stream={webcamStream} hidden />
 </div>
 
 <style>
@@ -454,6 +552,9 @@
     flex-direction: column;
     min-height: 100vh;
     color: #f5f7fb;
+    background:
+      radial-gradient(circle at top, rgba(255, 255, 255, 0.08), transparent 42%),
+      linear-gradient(180deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.28));
     transition: background-color 1.5s ease;
     overflow: hidden;
   }
@@ -474,7 +575,7 @@
   }
 
   .title-block h1 {
-    font-size: clamp(1.4rem, 4vw, 2rem);
+    font-size: clamp(1.6rem, 4vw, 2.4rem);
     margin: 0.2rem 0;
   }
 
@@ -504,37 +605,197 @@
 
   .main-layout {
     flex: 1;
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
-    padding: 0 1rem 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 1rem 1.5rem;
     min-height: 0;
   }
 
-  .circle-zone {
+  .hero-shell {
+    width: min(980px, 100%);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 1.25rem 0 0.75rem;
+    gap: 1rem;
+    padding: 1.5rem 1rem 1rem;
     text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 32px;
+    background: rgba(7, 10, 18, 0.24);
+    backdrop-filter: blur(18px);
   }
 
-  .speech-state {
-    margin-top: 0.3rem;
-    font-size: 0.95rem;
-  }
-
-  .chat-shell {
-    width: min(860px, 100%);
-    margin: 0 auto;
+  .hero-copy {
     display: flex;
     flex-direction: column;
-    min-height: 0;
-    padding: 0.75rem 1rem 1rem;
-    border: 1px solid rgba(255, 255, 255, 0.09);
-    border-radius: 24px;
-    background: rgba(6, 10, 20, 0.26);
-    backdrop-filter: blur(12px);
+    gap: 0.5rem;
+    max-width: 42rem;
+  }
+
+  .hero-kicker,
+  .transcript-label,
+  .response-label {
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.64);
+  }
+
+  .hero-copy h2 {
+    font-size: clamp(2rem, 5vw, 3.8rem);
+    line-height: 1;
+    letter-spacing: -0.04em;
+  }
+
+  .recording-subtitle {
+    --mic-pulse: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.7rem;
+    align-self: center;
+    margin-top: 0.35rem;
+    padding: 0.55rem 0.85rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.68);
+    transition:
+      background 140ms ease,
+      border-color 140ms ease,
+      color 140ms ease,
+      transform 140ms ease;
+  }
+
+  .recording-subtitle.listening {
+    border-color: rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .recording-subtitle.recording {
+    border-color: rgba(255, 132, 132, 0.28);
+    background: rgba(255, 82, 82, 0.08);
+    color: rgba(255, 255, 255, 0.94);
+    transform: translateY(calc(var(--mic-pulse) * -1px));
+  }
+
+  .recording-dot {
+    width: 0.62rem;
+    height: 0.62rem;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.34);
+    box-shadow: 0 0 0 rgba(255, 92, 92, 0);
+    transition: background 140ms ease;
+  }
+
+  .recording-subtitle.listening .recording-dot {
+    background: rgba(255, 255, 255, 0.76);
+  }
+
+  .recording-subtitle.recording .recording-dot {
+    background: rgb(255, 108, 108);
+    animation: record-pulse 1s ease-out infinite;
+  }
+
+  .recording-copy {
+    font-size: 0.88rem;
+    line-height: 1.3;
+  }
+
+  .recording-bars {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 0.18rem;
+    height: 0.8rem;
+  }
+
+  .recording-bars span {
+    width: 0.16rem;
+    height: calc(0.28rem + var(--mic-pulse) * 0.55rem);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.26);
+    transform-origin: bottom;
+    transition: height 120ms linear, background 140ms ease;
+  }
+
+  .recording-subtitle.listening .recording-bars span {
+    background: rgba(255, 255, 255, 0.48);
+  }
+
+  .recording-subtitle.recording .recording-bars span:nth-child(1) {
+    animation: level-bounce 0.85s ease-in-out infinite;
+  }
+
+  .recording-subtitle.recording .recording-bars span:nth-child(2) {
+    animation: level-bounce 0.85s ease-in-out 0.12s infinite;
+  }
+
+  .recording-subtitle.recording .recording-bars span:nth-child(3) {
+    animation: level-bounce 0.85s ease-in-out 0.24s infinite;
+  }
+
+  .transcript-shell,
+  .response-shell {
+    width: min(700px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1rem 1.1rem;
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .transcript-text,
+  .response-text {
+    font-size: 1rem;
+    line-height: 1.6;
+    color: rgba(255, 255, 255, 0.94);
+  }
+
+  .transcript-text {
+    min-height: 1.6em;
+  }
+
+  .response-text {
+    max-height: 4.8em;
+    overflow: hidden;
+  }
+
+  .composer-shell {
+    width: min(760px, 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .composer-hint {
+    color: rgba(255, 255, 255, 0.68);
+    font-size: 0.88rem;
+    line-height: 1.5;
+    max-width: 38rem;
+  }
+
+  @keyframes record-pulse {
+    0% {
+      box-shadow: 0 0 0 0 rgba(255, 92, 92, 0.46);
+    }
+    100% {
+      box-shadow: 0 0 0 10px rgba(255, 92, 92, 0);
+    }
+  }
+
+  @keyframes level-bounce {
+    0%, 100% {
+      transform: scaleY(0.7);
+    }
+    50% {
+      transform: scaleY(calc(1 + var(--mic-pulse) * 0.6));
+    }
   }
 
   @media (max-width: 720px) {
@@ -546,9 +807,28 @@
       padding: 0 0.75rem 0.75rem;
     }
 
-    .chat-shell {
-      border-radius: 18px;
-      padding: 0.5rem 0.75rem 0.75rem;
+    .hero-shell {
+      padding: 1.25rem 0.9rem 0.9rem;
+      border-radius: 24px;
+    }
+
+    .hero-copy h2 {
+      font-size: clamp(1.7rem, 9vw, 2.4rem);
+    }
+
+    .recording-subtitle {
+      width: 100%;
+      gap: 0.55rem;
+      padding: 0.5rem 0.7rem;
+    }
+
+    .recording-copy {
+      font-size: 0.82rem;
+    }
+
+    .transcript-shell,
+    .response-shell {
+      padding: 0.9rem 1rem;
     }
   }
 </style>
