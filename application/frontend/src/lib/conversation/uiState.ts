@@ -48,7 +48,8 @@ function isPlaceholderTranscript(text: string): boolean {
     || normalized === "listening for harness transcript..."
     || normalized === "mic idle"
     || normalized.startsWith("sent speech clip ")
-    || normalized === "harness received audio but produced no transcript";
+    || normalized === "harness received audio but produced no transcript"
+    || normalized === "[whisper.cpp returned no text]";
 }
 
 export function transcriptPreview(

@@ -2,7 +2,7 @@
   import { browser } from "$app/environment";
   import { env as publicEnv } from "$env/dynamic/public";
   import { PUBLIC_HARNESS_WS_URL } from "$env/static/public";
-  import { api, type Message, type Profile } from "$lib/api";
+  import { api, type ChatDebug, type Message, type Profile } from "$lib/api";
   import ChatInput from "$lib/components/ChatInput.svelte";
   import DebugDashboard from "$lib/components/DebugDashboard.svelte";
   import ProfileModal from "$lib/components/ProfileModal.svelte";
@@ -61,6 +61,7 @@
   let pendingTranscript = $state<string | null>(null);
   let lastPromotedTranscript = $state<string | null>(null);
   let speechPulse = $state(0);
+  let latestReasoningDebug = $state<ChatDebug | null>(null);
 
   let ws = $state<WebSocket | null>(null);
   let frameInterval = $state<ReturnType<typeof setInterval> | null>(null);
@@ -84,6 +85,8 @@
     if (!backendOnline) return "Backend offline";
     if (!profile) return "Select a profile to begin";
     if (!harnessOnline) return "Backend ready, harness not connected";
+    if (!micStream) return "Allow microphone access to start speaking";
+    if (isListening) return "Listening for your voice";
     if (!faceDetected) return "Harness connected, waiting for face";
     if (chatBusy) return "Backend is forming a reply";
     return "Ready for a live conversation";
@@ -213,8 +216,9 @@
     messages = [...messages, userMsg];
 
     try {
-      const { response } = await api.sendChat(text);
+      const { response, debug } = await api.sendChat(text);
       backendOnline = true;
+      latestReasoningDebug = debug;
       const agentMsg: Message = {
         id: crypto.randomUUID(),
         role: "agent",
@@ -240,6 +244,7 @@
   async function onProfileSelected(p: Profile) {
     profile = p;
     showModal = false;
+    bootMessage = `Profile selected: ${p.name}`;
     const hist = await api.getHistory();
     messages = hist;
     connectHarness(p.id);
@@ -261,6 +266,7 @@
 
     socket.onopen = () => {
       harnessOnline = true;
+      bootMessage = "Harness connected";
       socket.send(JSON.stringify({ type: "session_start", profile_id: profileId }));
       startFrameStreaming(socket);
       if (isListening) startAudioStreaming();
@@ -414,6 +420,12 @@
   });
 
   $effect(() => {
+    if (!profile || !harnessOnline || !micStream || isListening) return;
+    isListening = true;
+    startAudioStreaming();
+  });
+
+  $effect(() => {
     init();
   });
 
@@ -534,6 +546,7 @@
       {harnessAudioCount}
       {latestAudioSummary}
       {sttStatus}
+      reasoningDebug={latestReasoningDebug}
     />
 
     <WebcamPreview stream={webcamStream} />
