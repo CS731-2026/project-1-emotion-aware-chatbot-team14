@@ -45,7 +45,10 @@ class EmotionalReasoningAgent:
             Returns a neutral fallback if no observations are present.
         """
         if not emotion_observations:
-            return "No emotional signal detected. Proceed with neutral tone."
+            return (
+                "No stable face-based emotional signal was detected from the webcam. "
+                "Proceed with a neutral, supportive tone."
+            )
 
         # Dominant emotion via statistical mode; fall back to most recent on tie.
         try:
@@ -58,6 +61,7 @@ class EmotionalReasoningAgent:
 
         prose = EMOTION_PROSE.get(dominant, dominant)
         return (
-            f"The user appears to be feeling {prose} (~{duration_seconds}s). "
+            f"From recent face-based cues observed through the webcam, "
+            f"the user appears to be feeling {prose} (~{duration_seconds}s). "
             "Calibrate tone accordingly without referencing this directly."
         )

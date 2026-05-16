@@ -38,7 +38,7 @@ export function isEmotion(value: unknown): value is Emotion {
   return typeof value === "string" && value in EMOTION_COLOURS;
 }
 
-export const FRAME_INTERVAL_MS = 500;
+export const FRAME_INTERVAL_MS = 200;
 export const AUDIO_CHUNK_SIZE = 512;
 export const SPEECH_THRESHOLD = 0.00075;
 export const SILENCE_DURATION_MS = 600;

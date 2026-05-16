@@ -2,6 +2,7 @@
 
 import logging
 from dataclasses import dataclass
+import time
 
 from core.emotion.buffer import EmotionBuffer
 
@@ -21,6 +22,7 @@ class HarnessSession:
     transcript_buffer: list[TranscriptSegment]
     frame_count: int = 0
     audio_chunk_count: int = 0
+    emotion_cycle_started_at: float = 0.0
 
 
 # Keyed by profile_id. Written by the WS handler; read by the HTTP /chat route.
@@ -48,6 +50,7 @@ def create_session(profile_id: str) -> HarnessSession:
         profile_id=profile_id,
         emotion_buffer=EmotionBuffer(),
         transcript_buffer=[],
+        emotion_cycle_started_at=time.time(),
     )
     _sessions[profile_id] = session
     return session
