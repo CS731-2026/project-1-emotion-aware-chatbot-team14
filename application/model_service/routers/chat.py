@@ -1,16 +1,22 @@
 from typing import cast
+import logging
 import random
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from core.app_state import HRIAppState
-from core.llm.reasoning_agent import Mode, Stage
+from core.llm.reasoning_agent import Mode, ReasoningResult, Stage
 from ws.session import get_session
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 NOISE_SYLLABLES = ["bzzt", "whirr", "tik", "vrrm", "shhh", "klik", "drrt", "ping"]
+
+# Soft safety cap. If the reasoner never emits next_mode="done", force it after
+# this many user turns so a misbehaving model can't trap a study participant.
+TURN_CAP = 30
 
 
 class ChatMessage(BaseModel):
@@ -30,6 +36,10 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str
+    # Where the reasoner thinks the conversation should go next. Frontend mirrors
+    # these into its conversation state to drive the view that renders.
+    next_mode: Mode = "qa"
+    next_stage: Stage | None = None
     debug: dict | None = None
 
 
@@ -87,8 +97,8 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
             stage=body.stage,
         )
 
-        # Step 4: run the current LLM reasoning pipeline to produce a reply.
-        response = hri.llm_agent.reason(
+        # Step 4: run the current LLM reasoning pipeline to produce a structured result.
+        result = hri.llm_agent.reason(
             body.message,
             emotional_context,
             history,
@@ -98,7 +108,20 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
         )
     else:
         latest_emotion = emotion_observations[-1].emotion if emotion_observations else "unknown"
-        response = f"{build_noise_reply()} Latest emotion: {latest_emotion}."
+        reply = f"{build_noise_reply()} Latest emotion: {latest_emotion}."
+        # Stub mode never transitions — keep the caller's state.
+        result = ReasoningResult(reply=reply, next_mode=body.mode, next_stage=body.stage)
         debug = _fallback_debug_snapshot(body, latest_emotion)
 
-    return ChatResponse(response=response, debug=debug)
+    # Soft turn cap: count this user message plus prior user turns in history.
+    user_turns = sum(1 for m in body.history if m.role == "user") + 1
+    if user_turns >= TURN_CAP and result.next_mode != "done":
+        logger.info("turn cap reached (%d) — forcing next_mode='done'", user_turns)
+        result = ReasoningResult(reply=result.reply, next_mode="done", next_stage=None)
+
+    return ChatResponse(
+        response=result.reply,
+        next_mode=result.next_mode,
+        next_stage=result.next_stage,
+        debug=debug,
+    )

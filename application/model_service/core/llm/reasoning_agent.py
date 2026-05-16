@@ -15,11 +15,16 @@ being threaded through the code ad hoc.
 
 from __future__ import annotations
 
+import json
+import logging
+import re
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, get_args
 
 from ws.session import TranscriptSegment
 from .base import LLMProvider, Message
+
+logger = logging.getLogger(__name__)
 
 # Which page / overall conversational mode the user is currently in.
 Mode = Literal["qa", "feedback", "consent", "done"]
@@ -80,8 +85,29 @@ STAGE_PROMPTS: dict[Stage, str] = {
 }
 
 
+# Appended to every system prompt so the LLM emits the structured transition
+# response the rest of the stack expects. The parser is forgiving — see
+# parse_reasoning_output — but the prompt is written as if the schema is strict.
+OUTPUT_INSTRUCTIONS = (
+    "Respond with a single JSON object and nothing else. No markdown fences. "
+    "The object must have exactly these keys:\n"
+    '  "reply": a string — your spoken reply to the user, natural conversational text.\n'
+    '  "next_mode": one of "qa", "feedback", or "done".\n'
+    '  "next_stage": when next_mode is "qa", one of "open", "explore", "ground", "close"; otherwise null.\n'
+    "\n"
+    "You decide where the conversation goes next:\n"
+    "- Stay in qa while supportive conversation is still useful.\n"
+    "- Advance through qa stages: open → explore → ground → close.\n"
+    '- Move to "feedback" when a brief self-report check-in would help (for example, a natural pause, or a disconnect between what the user says and how they sound).\n'
+    '- Move to "done" when the conversation has reached a meaningful close.\n'
+    "- Returning to qa from feedback is fine if the user wants to keep talking.\n"
+    "\n"
+    "Do not announce these transitions to the user. They are internal."
+)
+
+
 def _system_prompt(mode: Mode, stage: Stage | None) -> str:
-    """Compose the system prompt from base persona + mode + (optional) stage."""
+    """Compose the system prompt from base persona + mode + (optional) stage + output instructions."""
     parts = [BASE_PERSONA]
     mode_part = MODE_PROMPTS.get(mode, "")
     if mode_part:
@@ -90,7 +116,70 @@ def _system_prompt(mode: Mode, stage: Stage | None) -> str:
         stage_part = STAGE_PROMPTS.get(stage, "")
         if stage_part:
             parts.append(stage_part)
+    parts.append(OUTPUT_INSTRUCTIONS)
     return "\n\n".join(parts)
+
+
+@dataclass(frozen=True)
+class ReasoningResult:
+    """Structured output of one reasoning turn.
+
+    The LLM is asked to emit JSON containing all three fields. When parsing
+    fails, `reply` falls back to the raw text and the mode/stage carry over
+    from the caller's current state — so a malformed response degrades to a
+    plain text reply with no transition rather than a hard failure.
+    """
+
+    reply: str
+    next_mode: Mode
+    next_stage: Stage | None
+
+
+_MODES: tuple[str, ...] = get_args(Mode)
+_STAGES: tuple[str, ...] = get_args(Stage)
+_JSON_FENCE_RE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$", re.IGNORECASE)
+
+
+def parse_reasoning_output(
+    raw_text: str,
+    current_mode: Mode,
+    current_stage: Stage | None,
+) -> ReasoningResult:
+    """Parse the LLM's JSON output. Degrade gracefully on any failure."""
+    stripped = _JSON_FENCE_RE.sub("", raw_text).strip()
+
+    try:
+        data = json.loads(stripped)
+    except json.JSONDecodeError:
+        logger.warning("reasoner output was not valid JSON; falling back to raw text")
+        return ReasoningResult(reply=raw_text.strip(), next_mode=current_mode, next_stage=current_stage)
+
+    if not isinstance(data, dict):
+        logger.warning("reasoner output JSON was not an object; falling back to raw text")
+        return ReasoningResult(reply=raw_text.strip(), next_mode=current_mode, next_stage=current_stage)
+
+    reply = data.get("reply")
+    if not isinstance(reply, str) or not reply.strip():
+        logger.warning("reasoner output missing 'reply' field; falling back to raw text")
+        reply = raw_text.strip()
+
+    raw_next_mode = data.get("next_mode")
+    next_mode: Mode = current_mode
+    if isinstance(raw_next_mode, str) and raw_next_mode in _MODES:
+        next_mode = raw_next_mode  # type: ignore[assignment]
+    elif raw_next_mode is not None:
+        logger.warning("reasoner emitted unknown next_mode=%r; keeping current=%s", raw_next_mode, current_mode)
+
+    raw_next_stage = data.get("next_stage")
+    next_stage: Stage | None = current_stage
+    if raw_next_stage is None:
+        next_stage = None
+    elif isinstance(raw_next_stage, str) and raw_next_stage in _STAGES:
+        next_stage = raw_next_stage  # type: ignore[assignment]
+    else:
+        logger.warning("reasoner emitted unknown next_stage=%r; keeping current=%s", raw_next_stage, current_stage)
+
+    return ReasoningResult(reply=reply, next_mode=next_mode, next_stage=next_stage)
 
 
 @dataclass(frozen=True)
@@ -254,9 +343,10 @@ class LLMReasoningAgent:
         transcript_segments: list[TranscriptSegment] | None = None,
         mode: Mode = "qa",
         stage: Stage | None = None,
-    ) -> str:
-        """Run the current reasoning pipeline and return the LLM response."""
+    ) -> ReasoningResult:
+        """Run the current reasoning pipeline and return a structured result."""
         inputs = self.collect_inputs(message, emotional_context, history, transcript_segments, mode, stage)
         context = self.derive_prompt_context(inputs)
         prompt_messages = self.assemble_messages(inputs, context)
-        return self._llm.chat(prompt_messages)
+        raw_response = self._llm.chat(prompt_messages)
+        return parse_reasoning_output(raw_response, mode, stage)

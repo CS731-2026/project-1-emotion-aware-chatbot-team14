@@ -3,6 +3,7 @@
   import { env as publicEnv } from "$env/dynamic/public";
   import { PUBLIC_HARNESS_WS_URL } from "$env/static/public";
   import { api, type ChatDebug, type Message, type Profile } from "$lib/api";
+  import { conversationState, setMode, setStage } from "$lib/conversation/store.svelte";
   import ChatInput from "$lib/components/ChatInput.svelte";
   import DebugDashboard from "$lib/components/DebugDashboard.svelte";
   import ProfileModal from "$lib/components/ProfileModal.svelte";
@@ -226,7 +227,11 @@
     messages = [...messages, userMsg];
 
     try {
-      const { response, debug } = await api.sendChat(text);
+      const { response, next_mode, next_stage, debug } = await api.sendChat(
+        text,
+        conversationState.mode,
+        conversationState.stage,
+      );
       backendOnline = true;
       latestReasoningDebug = debug;
       const agentMsg: Message = {
@@ -237,6 +242,10 @@
       };
       messages = [...messages, agentMsg];
       speak(response);
+      // Reasoner decides where the conversation goes next. Apply transitions
+      // to the store; the view block below re-renders to match.
+      if (next_mode !== conversationState.mode) setMode(next_mode);
+      if (next_stage !== conversationState.stage) setStage(next_stage);
     } catch {
       backendOnline = false;
       const errMsg: Message = {
@@ -480,54 +489,76 @@
   </header>
 
   <main class="main-layout">
-    <section class="hero-shell">
-      <div class="hero-copy">
-        <p class="hero-kicker">{phaseLabel(assistantPhase)}</p>
-        <h2>A calmer, voice-first conversation.</h2>
-        <p class="helper-text">{bootMessage}</p>
-        <div
-          class="recording-subtitle"
-          class:listening={isListening}
-          class:recording={isActivelyRecording}
-          style={`--mic-pulse:${micPulse};`}
-        >
-          <span class="recording-dot" aria-hidden="true"></span>
-          <span class="recording-copy">
-            {#if isActivelyRecording}
-              Frontend is recording your voice
-            {:else if isListening}
-              Listening for a strong enough signal to record
-            {:else}
-              Voice capture is idle
-            {/if}
-          </span>
-          <span class="recording-bars" aria-hidden="true">
-            <span></span>
-            <span></span>
-            <span></span>
-          </span>
+    {#if conversationState.mode === "qa"}
+      <section class="hero-shell">
+        <div class="hero-copy">
+          <p class="hero-kicker">{phaseLabel(assistantPhase)}</p>
+          <h2>A calmer, voice-first conversation.</h2>
+          <p class="helper-text">{bootMessage}</p>
+          <div
+            class="recording-subtitle"
+            class:listening={isListening}
+            class:recording={isActivelyRecording}
+            style={`--mic-pulse:${micPulse};`}
+          >
+            <span class="recording-dot" aria-hidden="true"></span>
+            <span class="recording-copy">
+              {#if isActivelyRecording}
+                Frontend is recording your voice
+              {:else if isListening}
+                Listening for a strong enough signal to record
+              {:else}
+                Voice capture is idle
+              {/if}
+            </span>
+            <span class="recording-bars" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+          </div>
         </div>
-      </div>
 
-      <SpeakingCircle phase={assistantPhase} pulse={speechPulse} />
+        <SpeakingCircle phase={assistantPhase} pulse={speechPulse} />
 
-      <div class="transcript-shell">
-        <p class="transcript-label">Live transcript</p>
-        <p class="transcript-text">{transcriptText}</p>
-      </div>
+        <div class="transcript-shell">
+          <p class="transcript-label">Live transcript</p>
+          <p class="transcript-text">{transcriptText}</p>
+        </div>
 
-      <div class="response-shell">
-        <p class="response-label">Latest response</p>
-        <p class="response-text">{latestAssistantMessage}</p>
-      </div>
+        <div class="response-shell">
+          <p class="response-label">Latest response</p>
+          <p class="response-text">{latestAssistantMessage}</p>
+        </div>
 
-      <div class="composer-shell">
-        <ChatInput onSend={sendMessage} {isListening} onMicToggle={toggleMic} disabled={chatBusy || showModal} />
-        <p class="composer-hint">
-          Speak to send a voice prompt automatically, or type if you want a quieter fallback.
-        </p>
-      </div>
-    </section>
+        <div class="composer-shell">
+          <ChatInput onSend={sendMessage} {isListening} onMicToggle={toggleMic} disabled={chatBusy || showModal} />
+          <p class="composer-hint">
+            Speak to send a voice prompt automatically, or type if you want a quieter fallback.
+          </p>
+        </div>
+      </section>
+    {:else if conversationState.mode === "feedback"}
+      <!-- Phase 5 will replace this stub with a timed self-report flow. -->
+      <section class="mode-stub">
+        <p class="hero-kicker">Feedback check-in</p>
+        <h2>How are you feeling right now?</h2>
+        <p class="helper-text">Self-report UI lands in Phase 5.</p>
+      </section>
+    {:else if conversationState.mode === "consent"}
+      <!-- Phase 7 will replace this stub with consent + profile select. -->
+      <section class="mode-stub">
+        <p class="hero-kicker">Before we begin</p>
+        <h2>Consent flow placeholder.</h2>
+        <p class="helper-text">Consent + profile selection ships in Phase 7.</p>
+      </section>
+    {:else if conversationState.mode === "done"}
+      <section class="mode-stub">
+        <p class="hero-kicker">All done</p>
+        <h2>Thanks for talking with us.</h2>
+        <p class="helper-text">You can close this window now.</p>
+      </section>
+    {/if}
   </main>
 
   {#if showDebugDashboard}
@@ -625,6 +656,27 @@
     border-radius: 32px;
     background: rgba(7, 10, 18, 0.24);
     backdrop-filter: blur(18px);
+  }
+
+  .mode-stub {
+    width: min(640px, 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 2rem 1.5rem;
+    text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 28px;
+    background: rgba(7, 10, 18, 0.24);
+    backdrop-filter: blur(18px);
+  }
+
+  .mode-stub h2 {
+    font-size: clamp(1.6rem, 4vw, 2.4rem);
+    line-height: 1.1;
+    margin: 0;
+    letter-spacing: -0.02em;
   }
 
   .hero-copy {

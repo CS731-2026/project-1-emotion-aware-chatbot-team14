@@ -43,5 +43,10 @@ export const api = {
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text, mode, stage }),
-    }).then((r) => r.json()) as Promise<{ response: string; debug: ChatDebug | null }>,
+    }).then((r) => r.json()) as Promise<{
+      response: string;
+      next_mode: Mode;
+      next_stage: Stage | null;
+      debug: ChatDebug | null;
+    }>,
 };

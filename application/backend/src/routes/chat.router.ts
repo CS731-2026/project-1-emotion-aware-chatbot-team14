@@ -71,6 +71,9 @@ router.post("/", async (req, res, next) => {
 
     let response = buildFallbackResponse(text);
     let debug: ChatDebug | null = null;
+    // If the model service is unreachable we keep the caller's state — no transition.
+    let nextMode: Mode = mode;
+    let nextStage: Stage | null = stage;
 
     try {
       const harnessRes = await fetch(`${env.MODEL_SERVICE_URL}/api/v1/chat`, {
@@ -86,9 +89,22 @@ router.post("/", async (req, res, next) => {
       });
 
       if (harnessRes.ok) {
-        const data = (await harnessRes.json()) as { response?: string; debug?: ChatDebug };
+        const data = (await harnessRes.json()) as {
+          response?: string;
+          next_mode?: string;
+          next_stage?: string | null;
+          debug?: ChatDebug;
+        };
         if (data.response) response = data.response;
         if (data.debug) debug = data.debug;
+        if (data.next_mode && VALID_MODES.has(data.next_mode as Mode)) {
+          nextMode = data.next_mode as Mode;
+        }
+        if (data.next_stage === null) {
+          nextStage = null;
+        } else if (data.next_stage && VALID_STAGES.has(data.next_stage as Stage)) {
+          nextStage = data.next_stage as Stage;
+        }
       }
     } catch {
       // Keep the backend usable locally even when the model service is down.
@@ -100,7 +116,7 @@ router.post("/", async (req, res, next) => {
     appendMessage(profileId, userMsg);
     appendMessage(profileId, agentMsg);
 
-    res.json({ response, debug });
+    res.json({ response, next_mode: nextMode, next_stage: nextStage, debug });
   } catch (err) {
     next(err);
   }
