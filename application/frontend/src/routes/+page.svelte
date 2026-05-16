@@ -13,9 +13,9 @@
   import { BrowserVadController } from "$lib/harness/browserVad";
   import {
     EMOTION_COLOURS,
-    EMOTION_MAP,
     FRAME_INTERVAL_MS,
     formatTimings,
+    isEmotion,
     type Emotion,
     type TranscriptEntry,
   } from "$lib/harness/types";
@@ -231,8 +231,7 @@
           `Harness received audio chunk ${msg.audio_chunk_count} - ` +
           `${msg.byte_length} base64 chars`;
       } else if (msg.type === "emotion_update") {
-        const mapped = EMOTION_MAP[msg.emotion as string];
-        if (mapped) emotion = mapped;
+        if (isEmotion(msg.emotion)) emotion = msg.emotion;
       } else if (msg.type === "face_detection") {
         faceDetected = Boolean(msg.detected);
         lastDetection = msg.detected

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import statistics
 
+from core.emotion.base import EMOTION_PROSE
 from core.emotion.buffer import EmotionObservation
 from ws.session import TranscriptSegment
 
@@ -38,8 +39,8 @@ class EmotionalReasoningAgent:
 
         Returns:
             A short emotional context instruction, e.g.:
-            "The user appears to be feeling happy (~12s). Calibrate tone
-            accordingly without referencing this directly."
+            "The user appears to be feeling anxious or fearful (~12s). Calibrate
+            tone accordingly without referencing this directly."
 
             Returns a neutral fallback if no observations are present.
         """
@@ -55,7 +56,8 @@ class EmotionalReasoningAgent:
         timestamps = [obs.timestamp for obs in emotion_observations]
         duration_seconds = int(max(timestamps) - min(timestamps))
 
+        prose = EMOTION_PROSE.get(dominant, dominant)
         return (
-            f"The user appears to be feeling {dominant} (~{duration_seconds}s). "
+            f"The user appears to be feeling {prose} (~{duration_seconds}s). "
             "Calibrate tone accordingly without referencing this directly."
         )

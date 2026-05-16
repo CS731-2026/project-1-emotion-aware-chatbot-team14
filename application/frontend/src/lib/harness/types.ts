@@ -1,11 +1,11 @@
+// EmpathBot 6-class schema — must mirror application/model_service/core/emotion/base.py.
 export type Emotion =
   | "neutral"
-  | "happy"
-  | "sad"
-  | "angry"
-  | "fearful"
-  | "disgusted"
-  | "surprised";
+  | "trust_relief"
+  | "sadness"
+  | "fear_anxiety"
+  | "confusion"
+  | "distrust";
 
 export type TranscriptEntry = {
   id: string;
@@ -17,24 +17,26 @@ export type TranscriptEntry = {
 };
 
 export const EMOTION_COLOURS: Record<Emotion, string> = {
-  neutral: "hsl(220, 15%, 10%)",
-  happy: "hsl(45, 70%, 15%)",
-  sad: "hsl(210, 60%, 12%)",
-  angry: "hsl(0, 65%, 15%)",
-  fearful: "hsl(275, 50%, 13%)",
-  disgusted: "hsl(120, 35%, 11%)",
-  surprised: "hsl(180, 55%, 13%)",
+  neutral:      "hsl(220, 15%, 10%)",
+  trust_relief: "hsl(150, 45%, 14%)",
+  sadness:      "hsl(210, 60%, 12%)",
+  fear_anxiety: "hsl(275, 50%, 13%)",
+  confusion:    "hsl(45, 55%, 14%)",
+  distrust:     "hsl(0, 55%, 13%)",
 };
 
-export const EMOTION_MAP: Record<string, Emotion> = {
-  angry: "angry",
-  disgust: "disgusted",
-  fear: "fearful",
-  happy: "happy",
-  sad: "sad",
-  surprise: "surprised",
-  neutral: "neutral",
+export const EMOTION_LABEL: Record<Emotion, string> = {
+  neutral:      "Neutral",
+  trust_relief: "Calm / Reassured",
+  sadness:      "Sad",
+  fear_anxiety: "Anxious",
+  confusion:    "Confused",
+  distrust:     "Wary",
 };
+
+export function isEmotion(value: unknown): value is Emotion {
+  return typeof value === "string" && value in EMOTION_COLOURS;
+}
 
 export const FRAME_INTERVAL_MS = 500;
 export const AUDIO_CHUNK_SIZE = 512;
