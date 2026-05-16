@@ -10,6 +10,13 @@ const router = Router();
 // Number of prior turns (user + agent pairs) sent to the model service.
 const HISTORY_WINDOW = 10;
 
+// Must stay in sync with model_service/core/llm/reasoning_agent.py.
+type Mode = "qa" | "feedback" | "consent" | "done";
+type Stage = "open" | "explore" | "ground" | "close";
+
+const VALID_MODES: ReadonlySet<Mode> = new Set(["qa", "feedback", "consent", "done"]);
+const VALID_STAGES: ReadonlySet<Stage> = new Set(["open", "explore", "ground", "close"]);
+
 /** Returns a safe fallback string when the model service is unreachable. */
 function buildFallbackResponse(text: string): string {
   return `Backend fallback reply: I received "${text}". The backend is working, but the model service or LLM is unavailable.`;
@@ -19,6 +26,8 @@ type ChatDebug = {
   provider: string | null;
   model: string | null;
   current_message: string;
+  mode?: Mode;
+  stage?: Stage | null;
   system_prompt: string | null;
   history_window: number;
   history_messages: Array<{ role: string; content: string }>;
@@ -41,11 +50,20 @@ router.post("/", async (req, res, next) => {
       return next(err);
     }
 
-    const { text } = req.body as { text?: string };
+    const { text, mode: rawMode, stage: rawStage } = req.body as {
+      text?: string;
+      mode?: string;
+      stage?: string | null;
+    };
     if (!text || typeof text !== "string") {
       const err: AppError = Object.assign(new Error("text is required"), { statusCode: 400 });
       return next(err);
     }
+
+    // Drop unrecognised values silently so the model service falls back to its own defaults.
+    const mode: Mode = rawMode && VALID_MODES.has(rawMode as Mode) ? (rawMode as Mode) : "qa";
+    const stage: Stage | null =
+      rawStage && VALID_STAGES.has(rawStage as Stage) ? (rawStage as Stage) : null;
 
     const fullHistory = getHistory(profileId);
     const windowed = fullHistory.slice(-(HISTORY_WINDOW * 2));
@@ -58,7 +76,13 @@ router.post("/", async (req, res, next) => {
       const harnessRes = await fetch(`${env.MODEL_SERVICE_URL}/api/v1/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile_id: profileId, message: text, history: harnessHistory }),
+        body: JSON.stringify({
+          profile_id: profileId,
+          message: text,
+          history: harnessHistory,
+          mode,
+          stage,
+        }),
       });
 
       if (harnessRes.ok) {

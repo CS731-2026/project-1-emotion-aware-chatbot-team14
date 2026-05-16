@@ -5,6 +5,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from core.app_state import HRIAppState
+from core.llm.reasoning_agent import Mode, Stage
 from ws.session import get_session
 
 router = APIRouter()
@@ -21,6 +22,10 @@ class ChatRequest(BaseModel):
     profile_id: str
     message: str
     history: list[ChatMessage] = []
+    # Which page / conversational mode the user is in. Defaults preserve today's behaviour.
+    mode: Mode = "qa"
+    # Within `qa` mode, the current scripted stage. None means stage-agnostic.
+    stage: Stage | None = None
 
 
 class ChatResponse(BaseModel):
@@ -40,6 +45,8 @@ def _fallback_debug_snapshot(body: ChatRequest, latest_emotion: str) -> dict:
         "provider": None,
         "model": None,
         "current_message": body.message,
+        "mode": body.mode,
+        "stage": body.stage,
         "system_prompt": None,
         "history_window": 0,
         "history_messages": body.history,
@@ -76,10 +83,19 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
             emotional_context,
             history,
             transcript_segments,
+            mode=body.mode,
+            stage=body.stage,
         )
 
         # Step 4: run the current LLM reasoning pipeline to produce a reply.
-        response = hri.llm_agent.reason(body.message, emotional_context, history, transcript_segments)
+        response = hri.llm_agent.reason(
+            body.message,
+            emotional_context,
+            history,
+            transcript_segments,
+            mode=body.mode,
+            stage=body.stage,
+        )
     else:
         latest_emotion = emotion_observations[-1].emotion if emotion_observations else "unknown"
         response = f"{build_noise_reply()} Latest emotion: {latest_emotion}."
