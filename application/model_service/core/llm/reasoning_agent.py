@@ -18,10 +18,11 @@ from __future__ import annotations
 import json
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, get_args
 
 from core.events import SystemEvent
+from core.tool_emissions import ToolEmission, extract_emissions
 from core.transcript_render import compose_stream
 from ws.session import TranscriptSegment
 from .base import LLMProvider, Message
@@ -157,12 +158,15 @@ def _system_prompt(
     mode: Mode,
     stage: Stage | None,
     intention: str | None = None,
+    advance_instruction: str | None = None,
 ) -> str:
     """Compose the system prompt.
 
     When `intention` is provided (the conductor-driven path), the result is
-    BASE_PERSONA + intention. The intention is the only state-specific text;
-    the LLM gets no other vocabulary about the state machine.
+    BASE_PERSONA + intention + optional advance_instruction. The intention
+    is the only state-specific conversational text; advance_instruction is
+    the tool-emission directive that lets the conductor pick up an
+    [[advance]] marker if the LLM senses a natural pause.
 
     When `intention` is None (legacy path, while callers are still being
     migrated), fall back to the MODE_PROMPTS / STAGE_PROMPTS composition.
@@ -180,6 +184,8 @@ def _system_prompt(
             stage_part = STAGE_PROMPTS.get(stage, "")
             if stage_part:
                 parts.append(stage_part)
+    if advance_instruction:
+        parts.append(advance_instruction)
     if INCLUDE_OUTPUT_INSTRUCTIONS:
         parts.append(OUTPUT_INSTRUCTIONS)
     return "\n\n".join(parts)
@@ -189,15 +195,20 @@ def _system_prompt(
 class ReasoningResult:
     """Structured output of one reasoning turn.
 
-    The LLM is asked to emit JSON containing all three fields. When parsing
-    fails, `reply` falls back to the raw text and the mode/stage carry over
-    from the caller's current state — so a malformed response degrades to a
-    plain text reply with no transition rather than a hard failure.
+    `reply` is the user-facing text with any inline tool-emission markers
+    (e.g. `[[advance]]`) stripped. `emissions` contains the parsed list of
+    ToolEmission objects the LLM produced — empty when the model didn't
+    emit anything. The conductor reads emissions[*].name to decide
+    transitions.
+
+    Legacy next_mode / next_stage fields remain for the still-attached
+    JSON-envelope path; deleted in iteration 7.
     """
 
     reply: str
     next_mode: Mode
     next_stage: Stage | None
+    emissions: list[ToolEmission] = field(default_factory=list)
 
 
 _MODES: tuple[str, ...] = get_args(Mode)
@@ -264,6 +275,9 @@ class ReasoningInputs:
     # Typed system events (form answers, emotion windows, segment summaries,
     # etc.) merged with transcript_segments into the LLM-facing stream.
     system_events: list[SystemEvent] | None = None
+    # Yarn-state directive appended to the system prompt telling the LLM to
+    # append [[advance]] when it senses a natural pause. None for form states.
+    advance_instruction: str | None = None
 
 
 @dataclass(frozen=True)
@@ -378,6 +392,7 @@ class LLMReasoningAgent:
         stage: Stage | None = None,
         intention: str | None = None,
         system_events: list[SystemEvent] | None = None,
+        advance_instruction: str | None = None,
     ) -> ReasoningInputs:
         """Normalise raw inputs into one explicit turn object."""
         return ReasoningInputs(
@@ -389,6 +404,7 @@ class LLMReasoningAgent:
             stage=stage,
             intention=intention,
             system_events=system_events,
+            advance_instruction=advance_instruction,
         )
 
     def derive_prompt_context(self, inputs: ReasoningInputs) -> PromptContext:
@@ -398,7 +414,9 @@ class LLMReasoningAgent:
         touching the chat route or provider adapters.
         """
         return PromptContext(
-            system_prompt=_system_prompt(inputs.mode, inputs.stage, inputs.intention),
+            system_prompt=_system_prompt(
+                inputs.mode, inputs.stage, inputs.intention, inputs.advance_instruction
+            ),
             history_messages=_history_window(inputs.history, self._history_window),
             emotional_message=_emotional_message(inputs.emotional_context),
             transcript_message=_build_transcript_message(
@@ -439,11 +457,12 @@ class LLMReasoningAgent:
         stage: Stage | None = None,
         intention: str | None = None,
         system_events: list[SystemEvent] | None = None,
+        advance_instruction: str | None = None,
     ) -> dict:
         """Return a structured snapshot of the current reasoning pipeline."""
         inputs = self.collect_inputs(
             message, emotional_context, history, transcript_segments, mode, stage, intention,
-            system_events,
+            system_events, advance_instruction,
         )
         context = self.derive_prompt_context(inputs)
         prompt_messages = self.assemble_messages(inputs, context)
@@ -473,13 +492,29 @@ class LLMReasoningAgent:
         stage: Stage | None = None,
         intention: str | None = None,
         system_events: list[SystemEvent] | None = None,
+        advance_instruction: str | None = None,
     ) -> ReasoningResult:
-        """Run the current reasoning pipeline and return a structured result."""
+        """Run the current reasoning pipeline and return a structured result.
+
+        Two-step parse on the raw LLM output:
+          1. Strip any recognised inline [[…]] tool-emission markers and
+             collect them into `emissions`.
+          2. Run the legacy parse_reasoning_output on the cleaned text
+             (still used for the JSON-envelope path; iteration 7 retires
+             this once the legacy fields go).
+        """
         inputs = self.collect_inputs(
             message, emotional_context, history, transcript_segments, mode, stage, intention,
-            system_events,
+            system_events, advance_instruction,
         )
         context = self.derive_prompt_context(inputs)
         prompt_messages = self.assemble_messages(inputs, context)
         raw_response = self._llm.chat(prompt_messages)
-        return parse_reasoning_output(raw_response, mode, stage)
+        cleaned, emissions = extract_emissions(raw_response)
+        legacy = parse_reasoning_output(cleaned, mode, stage)
+        return ReasoningResult(
+            reply=legacy.reply,
+            next_mode=legacy.next_mode,
+            next_stage=legacy.next_stage,
+            emissions=emissions,
+        )
