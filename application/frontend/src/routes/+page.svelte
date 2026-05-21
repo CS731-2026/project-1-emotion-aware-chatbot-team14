@@ -102,6 +102,32 @@
   // model service; this is a read-only mirror.
   let backendView = $state<ChatView>({ surface: "chat" });
 
+  // True while we're waiting for the assistant's yarn-opener reply after a
+  // form completion. Drives the thinking indicator + mic pause. Cleared
+  // when an assistant_reply (or assistant_reply_error) message arrives, or
+  // when a safety timeout fires.
+  let assistantThinking = $state(false);
+  let assistantThinkingTimeout = $state<ReturnType<typeof setTimeout> | null>(null);
+
+  function clearAssistantThinking() {
+    assistantThinking = false;
+    if (assistantThinkingTimeout) {
+      clearTimeout(assistantThinkingTimeout);
+      assistantThinkingTimeout = null;
+    }
+  }
+
+  function startAssistantThinking() {
+    assistantThinking = true;
+    if (assistantThinkingTimeout) clearTimeout(assistantThinkingTimeout);
+    // Safety net — claude-code subprocess may hang or never respond. After
+    // 60s, give up and let the user speak again.
+    assistantThinkingTimeout = setTimeout(() => {
+      assistantThinking = false;
+      assistantThinkingTimeout = null;
+    }, 60_000);
+  }
+
   let ws = $state<WebSocket | null>(null);
   let frameInterval = $state<ReturnType<typeof setInterval> | null>(null);
   let speechPulseTimeout = $state<ReturnType<typeof setTimeout> | null>(null);
@@ -166,6 +192,10 @@
       // exposing the state name to the LLM via the rendered event would
       // violate "the LLM never sees state-machine vocabulary".
       sendSystemEvent("form_complete", {});
+      // Optimistically mark the assistant as thinking — the backend will
+      // soon push view_update + assistant_reply, but rendering the
+      // indicator immediately gives the user a responsive signal.
+      startAssistantThinking();
     }
   }
   const assistantPhase = $derived(deriveAssistantPhase({
@@ -440,6 +470,27 @@
         // Conductor stepped on the model service (e.g. form_complete event)
         // and pushed us a new view. Mirror it; render reactively.
         if (msg.view) backendView = msg.view as ChatView;
+      } else if (msg.type === "assistant_reply") {
+        // Backend's yarn opener — assistant speaks first after a form
+        // completion. Append to chat history + persist server-side so
+        // subsequent /chat calls include it in the LLM's context.
+        const text = String(msg.text ?? "").trim();
+        if (text) {
+          const agentMsg: Message = {
+            id: crypto.randomUUID(),
+            role: "agent",
+            content: text,
+            timestamp: new Date().toISOString(),
+          };
+          messages = [...messages, agentMsg];
+          speak(text);
+          void api.appendHistory(agentMsg).catch(() => { /* non-fatal */ });
+        }
+        clearAssistantThinking();
+      } else if (msg.type === "assistant_reply_error") {
+        // Backend's yarn opener failed. Surface a soft fallback so the
+        // user isn't left waiting and can speak again.
+        clearAssistantThinking();
       } else if (msg.type === "frame_debug") {
         harnessFrameCount = Number(msg.frame_count ?? harnessFrameCount);
         latestHarnessFrame = `data:image/jpeg;base64,${msg.image_data}`;
@@ -578,6 +629,14 @@
     startAudioStreaming();
   });
 
+  // Pause the mic while the assistant is generating its yarn-opener so the
+  // user can't talk over a reply that hasn't arrived yet. Resume the
+  // moment the reply lands (or the safety timeout fires).
+  $effect(() => {
+    if (assistantThinking) browserVad?.pause();
+    else browserVad?.resume();
+  });
+
   $effect(() => {
     init();
   });
@@ -709,11 +768,25 @@
 
         <div class="response-shell">
           <p class="response-label">Latest response</p>
-          <p class="response-text">{latestAssistantMessage}</p>
+          {#if assistantThinking}
+            <p class="response-text thinking" aria-live="polite">
+              <span class="thinking-dot"></span>
+              <span class="thinking-dot"></span>
+              <span class="thinking-dot"></span>
+              <span class="thinking-label">Forming a response…</span>
+            </p>
+          {:else}
+            <p class="response-text">{latestAssistantMessage}</p>
+          {/if}
         </div>
 
         <div class="composer-shell">
-          <ChatInput onSend={sendMessage} {isListening} onMicToggle={toggleMic} disabled={chatBusy || showModal} />
+          <ChatInput
+            onSend={sendMessage}
+            {isListening}
+            onMicToggle={toggleMic}
+            disabled={chatBusy || showModal || assistantThinking}
+          />
           <p class="composer-hint">
             Speak to send a voice prompt automatically, or type if you want a quieter fallback.
           </p>
@@ -1021,6 +1094,31 @@
   .response-text {
     max-height: 4.8em;
     overflow: hidden;
+  }
+
+  .response-text.thinking {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: rgba(255, 255, 255, 0.85);
+  }
+  .thinking-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.85);
+    animation: thinkingPulse 1.2s ease-in-out infinite;
+  }
+  .thinking-dot:nth-child(2) { animation-delay: 0.18s; }
+  .thinking-dot:nth-child(3) { animation-delay: 0.36s; }
+  .thinking-label {
+    margin-left: 0.4rem;
+    font-style: italic;
+    opacity: 0.75;
+  }
+  @keyframes thinkingPulse {
+    0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+    40% { transform: scale(1); opacity: 1; }
   }
 
   .composer-shell {

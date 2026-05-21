@@ -55,6 +55,13 @@ export const api = {
   selectProfile: (id: string) =>
     fetch(`${BASE}/api/v1/profiles/${id}/select`, { method: "POST", credentials: "include" }).then((r) => r.json()),
   getHistory: () => fetch(`${BASE}/api/v1/history`, { credentials: "include" }).then((r) => r.json()) as Promise<Message[]>,
+  appendHistory: (message: Message) =>
+    fetch(`${BASE}/api/v1/history`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(message),
+    }).then((r) => r.json()) as Promise<{ ok: boolean }>,
   sendChat: (text: string) =>
     fetch(`${BASE}/api/v1/chat`, {
       method: "POST",

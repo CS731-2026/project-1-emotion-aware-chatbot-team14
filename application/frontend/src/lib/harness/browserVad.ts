@@ -44,6 +44,11 @@ export class BrowserVadController {
   // Rolling RMS history matching `frames`.
   private levels: number[] = [];
 
+  // When true, onFrame returns immediately — no detection, no sending.
+  // Used by the page to gate recording while the assistant is generating
+  // its yarn-opener reply.
+  private paused = false;
+
   private utteranceActive = false;
   private utteranceStartedAt = 0;
   // Index into `frames` where the utterance is considered to start (already
@@ -153,8 +158,31 @@ export class BrowserVadController {
     this.callbacks.onVadState("Listening");
   }
 
+  /** Pause detection — frames are dropped on the floor until resume(). */
+  pause() {
+    if (this.paused) return;
+    this.paused = true;
+    // Reset in-progress utterance state so resuming doesn't carry over a
+    // half-recorded utterance from before the pause.
+    this.utteranceActive = false;
+    this.silenceStartedAt = null;
+    this.frames = [];
+    this.levels = [];
+    this.currentAudioLevel = 0;
+    this.callbacks.onAudioLevel(0);
+    this.callbacks.onVadState("Paused");
+  }
+
+  /** Resume detection after pause(). No-op if not paused. */
+  resume() {
+    if (!this.paused) return;
+    this.paused = false;
+    this.callbacks.onVadState("Listening");
+  }
+
   /** Receive a PCM frame from the worklet. Drives the windowed VAD state machine. */
   private onFrame(pcm: Float32Array) {
+    if (this.paused) return;
     // Compute RMS of this frame and update level history.
     let sumSq = 0;
     for (let i = 0; i < pcm.length; i++) sumSq += pcm[i] * pcm[i];
