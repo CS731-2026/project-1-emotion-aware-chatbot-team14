@@ -194,12 +194,13 @@
   // event; the final chip also emits form_complete so the conductor's
   // qa_form → next-state transition fires. No /chat round-trip for chip
   // clicks — the answers are structured signals, not user speech.
-  // Free-text supplementary input on the conductor's form surface. Both
-  // typed text and STT route through here — chip clicks still drive form
-  // completion, but the user can add colour via speech or typing. The
-  // text rides into the next yarn as a {{free_text_input: …}} line in
-  // the LLM's transcript context.
+  // Text / STT during the form surface flows through QuestionnairePage:
+  //   - chip match found → form_answer event + advance
+  //   - matchless free-text → handleFormFreeText emits free_text_input
+  // pendingFormInputText is set by STT (parent owns the transcript pipe);
+  // composer-typed text reaches QuestionnairePage directly via ChatInput.
   let lastFreeTextNote = $state("");
+  let pendingFormInputText = $state<string | null>(null);
   function handleFormFreeText(text: string) {
     const cleaned = text.trim();
     if (!cleaned) return;
@@ -214,10 +215,11 @@
       // exposing the state name to the LLM via the rendered event would
       // violate "the LLM never sees state-machine vocabulary".
       sendSystemEvent("form_complete", {});
-      // Optimistically mark the assistant as thinking — the backend will
-      // soon push view_update + assistant_reply, but rendering the
-      // indicator immediately gives the user a responsive signal.
-      startAssistantThinking();
+      // Note: deliberately no startAssistantThinking() here. After the
+      // form, we want the user to be able to keep going immediately —
+      // the yarn-opener LLM call runs in the background and the reply
+      // will be spoken when it lands (which pauses the mic during TTS,
+      // not during the wait).
     }
   }
   const assistantPhase = $derived(deriveAssistantPhase({
@@ -643,14 +645,15 @@
       pendingTranscript = null;
       // Route speech depending on what surface is mounted:
       //   - debug Shift+overlay active → funnel into its step advancement
-      //   - conductor-driven form surface → free-text supplement; chips
-      //     still drive form_complete, but the speech rides into the
-      //     next yarn as a {{free_text_input}} line for the LLM.
+      //   - conductor-driven form surface → hand the text to
+      //     QuestionnairePage via pendingFormInputText; it tries to
+      //     match a chip on the current question, falls back to
+      //     free-text if there's no match.
       //   - otherwise (yarn / chat) → normal chat turn
       if (isOverlayActive) {
         handleCheckInAnswer(nextTranscript);
       } else if (backendView.surface === "checkin") {
-        handleFormFreeText(nextTranscript);
+        pendingFormInputText = nextTranscript;
       } else {
         void sendMessage(nextTranscript);
       }
@@ -845,6 +848,8 @@
             {isListening}
             onMicToggle={toggleMic}
             disabled={chatBusy || showModal || assistantThinking}
+            audioLevel={currentAudioLevel}
+            locked={micGated}
           />
           <p class="composer-hint">
             Speak to send a voice prompt automatically, or type if you want a quieter fallback.
@@ -861,6 +866,10 @@
           {isListening}
           onMicToggle={toggleMic}
           freeTextNote={lastFreeTextNote}
+          audioLevel={currentAudioLevel}
+          locked={micGated}
+          pendingInputText={pendingFormInputText}
+          onInputConsumed={() => (pendingFormInputText = null)}
         />
       </section>
     {:else if backendView.surface === "done"}

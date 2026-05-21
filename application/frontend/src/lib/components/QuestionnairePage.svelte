@@ -18,6 +18,10 @@
     isListening,
     onMicToggle,
     freeTextNote = "",
+    audioLevel = 0,
+    locked = false,
+    pendingInputText = null,
+    onInputConsumed,
   }: {
     spec: PageSpec;
     /**
@@ -33,6 +37,16 @@
     /** Most recent free-text supplementary note (typed or spoken). Shown as
      * an acknowledgement under the composer so the user knows it landed. */
     freeTextNote?: string;
+    audioLevel?: number;
+    locked?: boolean;
+    /** Text from outside the component (e.g. STT from the parent) that
+     * should be processed exactly the same way as composer-typed text:
+     * match a chip on the current question, or fall back to free-text. */
+    pendingInputText?: string | null;
+    /** Called when the component has consumed pendingInputText; parent
+     * resets the prop to null so a duplicate text doesn't get processed
+     * twice on rerender. */
+    onInputConsumed?: () => void;
   } = $props();
 
   // Per-question local state. Resets when a different spec object arrives.
@@ -102,6 +116,77 @@
     const allAnswered = spec.questions.every((q) => updatedAnswers[q.id]?.selected);
     onAnswer(question.id, value, allAnswered);
   }
+
+  /** Normalise text for fuzzy chip matching. */
+  function normalise(s: string): string {
+    return s.toLowerCase().replace(/[_-]+/g, " ").replace(/[^a-z0-9\s]+/g, "").trim();
+  }
+
+  /** Try to map free text to a chip on the given question.
+   *
+   * Returns the matched value if one is found, else null. Heuristic:
+   *   1. Exact (normalised) match against label or value
+   *   2. Substring containment in either direction (text contains label,
+   *      or label contains text)
+   * No exotic NLP — for a 4-chip multiple choice this is plenty and gives
+   * predictable behaviour the user can reason about.
+   */
+  function matchChip(question: QuestionSpec, text: string): string | null {
+    const normText = normalise(text);
+    if (!normText) return null;
+    for (const c of question.choices) {
+      const normLabel = normalise(c.label);
+      const normValue = normalise(c.value);
+      if (normText === normLabel || normText === normValue) return c.value;
+    }
+    for (const c of question.choices) {
+      const normLabel = normalise(c.label);
+      if (normLabel && (normText.includes(normLabel) || normLabel.includes(normText))) {
+        return c.value;
+      }
+    }
+    return null;
+  }
+
+  /** Process composer or STT text against the first unanswered visible
+   * question. A successful chip match advances the form; allowFreeText
+   * questions accept the raw text as the answer; otherwise the text
+   * becomes a free-text supplement (parent handles ack + system_event).
+   */
+  function consumeInputText(text: string) {
+    const clean = text.trim();
+    if (!clean) return;
+    const target = visibleQuestions.find((q) => !answers[q.id]?.selected);
+    if (!target) {
+      onTextSubmit(clean);  // form already filled — treat as supplementary
+      return;
+    }
+    const matched = matchChip(target, clean);
+    if (matched !== null) {
+      selectChoice(target, matched);
+      return;
+    }
+    if (target.allowFreeText) {
+      selectChoice(target, clean);  // raw text is the answer
+      return;
+    }
+    // Couldn't progress; fall through to the supplementary free-text path.
+    onTextSubmit(clean);
+  }
+
+  function handleComposerSubmit(text: string) {
+    consumeInputText(text);
+  }
+
+  // External text (STT from the parent) lands here. Process once per
+  // change, then notify the parent to clear the prop.
+  $effect(() => {
+    if (pendingInputText) {
+      const text = pendingInputText;
+      onInputConsumed?.();
+      consumeInputText(text);
+    }
+  });
 </script>
 
 <div class="page" in:fly={{ y: 24, duration: 360, delay: 280, easing: cubicOut }}>
@@ -138,10 +223,12 @@
 
   <footer class="composer" in:fade={{ duration: 240, delay: 700 }}>
     <ChatInput
-      onSend={onTextSubmit}
+      onSend={handleComposerSubmit}
       {isListening}
       {onMicToggle}
-      placeholder="Add anything else you'd like to share (optional)"
+      placeholder="Answer aloud, or type — chips also work"
+      {audioLevel}
+      {locked}
     />
     {#if freeTextNote}
       <p class="free-text-ack" aria-live="polite">Got it: &ldquo;{freeTextNote}&rdquo;</p>
