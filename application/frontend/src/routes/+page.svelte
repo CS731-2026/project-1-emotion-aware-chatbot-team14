@@ -8,6 +8,7 @@
     checkInState,
     openCheckIn,
     closeCheckIn,
+    advanceOverlayStep,
   } from "$lib/conversation/checkInState.svelte";
   import {
     SAMPLE_OVERLAY_CONVERSATIONAL,
@@ -24,6 +25,7 @@
   import WebcamPreview from "$lib/components/WebcamPreview.svelte";
   import {
     deriveAssistantPhase,
+    isRealTranscript,
     phaseLabel,
     shouldPromoteTranscript,
     transcriptPreview,
@@ -40,6 +42,11 @@
 
   const HARNESS_WS_URL = PUBLIC_HARNESS_WS_URL || "ws://127.0.0.1:8000/ws";
   const DEBUG_ENV_ENABLED = publicEnv.PUBLIC_DEBUG_DASHBOARD === "true";
+  // Temporary kill-switch for reasoner-driven mode transitions. The LLM still
+  // emits next_mode / next_stage (visible in the debug snapshot), but we don't
+  // apply them. Check-ins are debug-key only until the reasoner can drive them
+  // through the proper channel.
+  const APPLY_REASONER_MODE_TRANSITIONS = false;
 
   let messages = $state<Message[]>([]);
   let emotion = $state<Emotion>("neutral");
@@ -67,6 +74,16 @@
   let websocketDebug = $state("No websocket events received yet");
   let websocketEvents = $state<string[]>([]);
   let transcriptEntries = $state<TranscriptEntry[]>([]);
+  let latestConfidence = $state<number | null>(null);
+  type RejectedTranscript = {
+    id: string;
+    timestamp: string;
+    text: string;
+    reason: string;
+    confidence: number | null;
+    durationMs: number | null;
+  };
+  let rejectedTranscripts = $state<RejectedTranscript[]>([]);
   let audioDebugEvents = $state<string[]>([]);
   let currentAudioLevel = $state(0);
   let vadState = $state("Mic idle");
@@ -99,13 +116,24 @@
     if (isListening) browserVad?.stop(isListening);
   }
 
-  function handleOverlaySelect(value: string) {
+  // Single funnel for every answer source — chip click, typed text, and
+  // speech transcript all flow through here so multi-step overlays advance
+  // consistently regardless of input mode.
+  function handleCheckInAnswer(value: string) {
     void sendMessage(value);
-    closeCheckIn();
+    if (!checkInState.active) return;
+    if (checkInState.spec?.elevation === "overlay") {
+      // Multi-step: advance if there's a next step, otherwise close.
+      // Single-step: advanceOverlayStep returns false → close.
+      if (!advanceOverlayStep()) closeCheckIn();
+    }
+    // Page elevation keeps its own per-question state and doesn't close on
+    // each answer; QuestionnairePage handles that.
   }
 
-  // Page-elevation answers stay open across questions; we don't close on each
-  // chip. Once the reasoner is wired this will also carry questionId metadata.
+  // Page-elevation per-question hook. For now identical to the overlay path
+  // (just send), but takes the questionId so once the reasoner is wired this
+  // can carry per-question metadata.
   function handlePageAnswer(_questionId: string, value: string) {
     void sendMessage(value);
   }
@@ -117,12 +145,13 @@
     isSpeaking,
   }));
   const transcriptText = $derived(transcriptPreview(liveTranscript, transcriptEntries));
+  // Indicator tracks MediaRecorder lifecycle: ON while the recorder is still
+  // capturing (active speech OR the silence-wait grace period), OFF once
+  // .stop() has been called or the clip has been sent.
   const isActivelyRecording = $derived(
     isListening && (
       vadState.startsWith("Recording speech")
       || vadState.startsWith("Silence detected")
-      || vadState.startsWith("Stopping speech clip")
-      || vadState.startsWith("Clip sent")
     )
   );
   const micPulse = $derived(
@@ -287,8 +316,10 @@
       speak(response);
       // Reasoner decides where the conversation goes next. Apply transitions
       // to the store; the view block below re-renders to match.
-      if (next_mode !== conversationState.mode) setMode(next_mode);
-      if (next_stage !== conversationState.stage) setStage(next_stage);
+      if (APPLY_REASONER_MODE_TRANSITIONS) {
+        if (next_mode !== conversationState.mode) setMode(next_mode);
+        if (next_stage !== conversationState.stage) setStage(next_stage);
+      }
     } catch {
       backendOnline = false;
       const errMsg: Message = {
@@ -362,10 +393,17 @@
           ? `Face detected at ${new Date().toLocaleTimeString()}`
           : `No face detected at ${new Date().toLocaleTimeString()}`;
       } else if (msg.type === "transcript_chunk") {
-        liveTranscript = msg.text || "Harness received audio but produced no transcript";
-        if (msg.text && shouldPromoteTranscript(msg.text, lastPromotedTranscript)) {
-          pendingTranscript = msg.text;
-          lastPromotedTranscript = msg.text;
+        // Only display real transcripts. Filtered/placeholder strings like
+        // [whisper.cpp transcript filtered] or [blank_audio] are dropped here
+        // so the prior real transcript stays visible until the user produces
+        // something new. shouldPromoteTranscript already guards chat sends.
+        const text = msg.text as string | undefined;
+        if (text && isRealTranscript(text)) {
+          liveTranscript = text;
+          if (shouldPromoteTranscript(text, lastPromotedTranscript)) {
+            pendingTranscript = text;
+            lastPromotedTranscript = text;
+          }
         }
       } else if (msg.type === "harness_status") {
         harnessStatus =
@@ -391,6 +429,8 @@
       } else if (msg.type === "audio_debug") {
         harnessAudioCount = Number(msg.audio_chunk_count ?? harnessAudioCount);
         const timings = formatTimings(msg.timings_ms);
+        const rawConf = typeof msg.stt_confidence === "number" ? msg.stt_confidence : null;
+        latestConfidence = rawConf;
         sttStatus = msg.stt_error
           ? `whisper.cpp error: ${msg.stt_error}`
           : `${msg.stt_loaded ? "whisper.cpp ran" : "whisper.cpp missing"} (${msg.stt_engine})`;
@@ -410,6 +450,18 @@
           error: msg.stt_error ?? null,
           timings,
         }, ...transcriptEntries].slice(0, 12);
+        // Rejected-transcript log: surfaces what whisper actually heard for
+        // clips that didn't pass the filter, so we can debug threshold tuning.
+        if (msg.accepted === false && typeof msg.raw_text === "string" && msg.raw_text.trim() !== "") {
+          rejectedTranscripts = [{
+            id: crypto.randomUUID(),
+            timestamp: new Date().toLocaleTimeString(),
+            text: msg.raw_text,
+            reason: (msg.stt_filter_reason as string | undefined) ?? "unknown",
+            confidence: typeof msg.stt_confidence === "number" ? msg.stt_confidence : null,
+            durationMs: typeof msg.duration_ms === "number" ? msg.duration_ms : null,
+          }, ...rejectedTranscripts].slice(0, 10);
+        }
       }
     };
 
@@ -478,7 +530,13 @@
     if (pendingTranscript && !chatBusy) {
       const nextTranscript = pendingTranscript;
       pendingTranscript = null;
-      void sendMessage(nextTranscript);
+      // Route speech through the check-in funnel when active so the current
+      // overlay step advances; otherwise fall back to a plain chat turn.
+      if (isOverlayActive) {
+        handleCheckInAnswer(nextTranscript);
+      } else {
+        void sendMessage(nextTranscript);
+      }
     }
   });
 
@@ -606,7 +664,14 @@
         <SpeakingCircle phase={assistantPhase} pulse={speechPulse} compact={isOverlayActive} />
 
         <div class="transcript-shell">
-          <p class="transcript-label">Live transcript</p>
+          <p class="transcript-label">
+            Live transcript
+            {#if latestConfidence !== null}
+              <span class="transcript-confidence">
+                · STT confidence {(latestConfidence * 100).toFixed(0)}%
+              </span>
+            {/if}
+          </p>
           <p class="transcript-text">{transcriptText}</p>
         </div>
 
@@ -649,12 +714,11 @@
     <div class="overlay-mount">
       <ModePanel
         spec={checkInState.spec}
-        onSelect={handleOverlaySelect}
+        currentStep={checkInState.currentStep}
+        onAnswer={(_stepId, value) => handleCheckInAnswer(value)}
         onCancelMic={cancelMicIfRecording}
-        onTextSubmit={sendMessage}
         {isListening}
         onMicToggle={toggleMic}
-        disabled={chatBusy}
       />
     </div>
   {/if}
@@ -675,6 +739,7 @@
       {latestFaceCrop}
       {latestFrameSummary}
       {emotion}
+      {rejectedTranscripts}
       reasoningDebug={latestReasoningDebug}
     />
   {/if}
@@ -911,6 +976,13 @@
     font-size: 1rem;
     line-height: 1.6;
     color: rgba(255, 255, 255, 0.94);
+  }
+
+  .transcript-confidence {
+    color: rgba(255, 255, 255, 0.5);
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: normal;
   }
 
   .transcript-text {
