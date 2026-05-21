@@ -11,7 +11,9 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 import config
 from core.app_state import HRIAppState
+from core.conductor import StateContext
 from core.emotion.base import EMOTIONS, EmotionModel
+from core.events import SystemEvent
 from ws.session import (
     HarnessSession,
     create_session,
@@ -206,11 +208,61 @@ def _make_handlers(
         ))
         return True
 
+    async def on_system_event(msg: dict[str, Any]) -> bool:
+        """Receive a typed system event from the frontend.
+
+        Most events are just logged into the session's events buffer for the
+        LLM to read on its next chat turn. `form_complete` is special: it
+        also advances the conductor immediately and pushes a view_update
+        back to the frontend so the next surface mounts without needing the
+        user to send a chat turn first.
+        """
+        session = get_session()
+        if session is None:
+            await _error(websocket, "system_event received before session_start")
+            return True
+
+        kind = msg.get("kind")
+        if not isinstance(kind, str):
+            await _error(websocket, "system_event missing kind")
+            return True
+
+        payload = msg.get("payload") if isinstance(msg.get("payload"), dict) else {}
+        t = float(msg.get("t", time.time()))
+        event = SystemEvent(kind=kind, t=t, payload=payload)  # type: ignore[arg-type]
+        session.system_events.append(event)
+        # Cap to avoid unbounded growth on long sessions.
+        if len(session.system_events) > 200:
+            session.system_events = session.system_events[-200:]
+
+        if kind == "form_complete":
+            ctx = StateContext(
+                turn_in_state=session.turn_in_state,
+                form_completed=True,
+                advance_emission=False,
+            )
+            decision = session.conductor.observe(ctx)
+            if decision.transitioned:
+                session.turn_in_state = 0
+                await _send(websocket, {
+                    "type": "view_update",
+                    "view": {
+                        "surface": decision.surface,
+                        "spec": decision.state.spec.model_dump() if decision.state.spec else None,
+                        "intention": decision.intention,
+                        "state_name": decision.state.name,
+                    },
+                    "prev_state_name": decision.prev_state_name,
+                })
+
+        return True
+
     return {
         "session_start": on_session_start,
         "session_end":   on_session_end,
         "video_frame":   on_video_frame,
         "audio_chunk":   on_audio_chunk,
+        "system_event":  on_system_event,
     }
 
 
