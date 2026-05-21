@@ -19,7 +19,7 @@ events use the sequential segment_id_counter instead.
 """
 
 from .check_in_spec import Choice, PageSpec, QuestionSpec
-from .state import State, StateContext
+from .state import State, StateContext, TickResult
 
 
 # ---------- form specs ----------
@@ -214,12 +214,21 @@ class PostQaYarn(State):
         "[[advance]] next turn."
     )
 
-    def intention_for(self, ctx: StateContext) -> str:
+    def tick(self, ctx: StateContext) -> TickResult:
+        """Phase the intention by turn count.
+
+        Three phases — see class docstring. `should_advance` defers to
+        the base hard_advance lambda (turn cap / time cap); the soft
+        [[advance]] emission path is handled by the conductor outside
+        tick().
+        """
         if ctx.turn_in_state >= 3:
-            return f"{self._BASE_INTENTION}\n\n{self._BRANCHING_GUIDANCE}\n\n{self._INSIST_GUIDANCE}"
-        if ctx.turn_in_state >= 2:
-            return f"{self._BASE_INTENTION}\n\n{self._BRANCHING_GUIDANCE}"
-        return self._BASE_INTENTION
+            intention = f"{self._BASE_INTENTION}\n\n{self._BRANCHING_GUIDANCE}\n\n{self._INSIST_GUIDANCE}"
+        elif ctx.turn_in_state >= 2:
+            intention = f"{self._BASE_INTENTION}\n\n{self._BRANCHING_GUIDANCE}"
+        else:
+            intention = self._BASE_INTENTION
+        return TickResult(intention=intention, advance=self.hard_advance(ctx))
 
 
 POST_QA_YARN = PostQaYarn(

@@ -131,15 +131,20 @@ async def _run_yarn_opener(
     websocket: WebSocket,
     session: HarnessSession,
     hri: HRIAppState,
+    intention: str,
 ) -> None:
     """Generate a yarn-opening assistant reply and push it to the frontend.
 
     Runs the (potentially slow) LLM call in a worker thread, then sends an
     assistant_reply WS message. On failure, sends assistant_reply_error so
     the frontend can clear its thinking indicator and surface the issue.
+
+    `intention` is passed through from the conductor's tick result on the
+    new yarn state so subclassed states can shape the opener via their
+    tick() override without having to mutate intention_prompt directly.
     """
     try:
-        reply = await asyncio.to_thread(generate_yarn_opener, session, hri)
+        reply = await asyncio.to_thread(generate_yarn_opener, session, hri, intention)
     except Exception:
         logger.exception("yarn opener crashed")
         reply = None
@@ -291,7 +296,6 @@ def _make_handlers(
             ctx = StateContext(
                 turn_in_state=session.turn_in_state,
                 form_completed=True,
-                advance_emission=False,
                 elapsed_in_state=max(0.0, time.time() - session.state_started_at),
             )
             decision = session.conductor.observe(ctx)
@@ -323,12 +327,14 @@ def _make_handlers(
                         hri,
                     ))
                 # If the new state is a yarn, kick off an LLM call to open
-                # the conversation. The frontend showed a thinking
-                # indicator the moment it sent form_complete; we'll clear
-                # it by sending assistant_reply (or assistant_reply_error)
-                # below.
-                if decision.state.kind == "yarn" and decision.state.intention_prompt:
-                    asyncio.create_task(_run_yarn_opener(websocket, session, hri))
+                # the conversation using the intention the conductor just
+                # produced via the new state's tick() — passing it through
+                # so subclasses can shape the opener via instance logic
+                # without having to mutate intention_prompt.
+                if decision.state.kind == "yarn" and decision.intention:
+                    asyncio.create_task(
+                        _run_yarn_opener(websocket, session, hri, decision.intention)
+                    )
 
         return True
 

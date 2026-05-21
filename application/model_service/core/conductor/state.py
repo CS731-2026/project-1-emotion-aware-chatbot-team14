@@ -2,16 +2,22 @@
 
 A State represents one logical moment in the session flow — running a
 form, an open-chat yarn after a form, a wrap-up exchange, etc. The
-conductor walks states forward in order; the LLM sees the prompt
-produced by `state.intention_for(ctx)` but never the state's name or
-any transition vocabulary.
+conductor walks states forward in order; the LLM sees the prompt the
+state's `tick()` returns but never the state's name or any transition
+vocabulary.
 
-States are a subclassable plain class (not a frozen dataclass) so a
-state can carry instance-level mutable bookkeeping (counters, "have
-we nudged already" flags, etc.) and override per-turn logic. The base
-class still covers the common scalar-field case — instantiating
-`State(...)` with kwargs works for any state that doesn't need
-custom behaviour beyond `late_guidance` + a `hard_advance` lambda.
+States are plain subclassable classes (not frozen dataclasses) so a
+state can:
+  - keep mutable instance attributes that persist across turns
+    (counters, "have we nudged already" flags, summaries built from
+    transcript scans)
+  - override `tick(ctx)` to deterministically decide what to say and
+    whether to hand off, instead of leaning entirely on the LLM to
+    reason its way through phases
+
+The base class still covers the common scalar-field case —
+`State(...)` with kwargs works for any state whose logic is just
+"static prompt, advance on a lambda".
 """
 
 from __future__ import annotations
@@ -24,20 +30,36 @@ from .check_in_spec import CheckInSpec
 
 @dataclass(frozen=True)
 class StateContext:
-    """Inputs the conductor reads when deciding whether to transition.
+    """Inputs the conductor reads when calling `state.tick(ctx)`.
 
     Populated by the chat router from session state + the latest turn's
-    parsed signals before calling `Conductor.observe(...)`.
+    parsed signals before each per-turn `Conductor.observe(...)` call.
+
+    Note: `advance_emission` is *not* on this ctx. The LLM's `[[advance]]`
+    marker is processed by the conductor's separate
+    `handle_emission_advance()` method, not by tick — so a tick can't
+    accidentally fire twice per turn.
     """
 
-    turn_in_state: int = 0              # turns since this state began
-    form_completed: bool = False        # set by the events stream when a form_complete event lands
-    advance_emission: bool = False      # set when the reply carried [[advance]]
+    turn_in_state: int = 0              # turns the state has been live
+    form_completed: bool = False        # set when a form_complete event lands
     elapsed_in_state: float = 0.0       # seconds since this state began
 
 
-# A hard-advance rule: pure function of StateContext → should we leave the
-# state right now? Keep deterministic; soft conditions live elsewhere.
+@dataclass(frozen=True)
+class TickResult:
+    """What `state.tick(ctx)` returns.
+
+    `intention` is the system-prompt text the LLM should see this turn.
+    `advance` signals the conductor to hand off to the next state.
+    A state can drive a transition purely deterministically by returning
+    `advance=True` from tick — no LLM `[[advance]]` emission required.
+    """
+
+    intention: str
+    advance: bool = False
+
+
 HardAdvance = Callable[[StateContext], bool]
 
 
@@ -49,20 +71,19 @@ class State:
     """One node in the session state machine.
 
     `name` is internal-only — used by the conductor, JSONL persistence,
-    and the debug dashboard. It is never sent to the LLM. The LLM only
-    ever sees `intention_for(ctx)` output and (for yarns)
-    `advance_instruction`.
+    and the debug dashboard. It is never sent to the LLM.
 
     `spec` is the check-in form the frontend mounts when kind == "form".
     Required for form states; ignored for yarn / done.
 
-    Subclasses can override:
-      - `intention_for(ctx)` — build the system prompt for this turn,
-        e.g. branching on `ctx.turn_in_state` or on instance attributes
-        the subclass maintains across turns.
-      - `should_advance(ctx)` — decide whether to hand off to the next
-        state, replacing the default (hard_advance lambda + [[advance]]
-        emission for yarn states).
+    The primary extension point is `tick(ctx)`. The default tick
+    implements the scalar-field behaviour (intention_prompt +
+    optional late_guidance after a turn threshold, advance via
+    `hard_advance` lambda). Subclasses override `tick` to:
+      - maintain mutable instance attributes across turns
+      - phase the prompt deterministically by inspecting ctx and self
+      - decide to advance based on the state's own reasoning instead of
+        waiting for the LLM to emit `[[advance]]`
     """
 
     def __init__(
@@ -90,30 +111,19 @@ class State:
         self.late_guidance = late_guidance
         self.late_guidance_after = late_guidance_after
 
-    def intention_for(self, ctx: StateContext) -> str:
-        """Build the prompt text the LLM should see this turn.
+    def tick(self, ctx: StateContext) -> TickResult:
+        """Default tick — wraps the scalar-field behaviour.
 
-        Default behaviour: return `intention_prompt`, optionally with
-        `late_guidance` appended once `ctx.turn_in_state` reaches
-        `late_guidance_after`. Subclasses can override for arbitrary
-        phase or counter-based logic.
+        Returns the base intention (plus late_guidance once
+        `ctx.turn_in_state >= late_guidance_after`) and advances when
+        the `hard_advance` lambda fires. LLM `[[advance]]` emissions
+        are handled outside tick, in `Conductor.handle_emission_advance`.
+
+        Subclasses with mutable instance state should override and call
+        super().tick(ctx) only if they want this default appended to
+        their own logic.
         """
-        text = self.intention_prompt
+        intention = self.intention_prompt
         if self.late_guidance and ctx.turn_in_state >= self.late_guidance_after:
-            text = f"{text}\n\n{self.late_guidance}".strip()
-        return text
-
-    def should_advance(self, ctx: StateContext) -> bool:
-        """Should the conductor hand off to the next state this turn?
-
-        Default behaviour: the `hard_advance` rule fires (form
-        completion, turn / time cap), or this is a yarn that exposes
-        an `advance_instruction` and the LLM emitted `[[advance]]`.
-        """
-        if self.hard_advance(ctx):
-            return True
-        return (
-            self.kind == "yarn"
-            and self.advance_instruction is not None
-            and ctx.advance_emission
-        )
+            intention = f"{intention}\n\n{self.late_guidance}".strip()
+        return TickResult(intention=intention, advance=self.hard_advance(ctx))

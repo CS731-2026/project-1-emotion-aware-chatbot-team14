@@ -1,13 +1,15 @@
 """Session conductor — per-session state machine walker.
 
-Holds a list of States and a pointer to the current one. Each turn the
-chat router calls `observe(ctx)` with the latest StateContext; the
-conductor evaluates the current state's `hard_advance` rule and, if it
-fires, walks to the next state. Forward-only; never backtracks.
+Holds a list of States and a pointer to the current one. Each user turn
+the chat router calls `observe(ctx)` once; the conductor invokes
+`state.tick(ctx)` exactly once on the current state and may transition.
+After the LLM has replied, if the reply carried `[[advance]]`, the
+router calls `handle_emission_advance()` — a separate entry that
+transitions without re-ticking, so per-turn counters stay correct.
 
 The conductor returns a `ConductorDecision` carrying:
   - the (possibly new) current state
-  - its intention prompt (for the reasoning agent to inject)
+  - its tick'd intention prompt (for the reasoning agent to inject)
   - the rendering surface ("chat" | "checkin" | "done") for the frontend
   - a `transitioned` flag and the just-ended state's name when applicable
 """
@@ -50,29 +52,73 @@ class Conductor:
         return next((s for s in self._states if s.name == name), None)
 
     def observe(self, ctx: StateContext) -> ConductorDecision:
-        """Possibly advance to the next state and return the resulting view.
+        """Per-turn entry. Tick the current state exactly once.
 
-        Walks one step:
-          1. Ask the current state via `should_advance(ctx)`.
-          2. If it returns True (and we're not already on the last
-             state), move forward.
-          3. Build the new current state's intention via
-             `intention_for(ctx)` — using a fresh ctx with turn 0 on
-             transitions so the new state sees its first turn.
+        If the tick result says `advance` and we're not already on the
+        last state, transition forward and tick the new state with a
+        fresh ctx (turn_in_state=0). The intention returned is whichever
+        tick was last evaluated — either the current state's (no
+        transition) or the new state's (transition).
         """
-        prev = self.current
-        transitioned = False
-        if self._idx < len(self._states) - 1 and self.current.should_advance(ctx):
-            self._idx += 1
-            transitioned = True
         cur = self.current
-        intention_ctx = StateContext() if transitioned else ctx
+        result = cur.tick(ctx)
+        if result.advance and self._idx < len(self._states) - 1:
+            prev = cur
+            self._idx += 1
+            new_state = self.current
+            new_result = new_state.tick(StateContext())
+            return ConductorDecision(
+                state=new_state,
+                intention=new_result.intention,
+                surface=_surface_for(new_state),
+                transitioned=True,
+                prev_state_name=prev.name,
+            )
         return ConductorDecision(
             state=cur,
-            intention=cur.intention_for(intention_ctx),
+            intention=result.intention,
             surface=_surface_for(cur),
-            transitioned=transitioned,
-            prev_state_name=prev.name if transitioned else None,
+            transitioned=False,
+            prev_state_name=None,
+        )
+
+    def handle_emission_advance(self) -> ConductorDecision:
+        """Post-LLM entry. Process an `[[advance]]` emission.
+
+        Only fires a transition when the current state is a yarn that
+        exposes an `advance_instruction` (i.e. the LLM was authorised
+        to emit the marker). Does NOT call `tick()` on the current
+        state — that already happened pre-LLM. The new state's `tick`
+        runs once with a fresh ctx.
+
+        If no transition is possible (current is the last state, or
+        not a yarn with an advance_instruction), returns the current
+        state's view unchanged.
+        """
+        cur = self.current
+        can_advance = (
+            cur.kind == "yarn"
+            and cur.advance_instruction is not None
+            and self._idx < len(self._states) - 1
+        )
+        if not can_advance:
+            return ConductorDecision(
+                state=cur,
+                intention=cur.intention_prompt,
+                surface=_surface_for(cur),
+                transitioned=False,
+                prev_state_name=None,
+            )
+        prev = cur
+        self._idx += 1
+        new_state = self.current
+        new_result = new_state.tick(StateContext())
+        return ConductorDecision(
+            state=new_state,
+            intention=new_result.intention,
+            surface=_surface_for(new_state),
+            transitioned=True,
+            prev_state_name=prev.name,
         )
 
 

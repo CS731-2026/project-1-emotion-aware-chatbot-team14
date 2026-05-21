@@ -79,6 +79,7 @@ _Surface = Literal["chat", "checkin", "done"]
 def generate_yarn_opener(
     session: HarnessSession,
     hri: HRIAppState,
+    intention: str,
 ) -> str | None:
     """Run the LLM once with no user message to produce a yarn-opening reply.
 
@@ -86,9 +87,12 @@ def generate_yarn_opener(
     form_complete event — there's no user chat turn to ride; we want the
     assistant to acknowledge the form answers and open the next phase.
 
+    `intention` is the conductor's tick output for the new state's first
+    turn — passed in by the caller so subclass tick() logic shapes the
+    opener.
+
     Returns the cleaned reply text, or None if the LLM agent isn't loaded
-    or the call fails. Caller is responsible for transporting the reply
-    to the frontend (e.g. via an assistant_reply WS message).
+    or the call fails.
     """
     if hri.llm_agent is None or hri.emotion_agent is None:
         return None
@@ -105,7 +109,7 @@ def generate_yarn_opener(
             emotional_context,
             [],
             transcript_segments,
-            current.intention_prompt,
+            intention,
             system_events,
             current.advance_instruction,
         )
@@ -161,22 +165,21 @@ async def _step_conductor(
     session: HarnessSession | None,
     *,
     form_completed: bool,
-    advance_emission: bool,
     hri: HRIAppState | None = None,
 ) -> tuple[str | None, str | None, _Surface, CheckInSpec | None, bool]:
-    """Advance the per-session conductor by one turn.
+    """Per-turn observe call. Ticks the current state exactly once.
 
-    Returns (intention, state_name, surface, spec, transitioned). When there
-    is no session yet (chat hit before WS session_start), surface defaults
-    to "chat" so the frontend still renders the existing hero.
+    Returns (intention, state_name, surface, spec, transitioned). When
+    there is no session yet (chat hit before WS session_start), surface
+    defaults to "chat" so the frontend still renders the existing hero.
 
-    When the conductor transitions, runs end-of-state fact extraction on
-    the just-left state and emits a segment_summary event into the
-    session's events buffer. The extraction is an LLM call that can block
-    for several seconds — it runs in a worker thread so the event loop
-    keeps servicing WebSocket video frames. `hri` is required for
-    extraction; pass None only when the caller knows no transition can
+    On transition, runs end-of-state fact extraction in a worker thread
+    so the LLM call doesn't block the WS event loop. `hri` is required
+    for that; pass None only when the caller knows no transition can
     happen.
+
+    `[[advance]]` emissions arrive AFTER the LLM call and are handled by
+    `_handle_advance_emission` below — they don't tick.
     """
     if session is None:
         return None, None, "chat", None, False
@@ -184,10 +187,9 @@ async def _step_conductor(
     ctx = StateContext(
         turn_in_state=session.turn_in_state,
         form_completed=form_completed,
-        advance_emission=advance_emission,
         elapsed_in_state=max(0.0, time.time() - session.state_started_at),
     )
-    decision = session.conductor.observe(ctx)        # cheap, on the loop
+    decision = session.conductor.observe(ctx)
     if decision.transitioned:
         session.turn_in_state = 0
         if decision.prev_state_name and hri is not None:
@@ -197,6 +199,35 @@ async def _step_conductor(
             )
     else:
         session.turn_in_state += 1
+    return (
+        decision.intention,
+        decision.state.name,
+        decision.surface,
+        decision.state.spec,
+        decision.transitioned,
+    )
+
+
+async def _handle_advance_emission(
+    session: HarnessSession | None,
+    *,
+    hri: HRIAppState | None = None,
+) -> tuple[str | None, str | None, _Surface, CheckInSpec | None, bool]:
+    """Post-LLM: the reply carried `[[advance]]`. Walk forward without
+    ticking the previous state again (its tick already ran this turn).
+    Runs end-of-state extraction on transition. Mirrors _step_conductor's
+    return shape for the chat router caller.
+    """
+    if session is None:
+        return None, None, "chat", None, False
+    decision = session.conductor.handle_emission_advance()
+    if decision.transitioned:
+        session.turn_in_state = 0
+        if decision.prev_state_name and hri is not None:
+            await asyncio.to_thread(
+                _run_extraction_on_transition,
+                session, decision.prev_state_name, hri,
+            )
     return (
         decision.intention,
         decision.state.name,
@@ -220,10 +251,10 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
     emotion_observations = session.emotion_buffer.history() if session else []
 
     # Step 0a: walk the conductor with whatever pre-LLM signals we have.
-    # form_complete now arrives over the WebSocket, never via /chat, so the
-    # pre-LLM observe sees no form completion signal here.
+    # form_complete arrives over the WebSocket, never via /chat — so this
+    # pre-LLM observe just ticks the current state with form_completed=False.
     intention, state_name, surface, spec, _transitioned = await _step_conductor(
-        session, form_completed=False, advance_emission=False, hri=hri,
+        session, form_completed=False, hri=hri,
     )
     advance_instruction = (
         session.conductor.current.advance_instruction if session else None
@@ -280,12 +311,13 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
         debug = _fallback_debug_snapshot(body, latest_emotion, intention)
 
     # Step 5: pick up any inline tool emissions from the reply (e.g.
-    # [[advance]]) and re-step the conductor so the response carries the
-    # post-advance view. The reply text has already had markers stripped.
+    # [[advance]]) and ask the conductor to process the transition WITHOUT
+    # re-ticking the previous state — that would double-count the turn.
+    # The reply text has already had markers stripped.
     advance_emitted = any(e.name == "advance" for e in result.emissions)
     if advance_emitted:
-        intention, state_name, surface, spec, _transitioned2 = await _step_conductor(
-            session, form_completed=False, advance_emission=True, hri=hri,
+        intention, state_name, surface, spec, _transitioned2 = await _handle_advance_emission(
+            session, hri=hri,
         )
 
     # Attach session-state details to the debug payload so the dashboard
