@@ -144,10 +144,24 @@
     void sendMessage(value);
   }
 
-  // Conductor-driven check-in path. On the final answer, signal
-  // form_complete so the conductor's qa_form → next-state transition fires.
-  function handleConductorPageAnswer(_questionId: string, value: string, isLast: boolean) {
-    void sendMessage(value, { formComplete: isLast });
+  // Send a typed system event over the harness WebSocket. The model service
+  // appends it to the session's events buffer (merged into the LLM-facing
+  // transcript stream) and, for kind="form_complete", steps the conductor
+  // and pushes back a view_update.
+  function sendSystemEvent(kind: string, payload: Record<string, unknown> = {}) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: "system_event", kind, payload, t: Date.now() / 1000 }));
+  }
+
+  // Conductor-driven check-in path. Each chip click emits a form_answer
+  // event; the final chip also emits form_complete so the conductor's
+  // qa_form → next-state transition fires. No /chat round-trip for chip
+  // clicks — the answers are structured signals, not user speech.
+  function handleConductorPageAnswer(questionId: string, value: string, isLast: boolean) {
+    sendSystemEvent("form_answer", { question_id: questionId, value });
+    if (isLast) {
+      sendSystemEvent("form_complete", { form_id: backendView.state_name ?? "unknown" });
+    }
   }
   const assistantPhase = $derived(deriveAssistantPhase({
     backendOnline,
@@ -428,6 +442,10 @@
         sttStatus = msg.stt_loaded
           ? `whisper.cpp ready: ${msg.stt_engine}/${msg.stt_model}`
           : "whisper.cpp not loaded";
+      } else if (msg.type === "view_update") {
+        // Conductor stepped on the model service (e.g. form_complete event)
+        // and pushed us a new view. Mirror it; render reactively.
+        if (msg.view) backendView = msg.view as ChatView;
       } else if (msg.type === "frame_debug") {
         harnessFrameCount = Number(msg.frame_count ?? harnessFrameCount);
         latestHarnessFrame = `data:image/jpeg;base64,${msg.image_data}`;
