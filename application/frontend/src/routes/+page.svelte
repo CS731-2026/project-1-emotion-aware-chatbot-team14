@@ -4,9 +4,22 @@
   import { PUBLIC_HARNESS_WS_URL } from "$env/static/public";
   import { api, type ChatDebug, type Message, type Profile } from "$lib/api";
   import { conversationState, setMode, setStage } from "$lib/conversation/store.svelte";
+  import {
+    checkInState,
+    openCheckIn,
+    closeCheckIn,
+  } from "$lib/conversation/checkInState.svelte";
+  import {
+    SAMPLE_OVERLAY_CONVERSATIONAL,
+    SAMPLE_OVERLAY_STATIC,
+    SAMPLE_PAGE_SEQUENTIAL,
+    SAMPLE_PAGE_ALL_AT_ONCE,
+  } from "$lib/conversation/sampleCheckIns";
   import ChatInput from "$lib/components/ChatInput.svelte";
   import DebugDashboard from "$lib/components/DebugDashboard.svelte";
+  import ModePanel from "$lib/components/ModePanel.svelte";
   import ProfileModal from "$lib/components/ProfileModal.svelte";
+  import QuestionnairePage from "$lib/components/QuestionnairePage.svelte";
   import SpeakingCircle from "$lib/components/SpeakingCircle.svelte";
   import WebcamPreview from "$lib/components/WebcamPreview.svelte";
   import {
@@ -57,7 +70,13 @@
   let audioDebugEvents = $state<string[]>([]);
   let currentAudioLevel = $state(0);
   let vadState = $state("Mic idle");
+  const DEBUG_VISIBLE_KEY = "debug:visible";
   let showDebugDashboard = $state(DEBUG_ENV_ENABLED);
+
+  function toggleDebugDashboard() {
+    showDebugDashboard = !showDebugDashboard;
+    if (browser) localStorage.setItem(DEBUG_VISIBLE_KEY, String(showDebugDashboard));
+  }
   let pendingTranscript = $state<string | null>(null);
   let lastPromotedTranscript = $state<string | null>(null);
   let speechPulse = $state(0);
@@ -69,6 +88,27 @@
   let browserVad: BrowserVadController | null = null;
 
   const bgColour = $derived(EMOTION_COLOURS[emotion]);
+  const isOverlayActive = $derived(
+    checkInState.active && checkInState.spec?.elevation === "overlay"
+  );
+  const isPageActive = $derived(
+    checkInState.active && checkInState.spec?.elevation === "page"
+  );
+
+  function cancelMicIfRecording() {
+    if (isListening) browserVad?.stop(isListening);
+  }
+
+  function handleOverlaySelect(value: string) {
+    void sendMessage(value);
+    closeCheckIn();
+  }
+
+  // Page-elevation answers stay open across questions; we don't close on each
+  // chip. Once the reasoner is wired this will also carry questionId metadata.
+  function handlePageAnswer(_questionId: string, value: string) {
+    void sendMessage(value);
+  }
   const assistantPhase = $derived(deriveAssistantPhase({
     backendOnline,
     profileReady: Boolean(profile),
@@ -116,6 +156,9 @@
     if (browser) {
       const params = new URLSearchParams(window.location.search);
       if (params.get("debug") === "1") showDebugDashboard = true;
+      // User toggle preference wins over env/URL once they've expressed it.
+      const stored = localStorage.getItem(DEBUG_VISIBLE_KEY);
+      if (stored !== null) showDebugDashboard = stored === "true";
     }
 
     try {
@@ -381,9 +424,10 @@
       }
     };
 
-    socket.onerror = () => {
+    socket.onerror = (error) => {
       harnessOnline = false;
       lastDetection = "Harness unavailable";
+      console.log(error)
     };
   }
 
@@ -448,6 +492,34 @@
     init();
   });
 
+  // Debug-only keypresses to open sample check-ins without backend involvement.
+  // Shift+1/2 → overlay variants. Shift+3/4 → full-page variants. Esc closes.
+  // Gated on the env flag (not the dashboard's visible state) so the shortcuts
+  // keep working when the dashboard panel is collapsed.
+  $effect(() => {
+    if (!DEBUG_ENV_ENABLED || !browser) return;
+
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+
+      if (e.shiftKey && e.code === "Digit1") {
+        openCheckIn(SAMPLE_OVERLAY_CONVERSATIONAL, "debug");
+      } else if (e.shiftKey && e.code === "Digit2") {
+        openCheckIn(SAMPLE_OVERLAY_STATIC, "debug");
+      } else if (e.shiftKey && e.code === "Digit3") {
+        openCheckIn(SAMPLE_PAGE_SEQUENTIAL, "debug");
+      } else if (e.shiftKey && e.code === "Digit4") {
+        openCheckIn(SAMPLE_PAGE_ALL_AT_ONCE, "debug");
+      } else if (e.key === "Escape" && checkInState.active) {
+        closeCheckIn();
+      }
+    }
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
   $effect(() => {
     return () => {
       if (ws) {
@@ -488,7 +560,19 @@
     </div>
   </header>
 
-  <main class="main-layout">
+  {#if isPageActive && checkInState.spec?.elevation === "page"}
+    <main class="page-mount">
+      <QuestionnairePage
+        spec={checkInState.spec}
+        onAnswer={handlePageAnswer}
+        onTextSubmit={sendMessage}
+        onCancelMic={cancelMicIfRecording}
+        {isListening}
+        onMicToggle={toggleMic}
+      />
+    </main>
+  {:else}
+  <main class="main-layout" class:hero-recede={isOverlayActive}>
     {#if conversationState.mode === "qa"}
       <section class="hero-shell">
         <div class="hero-copy">
@@ -519,7 +603,7 @@
           </div>
         </div>
 
-        <SpeakingCircle phase={assistantPhase} pulse={speechPulse} />
+        <SpeakingCircle phase={assistantPhase} pulse={speechPulse} compact={isOverlayActive} />
 
         <div class="transcript-shell">
           <p class="transcript-label">Live transcript</p>
@@ -560,6 +644,27 @@
       </section>
     {/if}
   </main>
+
+  {#if isOverlayActive && checkInState.spec?.elevation === "overlay"}
+    <div class="overlay-mount">
+      <ModePanel
+        spec={checkInState.spec}
+        onSelect={handleOverlaySelect}
+        onCancelMic={cancelMicIfRecording}
+        onTextSubmit={sendMessage}
+        {isListening}
+        onMicToggle={toggleMic}
+        disabled={chatBusy}
+      />
+    </div>
+  {/if}
+  {/if}
+
+  {#if DEBUG_ENV_ENABLED}
+    <button class="debug-toggle" type="button" onclick={toggleDebugDashboard}>
+      {showDebugDashboard ? "Hide debug" : "Show debug"}
+    </button>
+  {/if}
 
   {#if showDebugDashboard}
     <DebugDashboard
@@ -847,6 +952,80 @@
     }
     50% {
       transform: scaleY(calc(1 + var(--mic-pulse) * 0.6));
+    }
+  }
+
+  .debug-toggle {
+    position: fixed;
+    top: 1rem;
+    left: 1rem;
+    z-index: 60;
+    background: rgba(15, 18, 28, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: rgba(255, 255, 255, 0.82);
+    border-radius: 999px;
+    padding: 0.4rem 0.85rem;
+    font-size: 0.78rem;
+    cursor: pointer;
+    backdrop-filter: blur(20px);
+    transition: background 120ms ease, border-color 120ms ease;
+  }
+  .debug-toggle:hover {
+    background: rgba(15, 18, 28, 0.92);
+    border-color: rgba(255, 255, 255, 0.28);
+  }
+
+  /* Check-in overlay (elevation 1): floats over the hero, which recedes. */
+  .main-layout.hero-recede .hero-shell {
+    filter: brightness(0.78) saturate(0.85);
+    transform: scale(0.97);
+    transition: filter 280ms cubic-bezier(0.22, 1, 0.36, 1),
+                transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .main-layout.hero-recede .transcript-shell,
+  .main-layout.hero-recede .response-shell,
+  .main-layout.hero-recede .composer-shell {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .main-layout .hero-shell {
+    transition: filter 280ms cubic-bezier(0.22, 1, 0.36, 1),
+                transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .overlay-mount {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 1.5rem;
+    z-index: 50;
+    pointer-events: none;
+  }
+  .overlay-mount > :global(*) {
+    pointer-events: auto;
+  }
+
+  /* Full-page check-in (elevation 2): replaces the conversation surface. */
+  .page-mount {
+    flex: 1;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 2rem 1.5rem;
+    overflow-y: auto;
+    background:
+      radial-gradient(circle at top, rgba(255, 255, 255, 0.06), transparent 40%);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .main-layout .hero-shell,
+    .main-layout.hero-recede .hero-shell,
+    .main-layout.hero-recede .transcript-shell,
+    .main-layout.hero-recede .response-shell,
+    .main-layout.hero-recede .composer-shell {
+      transition: none;
     }
   }
 
