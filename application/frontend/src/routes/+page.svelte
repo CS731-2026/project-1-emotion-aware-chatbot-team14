@@ -116,7 +116,10 @@
   );
 
   function cancelMicIfRecording() {
-    if (isListening) browserVad?.stop(isListening);
+    // Abort any in-progress utterance but keep the audio engine alive —
+    // calling stop() here would close the AudioContext and never restart
+    // (the auto-listen $effect bails because isListening is still true).
+    browserVad?.cancelUtterance();
   }
 
   // Single funnel for every answer source — chip click, typed text, and

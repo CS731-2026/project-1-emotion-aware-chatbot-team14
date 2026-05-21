@@ -135,6 +135,24 @@ export class BrowserVadController {
     void this.stop(false);
   }
 
+  /** Abort the current utterance (if any) and keep the audio engine running.
+   *
+   * Used when something else (a chip click) consumes the user's intent, so
+   * the in-progress speech should not become a chat turn. Unlike stop(),
+   * this leaves the AudioContext + worklet alive so the next utterance is
+   * captured normally.
+   */
+  cancelUtterance() {
+    if (!this.workletNode) return;  // not running; nothing to cancel
+    this.utteranceActive = false;
+    this.silenceStartedAt = null;
+    this.frames = [];
+    this.levels = [];
+    this.currentAudioLevel = 0;
+    this.callbacks.onAudioLevel(0);
+    this.callbacks.onVadState("Listening");
+  }
+
   /** Receive a PCM frame from the worklet. Drives the windowed VAD state machine. */
   private onFrame(pcm: Float32Array) {
     // Compute RMS of this frame and update level history.
