@@ -138,7 +138,7 @@ def _run_extraction_on_transition(
     session.state_started_at = now
 
 
-def _step_conductor(
+async def _step_conductor(
     session: HarnessSession | None,
     *,
     form_completed: bool,
@@ -153,8 +153,11 @@ def _step_conductor(
 
     When the conductor transitions, runs end-of-state fact extraction on
     the just-left state and emits a segment_summary event into the
-    session's events buffer. `hri` is required for extraction; pass None
-    only when the caller knows no transition can happen.
+    session's events buffer. The extraction is an LLM call that can block
+    for several seconds — it runs in a worker thread so the event loop
+    keeps servicing WebSocket video frames. `hri` is required for
+    extraction; pass None only when the caller knows no transition can
+    happen.
     """
     if session is None:
         return None, None, "chat", None, False
@@ -164,11 +167,14 @@ def _step_conductor(
         form_completed=form_completed,
         advance_emission=advance_emission,
     )
-    decision = session.conductor.observe(ctx)
+    decision = session.conductor.observe(ctx)        # cheap, on the loop
     if decision.transitioned:
         session.turn_in_state = 0
         if decision.prev_state_name and hri is not None:
-            _run_extraction_on_transition(session, decision.prev_state_name, hri)
+            await asyncio.to_thread(
+                _run_extraction_on_transition,
+                session, decision.prev_state_name, hri,
+            )
     else:
         session.turn_in_state += 1
     return (
@@ -195,7 +201,7 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
 
     # Step 0a: walk the conductor with whatever pre-LLM signals we have.
     # The post-LLM advance_emission re-step happens after the reasoner runs.
-    intention, state_name, surface, spec, _transitioned = _step_conductor(
+    intention, state_name, surface, spec, _transitioned = await _step_conductor(
         session, form_completed=body.form_complete, advance_emission=False, hri=hri,
     )
     advance_instruction = (
@@ -252,7 +258,7 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
     # post-advance view. The reply text has already had markers stripped.
     advance_emitted = any(e.name == "advance" for e in result.emissions)
     if advance_emitted:
-        intention, state_name, surface, spec, _transitioned2 = _step_conductor(
+        intention, state_name, surface, spec, _transitioned2 = await _step_conductor(
             session, form_completed=False, advance_emission=True, hri=hri,
         )
 
