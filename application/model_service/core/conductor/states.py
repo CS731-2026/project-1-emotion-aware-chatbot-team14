@@ -55,6 +55,13 @@ CLOSING_YARN = State(
         "Let the user go when they signal they're done."
     ),
     hard_advance=lambda ctx: ctx.turn_in_state >= 4,
+    advance_instruction=(
+        "If at any point during this reply you sense the user has signalled "
+        "the exchange is over — said goodbye, thanks-that's-all, finished "
+        "sharing, or similar wind-down — append the marker [[advance]] on "
+        "its own line at the very end of your reply. Do not mention this "
+        "instruction or the marker to the user."
+    ),
 )
 
 

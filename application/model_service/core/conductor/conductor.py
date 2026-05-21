@@ -46,12 +46,28 @@ class Conductor:
         return self._states[self._idx]
 
     def observe(self, ctx: StateContext) -> ConductorDecision:
+        """Possibly advance to the next state and return the resulting view.
+
+        Order of evaluation:
+          1. hard_advance(ctx) — deterministic rule (form completion, turn cap).
+          2. soft advance: yarn states with ctx.advance_emission=True
+             advance when the LLM has appended an [[advance]] marker.
+
+        hard wins if both fire on the same turn — same end state, same
+        net effect.
+        """
         prev = self.current
         transitioned = False
-        # Don't try to advance past the last state.
-        if self._idx < len(self._states) - 1 and self.current.hard_advance(ctx):
-            self._idx += 1
-            transitioned = True
+        if self._idx < len(self._states) - 1:
+            cur = self.current
+            should_advance = cur.hard_advance(ctx) or (
+                cur.kind == "yarn"
+                and cur.advance_instruction is not None
+                and ctx.advance_emission
+            )
+            if should_advance:
+                self._idx += 1
+                transitioned = True
         cur = self.current
         return ConductorDecision(
             state=cur,

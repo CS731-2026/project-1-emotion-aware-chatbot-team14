@@ -92,7 +92,9 @@ _Surface = Literal["chat", "checkin", "done"]
 
 def _step_conductor(
     session: HarnessSession | None,
+    *,
     form_completed: bool,
+    advance_emission: bool,
 ) -> tuple[str | None, str | None, _Surface, CheckInSpec | None, bool]:
     """Advance the per-session conductor by one turn.
 
@@ -106,7 +108,7 @@ def _step_conductor(
     ctx = StateContext(
         turn_in_state=session.turn_in_state,
         form_completed=form_completed,
-        advance_emission=False,      # i4 plumbs this in
+        advance_emission=advance_emission,
     )
     decision = session.conductor.observe(ctx)
     if decision.transitioned:
@@ -135,10 +137,13 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
     session = get_session(body.profile_id)
     emotion_observations = session.emotion_buffer.history() if session else []
 
-    # Step 0: walk the session conductor forward by one turn. Produces the
-    # intention the reasoner will use and the view the frontend will render.
+    # Step 0a: walk the conductor with whatever pre-LLM signals we have.
+    # The post-LLM advance_emission re-step happens after the reasoner runs.
     intention, state_name, surface, spec, _transitioned = _step_conductor(
-        session, form_completed=body.form_complete,
+        session, form_completed=body.form_complete, advance_emission=False,
+    )
+    advance_instruction = (
+        session.conductor.current.advance_instruction if session else None
     )
 
     if hri.emotion_agent and hri.llm_agent:
@@ -160,6 +165,7 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
             stage=body.stage,
             intention=intention,
             system_events=system_events,
+            advance_instruction=advance_instruction,
         )
 
         # Step 4: run the current LLM reasoning pipeline to produce a structured result.
@@ -176,6 +182,7 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
             body.stage,
             intention,
             system_events,
+            advance_instruction,
         )
     else:
         latest_emotion = emotion_observations[-1].emotion if emotion_observations else "unknown"
@@ -183,6 +190,15 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
         # Stub mode never transitions — keep the caller's state.
         result = ReasoningResult(reply=reply, next_mode=body.mode, next_stage=body.stage)
         debug = _fallback_debug_snapshot(body, latest_emotion, intention)
+
+    # Step 5: pick up any inline tool emissions from the reply (e.g.
+    # [[advance]]) and re-step the conductor so the response carries the
+    # post-advance view. The reply text has already had markers stripped.
+    advance_emitted = any(e.name == "advance" for e in result.emissions)
+    if advance_emitted:
+        intention, state_name, surface, spec, _transitioned2 = _step_conductor(
+            session, form_completed=False, advance_emission=True,
+        )
 
     # Soft turn cap: count this user message plus prior user turns in history.
     user_turns = sum(1 for m in body.history if m.role == "user") + 1
