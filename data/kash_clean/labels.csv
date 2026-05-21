@@ -1,0 +1,119 @@
+filename,path,eb_label,label_name,split,val_sample,blur_score
+4_IMG_2527_00000.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2527_00000.jpg,4,confusion,train,False,163.1
+4_IMG_2552_00001.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2552_00001.jpg,4,confusion,train,False,87.7
+4_IMG_2552_00002.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2552_00002.jpg,4,confusion,train,False,99.9
+4_IMG_2563_00003.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2563_00003.jpg,4,confusion,train,False,320.8
+4_IMG_2564_00004.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2564_00004.jpg,4,confusion,train,False,224.7
+4_IMG_2565_00005.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2565_00005.jpg,4,confusion,train,False,272.1
+4_IMG_2566_00006.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2566_00006.jpg,4,confusion,train,False,183.3
+4_IMG_2577_00007.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2577_00007.jpg,4,confusion,train,False,238.8
+4_IMG_2578_00008.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2578_00008.jpg,4,confusion,train,True,226.6
+4_IMG_2579_00009.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2579_00009.jpg,4,confusion,train,False,226.3
+4_IMG_2602_00021.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2602_00021.jpg,4,confusion,train,False,123.2
+4_IMG_2602_00022.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2602_00022.jpg,4,confusion,train,False,154.5
+4_IMG_2713_00023.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2713_00023.jpg,4,confusion,train,False,136.1
+4_IMG_2713_00024.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2713_00024.jpg,4,confusion,train,False,168.4
+4_IMG_2724_00025.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2724_00025.jpg,4,confusion,train,False,145.2
+4_IMG_2724_00026.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2724_00026.jpg,4,confusion,train,True,180.3
+4_IMG_2748 copy_00027.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2748 copy_00027.jpg,4,confusion,train,False,202.3
+4_IMG_2748_00028.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2748_00028.jpg,4,confusion,train,False,202.3
+4_IMG_2748_00029.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2748_00029.jpg,4,confusion,train,False,253.1
+4_IMG_2760_00030.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2760_00030.jpg,4,confusion,train,True,100.4
+4_IMG_2760_00031.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2760_00031.jpg,4,confusion,train,False,126.4
+4_IMG_2768_00032.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2768_00032.jpg,4,confusion,train,True,98.6
+4_IMG_2768_00033.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2768_00033.jpg,4,confusion,train,False,122.6
+4_IMG_2778_00034.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2778_00034.jpg,4,confusion,train,False,122.5
+4_IMG_2778_00035.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2778_00035.jpg,4,confusion,train,True,151.7
+4_IMG_2783_00036.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2783_00036.jpg,4,confusion,train,False,149.4
+4_IMG_2783_00037.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2783_00037.jpg,4,confusion,train,True,185.4
+4_IMG_2829_00038.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2829_00038.jpg,4,confusion,train,True,113.4
+4_IMG_2829_00039.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2829_00039.jpg,4,confusion,train,False,139.9
+4_IMG_2858_00040.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2858_00040.jpg,4,confusion,train,False,129.6
+4_IMG_2880_00041.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2880_00041.jpg,4,confusion,train,False,111.0
+4_IMG_2894_00042.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2894_00042.jpg,4,confusion,train,False,130.7
+4_IMG_2914_00043.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2914_00043.jpg,4,confusion,train,False,132.8
+4_IMG_2955_00044.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/4_IMG_2955_00044.jpg,4,confusion,train,False,107.1
+5_IMG_2567_00052.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/5_IMG_2567_00052.jpg,5,distrust,train,False,353.1
+5_IMG_2568_00053.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/5_IMG_2568_00053.jpg,5,distrust,train,True,319.6
+5_IMG_2574_00054.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/5_IMG_2574_00054.jpg,5,distrust,train,False,238.4
+5_IMG_2713_00055.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/5_IMG_2713_00055.jpg,5,distrust,train,False,136.1
+5_IMG_2724_00056.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/5_IMG_2724_00056.jpg,5,distrust,train,False,145.2
+5_IMG_2736 Background Removed_00057.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/5_IMG_2736 Background Removed_00057.jpg,5,distrust,train,False,147.0
+5_IMG_2736 copy_00058.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/5_IMG_2736 copy_00058.jpg,5,distrust,train,False,137.5
+5_IMG_2736_00059.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/5_IMG_2736_00059.jpg,5,distrust,train,True,137.5
+5_IMG_2736_00060.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/5_IMG_2736_00060.jpg,5,distrust,train,False,171.8
+1_IMG_2575_00061.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2575_00061.jpg,1,trust_relief,train,False,241.6
+1_IMG_2576_00062.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2576_00062.jpg,1,trust_relief,train,False,215.0
+1_IMG_2582_00063.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2582_00063.jpg,1,trust_relief,train,False,246.2
+1_IMG_2583_00064.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2583_00064.jpg,1,trust_relief,train,False,294.5
+1_IMG_2637_00065.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2637_00065.jpg,1,trust_relief,train,True,108.4
+1_IMG_2637_00066.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2637_00066.jpg,1,trust_relief,train,False,134.3
+1_IMG_2650 Background Removed_00069.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2650 Background Removed_00069.jpg,1,trust_relief,train,False,215.7
+1_IMG_2650 copy_00070.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2650 copy_00070.jpg,1,trust_relief,train,False,111.5
+1_IMG_2650_00071.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2650_00071.jpg,1,trust_relief,train,True,111.5
+1_IMG_2650_00072.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2650_00072.jpg,1,trust_relief,train,False,140.0
+1_IMG_2654 Background Removed_00073.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2654 Background Removed_00073.jpg,1,trust_relief,train,False,219.7
+1_IMG_2654 copy_00074.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2654 copy_00074.jpg,1,trust_relief,train,False,109.9
+1_IMG_2654_00075.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2654_00075.jpg,1,trust_relief,train,True,109.9
+1_IMG_2654_00076.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2654_00076.jpg,1,trust_relief,train,False,136.4
+1_IMG_2669 Background Removed_00077.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2669 Background Removed_00077.jpg,1,trust_relief,train,False,242.7
+1_IMG_2669 copy_00078.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2669 copy_00078.jpg,1,trust_relief,train,False,126.1
+1_IMG_2669_00079.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2669_00079.jpg,1,trust_relief,train,False,126.1
+1_IMG_2669_00080.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2669_00080.jpg,1,trust_relief,train,False,156.7
+1_IMG_2675 Background Removed_00081.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2675 Background Removed_00081.jpg,1,trust_relief,train,False,172.3
+1_IMG_2675 copy_00082.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2675 copy_00082.jpg,1,trust_relief,train,False,127.3
+1_IMG_2675_00083.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2675_00083.jpg,1,trust_relief,train,False,127.3
+1_IMG_2675_00084.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2675_00084.jpg,1,trust_relief,train,False,158.4
+1_IMG_2689 copy_00085.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2689 copy_00085.jpg,1,trust_relief,train,False,108.7
+1_IMG_2689_00086.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2689_00086.jpg,1,trust_relief,train,False,108.7
+1_IMG_2689_00087.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2689_00087.jpg,1,trust_relief,train,False,136.4
+1_IMG_2695 copy_00088.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2695 copy_00088.jpg,1,trust_relief,train,True,101.2
+1_IMG_2695_00089.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2695_00089.jpg,1,trust_relief,train,True,101.2
+1_IMG_2695_00090.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2695_00090.jpg,1,trust_relief,train,False,127.0
+1_IMG_2709 copy_00091.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2709 copy_00091.jpg,1,trust_relief,train,False,116.6
+1_IMG_2709_00092.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2709_00092.jpg,1,trust_relief,train,False,116.6
+1_IMG_2709_00093.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2709_00093.jpg,1,trust_relief,train,False,144.7
+1_IMG_2793 copy_00094.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2793 copy_00094.jpg,1,trust_relief,train,False,104.8
+1_IMG_2793_00095.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2793_00095.jpg,1,trust_relief,train,False,104.8
+1_IMG_2793_00096.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2793_00096.jpg,1,trust_relief,train,False,130.2
+1_IMG_2810 copy_00097.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2810 copy_00097.jpg,1,trust_relief,train,False,98.0
+1_IMG_2810_00098.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2810_00098.jpg,1,trust_relief,train,True,98.0
+1_IMG_2810_00099.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2810_00099.jpg,1,trust_relief,train,False,122.8
+1_IMG_2858 Background Removed_00100.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2858 Background Removed_00100.jpg,1,trust_relief,train,False,203.2
+1_IMG_2925 Background Removed_00101.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2925 Background Removed_00101.jpg,1,trust_relief,train,False,249.8
+1_IMG_2925_00102.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2925_00102.jpg,1,trust_relief,train,True,103.8
+1_IMG_2935 Background Removed_00103.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2935 Background Removed_00103.jpg,1,trust_relief,train,False,219.3
+1_IMG_2935_00104.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2935_00104.jpg,1,trust_relief,train,True,112.9
+1_IMG_2947 Background Removed_00105.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2947 Background Removed_00105.jpg,1,trust_relief,train,False,232.6
+1_IMG_2947_00106.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2947_00106.jpg,1,trust_relief,train,False,100.2
+1_IMG_2968 Background Removed_00107.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2968 Background Removed_00107.jpg,1,trust_relief,train,True,266.3
+1_IMG_2968_00108.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/1_IMG_2968_00108.jpg,1,trust_relief,train,False,106.6
+0_IMG_2559_00109.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/0_IMG_2559_00109.jpg,0,neutral,train,False,511.6
+0_IMG_2560_00110.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/0_IMG_2560_00110.jpg,0,neutral,train,True,503.7
+0_IMG_2561_00111.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/0_IMG_2561_00111.jpg,0,neutral,train,False,523.5
+0_IMG_2562_00112.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/0_IMG_2562_00112.jpg,0,neutral,train,False,380.4
+0_IMG_2618_00115.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/0_IMG_2618_00115.jpg,0,neutral,train,False,129.2
+0_IMG_2618_00116.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/0_IMG_2618_00116.jpg,0,neutral,train,True,161.1
+0_IMG_2625_00117.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/0_IMG_2625_00117.jpg,0,neutral,train,False,111.5
+0_IMG_2625_00118.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/0_IMG_2625_00118.jpg,0,neutral,train,False,138.4
+2_IMG_2523_00119.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/2_IMG_2523_00119.jpg,2,sadness,train,True,81.4
+2_IMG_2528_00121.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/2_IMG_2528_00121.jpg,2,sadness,train,True,208.7
+2_IMG_2534_00122.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/2_IMG_2534_00122.jpg,2,sadness,train,False,110.4
+2_IMG_2534_00123.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/2_IMG_2534_00123.jpg,2,sadness,train,False,125.4
+2_IMG_2580_00126.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/2_IMG_2580_00126.jpg,2,sadness,train,False,94.7
+2_IMG_2581_00127.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/2_IMG_2581_00127.jpg,2,sadness,train,False,276.2
+2_IMG_2778_00130.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/2_IMG_2778_00130.jpg,2,sadness,train,False,122.5
+2_IMG_2819 Background Removed_00131.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/2_IMG_2819 Background Removed_00131.jpg,2,sadness,train,False,311.7
+2_IMG_2819 copy_00132.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/2_IMG_2819 copy_00132.jpg,2,sadness,train,False,127.0
+2_IMG_2819_00133.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/2_IMG_2819_00133.jpg,2,sadness,train,False,127.0
+2_IMG_2819_00134.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/2_IMG_2819_00134.jpg,2,sadness,train,False,156.9
+2_IMG_2829 Background Removed_00135.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/2_IMG_2829 Background Removed_00135.jpg,2,sadness,train,False,297.4
+2_IMG_2829_00136.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/2_IMG_2829_00136.jpg,2,sadness,train,False,113.4
+2_IMG_2847 Background Removed_00137.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/2_IMG_2847 Background Removed_00137.jpg,2,sadness,train,False,204.3
+2_IMG_2847_00138.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/2_IMG_2847_00138.jpg,2,sadness,train,False,130.3
+2_IMG_2880 Background Removed_00139.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/2_IMG_2880 Background Removed_00139.jpg,2,sadness,train,True,174.7
+2_IMG_2890 Background Removed_00140.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/2_IMG_2890 Background Removed_00140.jpg,2,sadness,train,False,266.4
+2_IMG_2890_00141.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/2_IMG_2890_00141.jpg,2,sadness,train,True,132.1
+2_IMG_2894 Background Removed_00142.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/2_IMG_2894 Background Removed_00142.jpg,2,sadness,train,False,276.8
+2_IMG_2914 Background Removed_00143.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/2_IMG_2914 Background Removed_00143.jpg,2,sadness,train,False,196.6
+2_IMG_2955 Background Removed_00144.jpg,/Users/pv/Documents/STUDY/CODEprojects/project-1-emotion-aware-chatbot-team14/data/kash_clean/images/2_IMG_2955 Background Removed_00144.jpg,2,sadness,train,False,253.7

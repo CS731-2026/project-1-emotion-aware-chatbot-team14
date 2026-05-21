@@ -4,7 +4,6 @@ import asyncio
 import json
 import logging
 import time
-from typing import Callable, Awaitable
 from typing import Any, Awaitable, Callable, cast
 
 import numpy as np
@@ -12,9 +11,8 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 import config
 from core.app_state import HRIAppState
-from core.emotion.base import EmotionModel
+from core.emotion.base import EMOTIONS, EmotionModel
 from ws.session import (
-    EMOTIONS,
     HarnessSession,
     create_session,
     remove_session,
