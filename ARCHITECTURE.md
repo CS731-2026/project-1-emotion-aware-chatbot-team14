@@ -21,10 +21,9 @@ Three services run together:
 │    ▼                              ▼                         │
 │  FastAPI model service (localhost:8000)                     │
 │    └── YOLOv8 face detector                                 │
-│    └── Emotion model — EmpathBotV1 (via models.yaml)        │
-│    │       placeholder / resnet18 also selectable           │
+│    └── Emotion model  ← PLACEHOLDER — needs real model      │
 │    └── whisper.cpp STT                                      │
-│    └── LLM (OpenAI / Gemini / Ollama / Anthropic)           │
+│    └── LLM (OpenAI / Ollama / Anthropic)                   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -48,7 +47,7 @@ This is the continuous stream that populates the emotional context used by the L
 frontend/src/routes/+page.svelte
   captureVideoFrame()             — canvas.drawImage(videoEl) → toDataURL("image/jpeg")
   ws.send({type:"video_frame", data: base64JPEG, timestamp})
-  [every FRAME_INTERVAL_MS = 200 ms — see frontend/src/lib/harness/types.ts]
+  [every FRAME_INTERVAL_MS = 500 ms]
         │
         ▼  WebSocket
 application/model_service/ws/handler.py
@@ -68,19 +67,20 @@ application/model_service/ws/handler.py
     │    returns (face_crop, box_xyxy) or (None, None)
     │
     │  ┌──────────────────────────────────────────────────────────────────────┐
-    │  │  EMOTION MODEL INVOCATION                                            │
+    │  │  ⚠ EMOTION MODEL INTEGRATION POINT                                  │
     │  │  ws/handler.py  pick_emotion(face_crop, emotion_model, detected)     │
     │  │                                                                      │
-    │  │  Reads core/debug_flags.py::emotion at runtime. Priority:           │
-    │  │    1. force_label       → pin a label (debug)                       │
-    │  │    2. cycle_test_labels → step through EMOTIONS on a timer (debug)  │
-    │  │    3. emotion_model.predict(face_crop)                              │
-    │  │    4. ("neutral", 0.5)  fallback                                    │
+    │  │  CURRENT (placeholder):                                              │
+    │  │    if config.TEST_EMOTIONS:  → random.choice(EMOTIONS)  (default)   │
+    │  │    else:                     → "neutral", 0.5                        │
     │  │                                                                      │
-    │  │  Model selection (loaded once at startup):                          │
-    │  │    EMOTION_MODEL_ID=<id>  → resolved via models.yaml (preferred)    │
-    │  │    EMOTION_VARIANT=<name> → legacy fallback                         │
-    │  │  See "Integration Points" below for adding a new variant.           │
+    │  │  TO INTEGRATE A REAL MODEL:                                          │
+    │  │    1. Implement EmotionModel ABC → core/emotion/<name>.py            │
+    │  │       def predict(face_bgr: np.ndarray) → (label: str, conf: float) │
+    │  │    2. Register in core/emotion/factory.py                            │
+    │  │    3. Set EMOTION_VARIANT=<name>, TEST_EMOTIONS=false in .env        │
+    │  │    pick_emotion() will call emotion_model.predict(face_crop)         │
+    │  │    automatically — no other changes needed.                          │
     │  └──────────────────────────────────────────────────────────────────────┘
     │
     ├─ core/emotion/buffer.py  EmotionBuffer.update(emotion, confidence, timestamp)
@@ -235,11 +235,15 @@ frontend: ChatHistory.svelte renders the new messages
 
 ## Integration Points — What to Build Next
 
-### 1. Adding a new emotion model variant
+### 1. Real Emotion Model (`⚠ highest priority`)
 
-The pipeline already runs a real model (`EmpathBotV1`) by default via the registry. To add another variant — e.g. a different architecture, ensemble, or a teammate's hand-trained checkpoint:
+**Where:** `application/model_service/ws/handler.py`, function `pick_emotion()`.
 
-**Step 1 — Implement `EmotionModel` in a new file:**
+**Current state:** returns a random emotion when `TEST_EMOTIONS=true` (default), or `"neutral"` otherwise. `face_crop` is prepared by `ws/video.py` but `emotion_model.predict()` is only called when a real model is loaded.
+
+**What to do:**
+
+Step 1 — Implement `EmotionModel` in a new file:
 ```
 application/model_service/core/emotion/<your_model_name>.py
 ```
@@ -247,36 +251,26 @@ Must implement the ABC from `core/emotion/base.py`:
 ```python
 def predict(self, face_bgr: np.ndarray) -> tuple[str, float]:
     # face_bgr: uint8 BGR crop of the detected face, any size
-    # returns: (emotion_label, confidence) where label ∈ EMOTIONS
-    #   EMOTIONS = ['neutral', 'trust_relief', 'sadness',
-    #               'fear_anxiety', 'confusion', 'distrust']
+    # returns: (emotion_label, confidence) where label ∈ EmotionModel.EMOTIONS
+    #   EMOTIONS = ['angry','disgust','fear','happy','sad','surprise','neutral']
 ```
 
-The model **is the source of truth** for label semantics. If your checkpoint stores `class_names`, assert it matches `EMOTIONS` at load time and fail loud on mismatch (see `core/emotion/empathbot.py` for the pattern).
-
-**Step 2 — Register it in the factory:**
+Step 2 — Register it in the factory:
 ```python
 # core/emotion/factory.py
 if variant == "your_model_name":
     from .your_model_name import YourEmotionModel
-    return YourEmotionModel(checkpoint_path=checkpoint_path, device=config.EMOTION_DEVICE)
+    return YourEmotionModel()
 ```
 
-**Step 3 — Add a registry entry:**
-```yaml
-# application/model_service/models.yaml
-models:
-  your_model_id:
-    path:    models/your_model/your_checkpoint.pth
-    variant: your_model_name
+Step 3 — Set the env vars:
+```
+# application/model_service/.env
+EMOTION_VARIANT=your_model_name
+TEST_EMOTIONS=false
 ```
 
-**Step 4 — Select it in `.env`:**
-```
-EMOTION_MODEL_ID=your_model_id
-```
-
-`pick_emotion()` already calls `emotion_model.predict(face_crop)` whenever a model is loaded — no other changes needed. The face crop arrives as BGR uint8 from the face detector; resize and normalise inside `predict()` to match the model's expected input.
+`pick_emotion()` in `ws/handler.py` already calls `emotion_model.predict(face_crop)` when the model is loaded — no other changes needed. The face crop arrives as BGR uint8 from the face detector; resize inside `predict()` to match your model's expected input.
 
 ---
 
@@ -333,8 +327,7 @@ ws/handler.py: handle_websocket()           — thin dispatcher only
   │      decode_frame()                         decode base64 JPEG → BGR numpy
   │      run_face_detection()                   YOLO → face_crop, box, annotated frame
   │        core/face_detector.py: detect_best() [WORKING]
-  │    ws/handler.py: pick_emotion()            [WORKING — calls real model]
-  │      reads core/debug_flags.py::emotion (force/cycle/log override)
+  │    ws/handler.py: pick_emotion()            [PLACEHOLDER → NEEDS REAL MODEL]
   │      emotion_model.predict(face_crop)       only invocation point in the codebase
   │    core/emotion/buffer.py: EmotionBuffer.update()   [WORKING]
   │    _send_frame_messages()                   face_detection + frame_debug + emotion_update
@@ -416,9 +409,7 @@ FastAPI + Python. All ML work happens here.
 
 ```
 app.py           FastAPI app creation, lifespan (loads all ML components), WS + router mounting
-config.py        All env vars (STT_ENGINE, EMOTION_MODEL_ID, EMOTION_VARIANT, LLM_PROVIDER, EMOTION_CYCLE_TEST_LABELS, EMOTION_FORCE_LABEL, …)
-                 Plus load_model_registry() — reads models.yaml
-models.yaml      Local model registry (id → path + variant)
+config.py        All env vars (STT_ENGINE, EMOTION_VARIANT, LLM_PROVIDER, TEST_EMOTIONS…)
 main.py          Uvicorn entry point
 routers/
 └── chat.py      POST /api/v1/chat — the only HTTP route; reads WS session state, calls LLM
@@ -431,17 +422,13 @@ ws/
 │                  detect_from_message, FrameDetectionResult — no emotion logic
 └── protocol.py  Dataclass definitions for all WS message types (documentation reference)
 core/
-├── __init__.py                  Re-exports debug_flags for `from core import debug_flags`
-├── debug_flags.py               Mutable runtime flags (cycle/force/log) seeded from .env
 ├── face_detector.py             YOLOv8 face detector (HuggingFace, auto-downloaded + cached)
 ├── emotional_reasoning_agent.py EmotionObservation[] + transcript[] → context string
 ├── emotion/
-│   ├── base.py        EmotionModel ABC + EMOTIONS list (EmpathBot 6-class)
+│   ├── base.py        EmotionModel ABC — implement this to add a real model
 │   ├── buffer.py      EmotionBuffer (deque, window=10) + EmotionObservation dataclass
-│   ├── factory.py     create_emotion_model() — checks EMOTION_MODEL_ID then EMOTION_VARIANT
-│   ├── placeholder.py Returns random emotion (kept for fallback/testing)
-│   ├── resnet18.py    Vanilla torchvision ResNet18 + Linear head
-│   └── empathbot.py   EmpathBotV1 (EfficientNet-B2 / ResNet18+SE) — currently loaded by default
+│   ├── factory.py     create_emotion_model(variant) — add new variants here
+│   └── placeholder.py Returns random emotion; used until real model is integrated
 ├── llm/
 │   ├── base.py            LLMProvider ABC + Message TypedDict
 │   ├── openai.py          OpenAI Chat Completions (working)
@@ -469,7 +456,7 @@ core/
 | type | key payload fields | sent when |
 |---|---|---|
 | `session_start` | `profile_id: str` | browser opens WS |
-| `video_frame` | `data: base64 JPEG`, `timestamp: float` | every 200 ms (`FRAME_INTERVAL_MS`) |
+| `video_frame` | `data: base64 JPEG`, `timestamp: float` | every 500 ms |
 | `audio_chunk` | `data: base64 WebM`, `timestamp: float`, `duration_ms`, `rms_level` | after VAD detects speech |
 | `session_end` | — | page unload |
 
@@ -495,7 +482,7 @@ core/
 2. Page loads → `+page.server.ts` calls `GET /api/v1/session`, `GET /api/v1/profiles`, `GET /api/v1/history` server-side.
 3. Browser opens WebSocket to `ws://localhost:8000/ws` → sends `{type:"session_start", profile_id}`.
 4. Model service creates `HarnessSession` in `_sessions[profile_id]` with a fresh `EmotionBuffer` and empty `transcript_buffer`.
-5. Video frames stream every 200 ms → face detection + emotion model → `emotion_buffer` fills up.
+5. Video frames stream every 500 ms → face detection + (placeholder) emotion → `emotion_buffer` fills up.
 6. Mic audio streams when speech detected → STT → `transcript_buffer` fills up.
 7. User sends chat message → browser → SvelteKit → Express → `POST /api/v1/chat` on model service.
 8. Chat handler reads `emotion_buffer.history()` + `transcript_buffer[-20:]` from session.
@@ -510,25 +497,20 @@ core/
 | Component | File | Status |
 |---|---|---|
 | Face detection (YOLOv8) | `core/face_detector.py` | Working |
-| Emotion model (EmpathBotV1) | `core/emotion/empathbot.py` | Working — selected via `EMOTION_MODEL_ID=empathbot_final` |
-| Emotion model (resnet18) | `core/emotion/resnet18.py` | Working — vanilla ResNet18, needs a compatible checkpoint |
-| Emotion model (placeholder) | `core/emotion/placeholder.py` | Working — emits random labels (testing only) |
-| Emotion buffer | `core/emotion/buffer.py` | Working |
-| Debug flags | `core/debug_flags.py` | Working — runtime cycle / force / log overrides |
+| Emotion model | `core/emotion/placeholder.py` | **Placeholder — random output** |
+| Emotion buffer | `core/emotion/buffer.py` | Working (feeds real model when ready) |
 | STT (whisper.cpp) | `core/stt/whisper_cpp.py` | Working |
 | STT (faster-whisper) | `core/stt/whisper_faster.py` | Implemented, tested less |
-| Emotional reasoning | `core/emotional_reasoning_agent.py` | Basic — mode only, ignores confidence + transcript |
+| Emotional reasoning | `core/emotional_reasoning_agent.py` | Basic — mode only, ignores transcript |
 | LLM reasoning | `core/llm/reasoning_agent.py` | Working — static window and prompt |
 | LLM (OpenAI) | `core/llm/openai.py` | Working |
-| LLM (Gemini) | `core/llm/gemini.py` | Working — set `LLM_PROVIDER=gemini` |
 | LLM (Anthropic) | `core/llm/anthropic.py` | **Stub — NotImplementedError** |
 | LLM (Ollama) | `core/llm/ollama.py` | Implemented, untested |
 | Profile persistence | `backend/src/lib/profileStore.ts` | Working |
 | Conversation history | `backend/src/routes/history.router.ts` | Working |
-| Transcript → reasoning | `ws/handler.py` + `emotional_reasoning_agent.py` | Collected but unused (low-hanging fruit) |
-| Face cropper (CLI/library) | `face_cropper.py`, `face_cropper/` | Working — re-exports `FaceDetector` for notebooks |
+| Transcript → reasoning | `ws/handler.py` + `emotional_reasoning_agent.py` | Collected but unused |
 
-To bypass the model during development, set `EMOTION_CYCLE_TEST_LABELS=true` (rotates through `EMOTIONS` on a timer) or `EMOTION_FORCE_LABEL=<label>` (pins one). Both can also be flipped at runtime via `core/debug_flags.py`.
+`TEST_EMOTIONS=true` (default) bypasses the emotion model entirely and emits random emotions — lets you develop and test the UI and LLM integration before the real model is ready.
 
 ---
 

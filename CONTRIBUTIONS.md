@@ -36,16 +36,23 @@ We are doing this deliberately to keep momentum. A rigid production workflow wou
 - branches do not need to map to formal tickets in the traditional sense
 - branches should instead reflect a line of inquiry
 
-Branch names should reflect the question being explored or the product change being made. The prefixes we've settled on in practice:
+Branch names should reflect the question being explored.
 
-| Prefix | Use it when… | Examples |
-|---|---|---|
-| `invest/<q>` | You're investigating a question — no commitment to landing the result | `invest/api-auth-flow`, `invest/can-we-use-library-x` |
-| `integration/<q>` | You've answered a question and you're landing the result into `application/` | `integration/data-shape-for-search` |
-| `feat/<thing>` | A product feature on the canonical web app | `feat/multi-page-flow`, `feat/model-integration`, `feat/check-in-panel` |
-| `tj-<name>` / `<student>-<name>` | Personal scratch in your sandbox | `tj-roaming`, `tj-repo-file-cleanup` |
+Examples:
+- `invest/api-auth-flow`
+- `invest/dashboard-layout-options`
+- `invest/data-shape-for-search`
+- `invest/can-we-use-library-x`
 
-The point of the branch is to investigate something that matters or build a real feature, not to imitate a production workflow. Because we expect branches to be short-lived, create pull requests to merge your branch into `main` often — even if the work is incomplete.
+The point of the branch is to investigate something that matters, not to imitate a production workflow. 
+Because we expect branches to short lived, create pull requests to merge your branch into `main` often. Even if the work is incomplete.
+
+Or branches should reflect the integration of results of inquiry into the main application logic.
+
+- `integration/api-auth-flow`
+- `integration/dashboard-layout-options`
+- `integration/data-shape-for-search`
+- `integration/can-we-use-library-x`
 
 ## Exploratory work
 
@@ -97,12 +104,7 @@ Better task framing:
 - which implementation approach is simplest and most reliable?
 
 ## Pull requests and merges
-
-Because this is a non-standard branching flow, it's rational to expect merge conflicts as we merge both investigation and feature branches into `main` frequently. To mitigate this:
-
-- All investigation work should go into your `sandbox/student_<name>/` folder.
-- The following are treated as **protected folders** — changes need a PR with at least one approval: `application/`, `training_pipeline/`, `report/`, `face_cropper/`, and the top-level docs (`README.md`, `ARCHITECTURE.md`, `CLAUDE.md`, `CONTRIBUTIONS.md`, `WORKTREES.md`).
-- Use a `feat/` or `integration/` branch when touching protected folders. `invest/` branches should stay in sandbox until you've answered the question.
+Because this is a non standard branching flow, its rational to expect merge conflicts as we merging both investigation and integration branches into the main branch frequently. To mitigate this, all our investigation work should go into our `sandbox/student_[name]` folders, and the following folders: `application`, `training_pipeline` and `report` are treated as the main application folders. Any changes to the main application folders needs to be a `integration` branch and PRs need to approved to control the quality of the main code.
 
 Exploratory work should only be merged into `main` when it has produced something useful enough to support the main application.
 

@@ -4,11 +4,9 @@
   let {
     phase,
     pulse = 0,
-    compact = false,
   }: {
     phase: AssistantPhase;
     pulse?: number;
-    compact?: boolean;
   } = $props();
 
   const clampedPulse = $derived(Math.max(0, Math.min(pulse, 1)));
@@ -16,7 +14,7 @@
   const haloScale = $derived(1 + clampedPulse * 0.32);
 </script>
 
-<div class="circle-wrap" class:compact>
+<div class="circle-wrap">
   <div
     class="visualiser {phase}"
     style={`--core-scale:${coreScale}; --halo-scale:${haloScale}; --pulse-opacity:${0.28 + clampedPulse * 0.52};`}
@@ -34,16 +32,6 @@
     display: flex;
     justify-content: center;
     padding: 1rem 0;
-    transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
-                opacity 320ms cubic-bezier(0.22, 1, 0.36, 1);
-    transform-origin: center;
-  }
-
-  /* Compact: shrink + dock to top-right as a "still listening" marker while
-     an overlay check-in is active. */
-  .circle-wrap.compact {
-    transform: scale(0.4) translate(160%, -110%);
-    opacity: 0.75;
   }
 
   .visualiser {

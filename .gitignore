@@ -2,6 +2,3 @@
 .env
 node_modules
 sandbox/student_taurajgreig/vendor/
-.DS_Store
-__pycache__/
-*.pyc

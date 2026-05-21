@@ -36,7 +36,6 @@ Config key: WHISPER_CPP_DIR  (default: ../../sandbox/student_taurajgreig/vendor/
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import shutil
@@ -237,44 +236,17 @@ class WhisperCppTranscriptionService(TranscriptionService):
     # -------------------------------------------------------------------------
 
     def _build_command(self, wav_path: Path) -> list[str]:
-        """Build the whisper-cli command.
-
-        --output-json-full writes a sidecar JSON containing per-token `p`
-        values which we average into a single confidence score.
-        --output-file controls the basename; whisper-cli appends .json.
-        """
-        json_base = wav_path.with_suffix("")  # strips .wav; .json gets appended by CLI
+        """Build the whisper-cli command."""
         return [
             str(self.binary_path),
-            "-m", str(self.model_path),
-            "-f", str(wav_path),
-            "-l", "en",
+            "-m",
+            str(self.model_path),
+            "-f",
+            str(wav_path),
+            "-l",
+            "en",
             "-nt",
-            "--output-json-full",
-            "--output-file", str(json_base),
         ]
-
-    @staticmethod
-    def _read_confidence(json_path: Path) -> float | None:
-        """Average per-token probabilities from whisper-cli's JSON sidecar.
-
-        Returns None if the file is missing, unparseable, or has no tokens.
-        """
-        if not json_path.exists():
-            return None
-        try:
-            data = json.loads(json_path.read_text())
-        except (json.JSONDecodeError, OSError):
-            return None
-        probabilities: list[float] = []
-        for segment in data.get("transcription", []):
-            for token in segment.get("tokens", []):
-                p = token.get("p")
-                if isinstance(p, (int, float)):
-                    probabilities.append(float(p))
-        if not probabilities:
-            return None
-        return sum(probabilities) / len(probabilities)
 
     def _parse_transcript(self, stdout: str) -> str:
         """Extract transcript text from whisper-cli stdout."""
@@ -324,8 +296,7 @@ class WhisperCppTranscriptionService(TranscriptionService):
 
         Notes:
         - language is fixed to "en" because the CLI command uses `-l en`.
-        - confidence is the mean of per-token `p` values from the
-          --output-json-full sidecar; None if the sidecar is missing or empty.
+        - confidence is not exposed by this wrapper, so it returns None.
         """
         if not self.binary_path.exists():
             raise FileNotFoundError(
@@ -359,12 +330,10 @@ class WhisperCppTranscriptionService(TranscriptionService):
             if not transcript:
                 transcript = ""
 
-            confidence = self._read_confidence(wav_path.with_suffix(".json"))
-            conf_tag = f"{confidence:.3f}" if confidence is not None else "n/a"
             self._log(
-                f"whisper.cpp transcription completed in {elapsed:.2f}s (confidence={conf_tag})"
+                f"whisper.cpp transcription completed in {elapsed:.2f}s"
             )
-            return transcript, "en", confidence
+            return transcript, "en", None
 
         finally:
             try:

@@ -4,25 +4,12 @@
     isListening,
     onMicToggle,
     disabled = false,
-    placeholder = "Type if you'd rather not speak...",
-    audioLevel = 0,
-    locked = false,
   }: {
     onSend: (text: string) => void;
     isListening: boolean;
     onMicToggle: () => void;
     disabled?: boolean;
-    placeholder?: string;
-    /** Current RMS audio level from the VAD, normalised 0–1. Drives the
-     * pulse animation on the listening button. */
-    audioLevel?: number;
-    /** Mic is gated (assistant is replying / speaking). Surfaces the same
-     * "can't hear you right now" state the recording-subtitle uses. */
-    locked?: boolean;
   } = $props();
-
-  // Map raw RMS (typically 0–0.02 in normal speech) to a 0–1 pulse value.
-  const micPulse = $derived(Math.min(1, Math.max(0, audioLevel / 0.012)));
 
   let text = $state("");
 
@@ -45,31 +32,18 @@
   <textarea
     bind:value={text}
     onkeydown={handleKeydown}
-    {placeholder}
+    placeholder="Type if you'd rather not speak..."
     rows="1"
     {disabled}
   ></textarea>
   <button
     class="mic-btn"
     class:active={isListening}
-    class:locked
-    style={`--mic-pulse:${micPulse};`}
     onclick={onMicToggle}
     title={isListening ? "Stop mic" : "Start mic"}
     type="button"
   >
-    <span class="mic-bars" aria-hidden="true">
-      <span></span><span></span><span></span><span></span>
-    </span>
-    <span class="mic-label">
-      {#if locked}
-        Listening (paused)
-      {:else if isListening}
-        Listening
-      {:else}
-        Speak
-      {/if}
-    </span>
+    {isListening ? "Listening" : "Speak"}
   </button>
   <button class="send-btn" onclick={submit} {disabled} type="button">Reply</button>
 </div>
@@ -111,45 +85,8 @@
   }
 
   .mic-btn {
-    --mic-pulse: 0;
     background: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.14);
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    transition: background 140ms ease, border-color 140ms ease;
-  }
-  .mic-bars {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    height: 1rem;
-  }
-  .mic-bars span {
-    display: block;
-    width: 3px;
-    border-radius: 2px;
-    background: rgba(255, 255, 255, 0.35);
-    height: calc(15% + var(--mic-pulse) * 70%);
-    transition: height 90ms ease, background 140ms ease;
-  }
-  .mic-btn.active .mic-bars span {
-    background: rgb(255, 108, 108);
-  }
-  /* The four bars dance at slightly different magnitudes so the cluster
-     reads as "live audio", not "synchronised pulse". */
-  .mic-bars span:nth-child(1) { height: calc(25% + var(--mic-pulse) * 55%); }
-  .mic-bars span:nth-child(2) { height: calc(35% + var(--mic-pulse) * 65%); animation-delay: 60ms; }
-  .mic-bars span:nth-child(3) { height: calc(45% + var(--mic-pulse) * 55%); animation-delay: 120ms; }
-  .mic-bars span:nth-child(4) { height: calc(20% + var(--mic-pulse) * 60%); animation-delay: 180ms; }
-
-  .mic-btn.locked {
-    border-color: rgba(168, 85, 247, 0.55);
-    background: rgba(124, 58, 237, 0.18);
-    color: rgba(233, 213, 255, 0.92);
-  }
-  .mic-btn.locked .mic-bars span {
-    background: rgba(216, 180, 254, 0.65);
   }
 
   .send-btn {

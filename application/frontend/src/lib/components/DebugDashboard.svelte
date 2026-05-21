@@ -2,15 +2,6 @@
   import type { ChatDebug, Profile } from "$lib/api";
   import type { Emotion } from "$lib/harness/types";
 
-  type RejectedTranscript = {
-    id: string;
-    timestamp: string;
-    text: string;
-    reason: string;
-    confidence: number | null;
-    durationMs: number | null;
-  };
-
   let {
     profile,
     faceDetected,
@@ -20,7 +11,6 @@
     latestFrameSummary,
     emotion,
     reasoningDebug,
-    rejectedTranscripts = [],
   }: {
     profile: Profile | null;
     faceDetected: boolean;
@@ -30,7 +20,6 @@
     latestFrameSummary: string;
     emotion: Emotion;
     reasoningDebug: ChatDebug | null;
-    rejectedTranscripts?: RejectedTranscript[];
   } = $props();
 </script>
 
@@ -64,52 +53,6 @@
       </div>
 
       <pre class="debug-pre">{latestFrameSummary}</pre>
-    </article>
-
-    <article class="debug-panel">
-      <p class="panel-label">Filtered transcripts</p>
-      {#if rejectedTranscripts.length === 0}
-        <p class="panel-copy">Nothing filtered yet. Speak quietly or briefly to test.</p>
-      {:else}
-        <ul class="rejected-list">
-          {#each rejectedTranscripts as item (item.id)}
-            <li class="rejected-item">
-              <div class="rejected-meta">
-                <span>{item.timestamp}</span>
-                <span>
-                  {item.confidence !== null ? `${(item.confidence * 100).toFixed(0)}% conf` : "no conf"}
-                  {item.durationMs !== null ? ` · ${(item.durationMs / 1000).toFixed(1)}s` : ""}
-                </span>
-              </div>
-              <p class="rejected-text">{item.text}</p>
-              <p class="rejected-reason">{item.reason}</p>
-            </li>
-          {/each}
-        </ul>
-      {/if}
-    </article>
-
-    <article class="debug-panel">
-      <p class="panel-label">Session state</p>
-      {#if reasoningDebug?.session_state}
-        <div class="session-summary">
-          <span class="session-pill" data-surface={reasoningDebug.session_state.surface}>
-            {reasoningDebug.session_state.state_name ?? "(none)"}
-          </span>
-          <span class="session-pill">turn {reasoningDebug.session_state.turn_in_state}</span>
-          <span class="session-pill">segment #{reasoningDebug.session_state.segment_id}</span>
-        </div>
-        {#if reasoningDebug.session_state.emissions.length > 0}
-          <p class="panel-heading">Last emissions</p>
-          <pre class="debug-pre">{reasoningDebug.session_state.emissions.map((e) => e.name).join(", ")}</pre>
-        {/if}
-        {#if Object.keys(reasoningDebug.session_state.state_facts).length > 0}
-          <p class="panel-heading">State facts</p>
-          <pre class="debug-pre">{JSON.stringify(reasoningDebug.session_state.state_facts, null, 2)}</pre>
-        {/if}
-      {:else}
-        <p class="panel-copy">No conductor activity yet. Send a chat turn to start a session.</p>
-      {/if}
     </article>
 
     <article class="debug-panel">
@@ -257,67 +200,6 @@
     color: rgba(255, 255, 255, 0.88);
     line-height: 1.5;
     font-size: 0.86rem;
-  }
-
-  .session-summary {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-    margin-bottom: 0.3rem;
-  }
-  .session-pill {
-    border-radius: 999px;
-    padding: 0.25rem 0.6rem;
-    font-size: 0.78rem;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    color: rgba(255, 255, 255, 0.88);
-  }
-  .session-pill[data-surface="checkin"] {
-    background: rgba(249, 115, 22, 0.18);
-    border-color: rgba(249, 115, 22, 0.36);
-  }
-  .session-pill[data-surface="done"] {
-    background: rgba(74, 222, 128, 0.18);
-    border-color: rgba(74, 222, 128, 0.36);
-  }
-
-  .rejected-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-  .rejected-item {
-    background: rgba(255, 132, 132, 0.08);
-    border: 1px solid rgba(255, 132, 132, 0.18);
-    border-radius: 10px;
-    padding: 0.55rem 0.75rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-  }
-  .rejected-meta {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.5rem;
-    font-size: 0.72rem;
-    color: rgba(255, 255, 255, 0.55);
-    letter-spacing: 0.04em;
-  }
-  .rejected-text {
-    margin: 0;
-    color: rgba(255, 255, 255, 0.92);
-    font-size: 0.92rem;
-    line-height: 1.4;
-  }
-  .rejected-reason {
-    margin: 0;
-    color: rgba(255, 180, 180, 0.78);
-    font-size: 0.78rem;
-    font-style: italic;
   }
 
   @media (max-width: 720px) {

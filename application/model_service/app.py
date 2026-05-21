@@ -3,7 +3,6 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Any
 
 import config
-from core import debug_flags
 from core.app_state import HRIAppState
 from fastapi import FastAPI, WebSocket
 
@@ -57,15 +56,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning("STT not loaded: %s", e)
 
     # Emotion model — ONLY invoked in ws/handler.py:pick_emotion().
-    # Model selection is driven by EMOTION_MODEL_ID + models.yaml (preferred)
-    # or EMOTION_VARIANT + EMOTION_CHECKPOINT_PATH (legacy fallback).
-    # Debug behaviour (cycle/force/log) lives in core/debug_flags.py.
+    # To swap in a real model: set EMOTION_VARIANT in .env and implement
+    # the EmotionModel ABC in core/emotion/ following the factory pattern.
+    # DEBUG: set TEST_EMOTIONS=true to bypass the model and emit random emotions.
     try:
         from core.emotion.factory import create_emotion_model
         hri.emotion_model = create_emotion_model(config.EMOTION_VARIANT)
         logger.info(
-            "Emotion model loaded: model_id=%s variant=%s",
-            config.EMOTION_MODEL_ID, config.EMOTION_VARIANT,
+            "Emotion model loaded: variant=%s (TEST_EMOTIONS=%s)",
+            config.EMOTION_VARIANT, config.TEST_EMOTIONS,
         )
     except Exception as e:
         logger.warning("Emotion model not loaded: %s", e)
@@ -89,13 +88,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     fd = hri.face_detector
     logger.info(
         "Startup summary — face_detector=%s (device=%s) | emotion_model=%s "
-        "(model_id=%s, variant=%s) | emotion_debug=%s | stt=%s | llm=%s",
+        "(variant=%s, test_mode=%s) | stt=%s | llm=%s",
         fd is not None,
         fd.device if fd is not None else "none",
         hri.emotion_model is not None,
-        config.EMOTION_MODEL_ID,
         config.EMOTION_VARIANT,
-        debug_flags.emotion,
+        config.TEST_EMOTIONS,
         hri.stt is not None,
         hri.llm is not None,
     )

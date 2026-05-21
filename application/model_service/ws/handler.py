@@ -4,24 +4,22 @@ import asyncio
 import json
 import logging
 import time
+from typing import Callable, Awaitable
 from typing import Any, Awaitable, Callable, cast
 
 import numpy as np
 from fastapi import WebSocket, WebSocketDisconnect
 
 import config
-from core import debug_flags
 from core.app_state import HRIAppState
-from core.conductor import StateContext
-from core.emotion.base import EMOTIONS, EmotionModel
-from core.events import SystemEvent
+from core.emotion.base import EmotionModel
 from ws.session import (
+    EMOTIONS,
     HarnessSession,
     create_session,
     remove_session,
     emit_debug,
 )
-from routers.chat import _run_extraction_on_transition, generate_yarn_opener
 from ws.audio import process_audio_chunk
 from ws.video import FrameDetectionResult, detect_from_message
 
@@ -58,11 +56,7 @@ def _harness_status(hri: HRIAppState) -> dict[str, Any]:
         "stt_loaded": hri.stt is not None,
         "emotion_model_loaded": hri.emotion_model is not None,
         "llm_loaded": hri.llm is not None,
-        "emotion_debug": {
-            "cycle_test_labels": debug_flags.emotion.cycle_test_labels,
-            "force_label": debug_flags.emotion.force_label,
-            "log_predictions": debug_flags.emotion.log_predictions,
-        },
+        "test_emotions": config.TEST_EMOTIONS,
         "stt_engine": config.STT_ENGINE,
         "stt_model": config.STT_MODEL,
     }
@@ -76,39 +70,24 @@ def pick_emotion(
 ) -> tuple[str, float]:
     """Invoke the emotion model or fall back to debug/neutral values.
 
-    Priority (see core/debug_flags.py for the mutable runtime state):
-      1. ``force_label``      — pin a specific emotion (bypasses everything)
-      2. ``cycle_test_labels`` — step through EMOTIONS on a timer (bypasses model)
-      3. Real model           — face detected + model loaded
-      4. Neutral fallback     — no face / no model
+    Priority:
+      1. Real model  — face detected + model loaded + TEST_EMOTIONS=false
+      2. Timed cycle  — DEBUG: TEST_EMOTIONS=true; steps through emotions on a fixed timer
+      3. Neutral     — no face and TEST_EMOTIONS=false
 
     emotion_model.predict() is the only model invocation point in the codebase.
     Lives here (not in ws/video.py) because it owns the model call — video.py
     only prepares the face crop.
     """
-    flags = debug_flags.emotion
-
-    if flags.force_label is not None:
-        if flags.force_label not in EMOTIONS:
-            logger.warning(
-                "debug_flags.emotion.force_label=%r is not in EMOTIONS; ignoring",
-                flags.force_label,
-            )
-        else:
-            return flags.force_label, 1.0
-
-    if flags.cycle_test_labels:
+    if config.TEST_EMOTIONS:
         started_at = session.emotion_cycle_started_at if session is not None else time.time()
         elapsed = max(0.0, time.time() - started_at)
-        interval = max(1, flags.cycle_interval_seconds)
+        interval = max(1, config.TEST_EMOTION_INTERVAL_SECONDS)
         emotion_index = int(elapsed // interval) % len(EMOTIONS)
         return EMOTIONS[emotion_index], 0.75
 
     if detected and face_crop is not None and emotion_model is not None:
-        emotion, confidence = emotion_model.predict(face_crop)
-        if flags.log_predictions:
-            logger.info("emotion_predict: %s @ %.3f", emotion, confidence)
-        return emotion, confidence
+        return emotion_model.predict(face_crop)
 
     return "neutral", 0.5
 
@@ -147,40 +126,6 @@ async def _send_frame_messages(
     }))
 
 
-async def _run_yarn_opener(
-    websocket: WebSocket,
-    session: HarnessSession,
-    hri: HRIAppState,
-    intention: str,
-) -> None:
-    """Generate a yarn-opening assistant reply and push it to the frontend.
-
-    Runs the (potentially slow) LLM call in a worker thread, then sends an
-    assistant_reply WS message. On failure, sends assistant_reply_error so
-    the frontend can clear its thinking indicator and surface the issue.
-
-    `intention` is passed through from the conductor's tick result on the
-    new yarn state so subclassed states can shape the opener via their
-    tick() override without having to mutate intention_prompt directly.
-    """
-    try:
-        reply = await asyncio.to_thread(generate_yarn_opener, session, hri, intention)
-    except Exception:
-        logger.exception("yarn opener crashed")
-        reply = None
-    if reply:
-        await _send(websocket, {
-            "type": "assistant_reply",
-            "text": reply,
-            "state_name": session.conductor.current.name,
-        })
-    else:
-        await _send(websocket, {
-            "type": "assistant_reply_error",
-            "state_name": session.conductor.current.name,
-        })
-
-
 def _make_handlers(
     websocket: WebSocket,
     hri: HRIAppState,
@@ -202,28 +147,10 @@ def _make_handlers(
         set_session(session)
         emit_debug(
             f"Session started: {profile_id} "
-            f"(cycle_test_labels={debug_flags.emotion.cycle_test_labels}, "
-            f"force_label={debug_flags.emotion.force_label!r}, "
+            f"(test_emotions={config.TEST_EMOTIONS}, "
             f"face_detector_loaded={hri.face_detector is not None})"
         )
         await _send(websocket, {**_harness_status(hri), "profile_id": profile_id})
-
-        # Push the conductor's starting view so the frontend mounts the
-        # correct surface (typically qa_form) immediately — without
-        # waiting for the user to type something first.
-        current = session.conductor.current
-        await _send(websocket, {
-            "type": "view_update",
-            "view": {
-                "surface": "checkin" if current.kind == "form" else (
-                    "done" if current.kind == "done" else "chat"
-                ),
-                "spec": current.spec.model_dump() if current.spec else None,
-                "intention": current.intention_prompt,
-                "state_name": current.name,
-            },
-            "prev_state_name": None,
-        })
         return True
 
     async def on_session_end(_msg: dict[str, Any]) -> bool:
@@ -268,95 +195,13 @@ def _make_handlers(
             "byte_length": len(msg.get("data", "")),
             "timestamp": timestamp,
         })
-        duration_ms_raw = msg.get("duration_ms")
-        duration_ms = float(duration_ms_raw) if isinstance(duration_ms_raw, (int, float)) else None
         asyncio.create_task(process_audio_chunk(
             websocket, session,
             hri.stt,
             session.audio_chunk_count,
             msg.get("data", ""),
             timestamp,
-            msg.get("format", "webm"),
-            duration_ms,
         ))
-        return True
-
-    async def on_system_event(msg: dict[str, Any]) -> bool:
-        """Receive a typed system event from the frontend.
-
-        Most events are just logged into the session's events buffer for the
-        LLM to read on its next chat turn. `form_complete` is special: it
-        also advances the conductor immediately and pushes a view_update
-        back to the frontend so the next surface mounts without needing the
-        user to send a chat turn first.
-        """
-        session = get_session()
-        if session is None:
-            await _error(websocket, "system_event received before session_start")
-            return True
-
-        kind = msg.get("kind")
-        if not isinstance(kind, str):
-            await _error(websocket, "system_event missing kind")
-            return True
-
-        payload = msg.get("payload") if isinstance(msg.get("payload"), dict) else {}
-        # Defence-in-depth: form_complete carries no payload data the LLM
-        # should see. Any state name / form_id in there would leak into
-        # the merged transcript's {{form_complete: …}} marker.
-        if kind == "form_complete":
-            payload = {}
-        t = float(msg.get("t", time.time()))
-        event = SystemEvent(kind=kind, t=t, payload=payload)  # type: ignore[arg-type]
-        session.system_events.append(event)
-        # Cap to avoid unbounded growth on long sessions.
-        if len(session.system_events) > 200:
-            session.system_events = session.system_events[-200:]
-
-        if kind == "form_complete":
-            ctx = StateContext(
-                turn_in_state=session.turn_in_state,
-                form_completed=True,
-                elapsed_in_state=max(0.0, time.time() - session.state_started_at),
-            )
-            decision = session.conductor.observe(ctx)
-            if decision.transitioned:
-                session.turn_in_state = 0
-                # Send the new view FIRST so the frontend swaps surfaces
-                # immediately. Extraction (an LLM call that can take 10-30s
-                # with the claude-code provider) runs in the background; its
-                # segment_summary event lands in session.system_events when
-                # the worker thread finishes. If the user speaks before
-                # then, the next yarn's LLM call just doesn't see the
-                # summary — acceptable, since the raw {{form_answer: …}}
-                # lines are still in the transcript.
-                await _send(websocket, {
-                    "type": "view_update",
-                    "view": {
-                        "surface": decision.surface,
-                        "spec": decision.state.spec.model_dump() if decision.state.spec else None,
-                        "intention": decision.intention,
-                        "state_name": decision.state.name,
-                    },
-                    "prev_state_name": decision.prev_state_name,
-                })
-                if decision.prev_state_name:
-                    asyncio.create_task(asyncio.to_thread(
-                        _run_extraction_on_transition,
-                        session,
-                        decision.prev_state_name,
-                        hri,
-                    ))
-                # If the new state is a yarn, kick off an LLM call to open
-                # the conversation using the intention the conductor just
-                # produced via the new state's tick() — passing it through
-                # so subclasses can shape the opener via instance logic
-                # without having to mutate intention_prompt.
-                if decision.state.kind == "yarn" and decision.intention:
-                    asyncio.create_task(
-                        _run_yarn_opener(websocket, session, hri, decision.intention)
-                    )
-
         return True
 
     return {
@@ -364,7 +209,6 @@ def _make_handlers(
         "session_end":   on_session_end,
         "video_frame":   on_video_frame,
         "audio_chunk":   on_audio_chunk,
-        "system_event":  on_system_event,
     }
 
 

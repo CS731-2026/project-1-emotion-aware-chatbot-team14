@@ -16,24 +16,18 @@ Browser → SvelteKit (5173) → Express backend (3001) → FastAPI model servic
 make dev          # start all three services (kills ports first)
 make install      # npm install + pip install (first time only)
 make kill         # free ports 3000/3001/5173/8000
-make crop-faces INPUT=<dir> OUTPUT=<dir>   # batch face-crop a dataset
 ```
-
-For parallel branches with isolated ports, see "Working in parallel branches" in `README.md`.
 
 ## Top-level folders
 
 | Folder | Purpose |
 |---|---|
 | `application/` | The production three-service web app |
-| `face_cropper/` | CLI + library wrapping the production face detector for use in notebooks / dataset preprocessing |
 | `sandbox/` | Per-student exploratory research (pre-application) |
 | `experiments/` | Shared cross-team experiments |
 | `training_pipeline/` | ML training harness (YAML config, step persistence) |
 | `report/` | Academic paper in Markdown → PDF via pandoc |
 | `models/` | Downloaded model weights (gitignored) |
-
-`face_cropper.py` (repo root) is the CLI + library; `application/model_service/core/face_detector.py` is the canonical detector — `face_cropper` re-exports it, so notebooks and the live service share one implementation.
 
 ## application/ — service layout
 
@@ -63,31 +57,25 @@ All routes under `/api/v1/`. All async handlers use `try/catch → next(err)`.
 ### `application/model_service/` — FastAPI + Python
 - `main.py` — uvicorn entry point
 - `app.py` — FastAPI app creation, lifespan (loads ML components), WS + router mounting
-- `config.py` — all env vars + `load_model_registry()` helper
-- `models.yaml` — local model registry (id → path + variant); selected at runtime via `EMOTION_MODEL_ID`
+- `config.py` — all env vars (`STT_ENGINE`, `EMOTION_VARIANT`, `LLM_PROVIDER`, etc.)
 - `routers/chat.py` — POST `/api/v1/chat`; runs EmotionalReasoningAgent → LLMReasoningAgent
-- `ws/handler.py` — WS dispatcher + `pick_emotion()` (the only place `emotion_model.predict()` is called)
+- `routers/chat.py` — the only HTTP route; bridges WS session state → LLM
+- `ws/handler.py` — thin WS dispatcher; routes messages to audio/video handlers
 - `ws/session.py` — `HarnessSession`, session store (`_sessions`), `get_session`, `emit_debug`
 - `ws/audio.py` — ffmpeg decode + `process_audio_chunk` (STT pipeline)
-- `ws/video.py` — frame decode, YOLO call, encode — prepares `face_crop` for the emotion model
+- `ws/video.py` — JPEG encode, YOLO call, `_pick_emotion`, `process_video_frame`
 - `ws/protocol.py` — dataclass definitions for all WS message types
-- `core/__init__.py` — re-exports `debug_flags` for `from core import debug_flags`
-- `core/app_state.py` — `HRIAppState` dataclass holding loaded ML components (face_detector, emotion_model, stt, llm, llm_agent, emotion_agent). One instance lives at `app.state.hri` for the life of the process; every router and WS handler reaches loaded components through it.
-- `core/debug_flags.py` — mutable runtime flags (cycle / force / log); seeded from `.env`, can be overridden in code
 - `core/face_detector.py` — YOLOv8 face detector (HuggingFace, auto-downloaded)
-- `core/emotion/base.py` — `EmotionModel` ABC + `EMOTIONS` list (EmpathBot 6-class)
+- `core/emotion/base.py` — `EmotionModel` ABC
 - `core/emotion/buffer.py` — `EmotionBuffer` rolling-window smoother + `EmotionObservation`
-- `core/emotion/placeholder.py` — random-emotion stub
-- `core/emotion/resnet18.py` — vanilla ResNet18 variant
-- `core/emotion/empathbot.py` — EmpathBotV1 (EfficientNet-B2 / ResNet18 with SE) ported from `Notebooks/6b_empathbot_v1_improvements.ipynb`
-- `core/emotion/factory.py` — `create_emotion_model()`; checks `EMOTION_MODEL_ID` first, falls back to `EMOTION_VARIANT`
+- `core/emotion/placeholder.py` — random emotion stub (default until real model integrated)
+- `core/emotion/factory.py` — `create_emotion_model(variant)`
 - `core/llm/base.py` — `LLMProvider` ABC + `Message` TypedDict
 - `core/llm/openai.py` — OpenAI Chat Completions provider
 - `core/llm/anthropic.py` — Anthropic stub (not yet implemented)
-- `core/llm/gemini.py` — Google Gemini provider
 - `core/llm/ollama.py` — Ollama local provider
 - `core/llm/factory.py` — `create_llm(provider, model)`
-- `core/llm/reasoning_agent.py` — `LLMReasoningAgent`; assembles system prompt + history + emotional context + transcript
+- `core/llm/reasoning_agent.py` — `LLMReasoningAgent`; assembles system prompt + history + emotional context + transcript (two separate inputs per spec)
 - `core/emotional_reasoning_agent.py` — `EmotionalReasoningAgent`; produces emotion context string from buffer
 - `core/stt/base.py` — `TranscriptionService` ABC
 - `core/stt/whisper_cpp.py` — whisper.cpp backend (default)
@@ -97,65 +85,15 @@ All routes under `/api/v1/`. All async handlers use `try/catch → next(err)`.
 ### `application/mock_programs/` — **DEPRECATED**
 Do not use or extend. Superseded by the production application.
 
-## Emotion model selection
-
-Two ways to pick which model loads — `EMOTION_MODEL_ID` wins if both are set.
-
-**Preferred — registry:**
-```
-EMOTION_MODEL_ID=empathbot_final
-```
-`models.yaml` resolves the id to a path under `models/` (gitignored) and the variant class to instantiate.
-
-**Legacy fallback — direct:**
-```
-EMOTION_VARIANT=empathbot
-EMOTION_CHECKPOINT_PATH=models/empathbot/empath_final.pth
-```
-
-## Debug flags (`core/debug_flags.py`)
-
-Mutable runtime overrides for the emotion pipeline. Defaults come from `.env`; any code (e.g. `routers/chat.py`) can flip them at runtime:
-
-```python
-from core import debug_flags
-debug_flags.emotion.force_label = "sadness"        # pin a label
-debug_flags.emotion.log_predictions = True
-```
-
-Resolution order in `ws/handler.py::pick_emotion()`:
-1. `force_label` → pin a specific emotion (bypasses everything)
-2. `cycle_test_labels` → step through `EMOTIONS` on a timer (bypasses model)
-3. Real model prediction
-4. Neutral fallback (no face / no model)
-
 ## Key env vars (model_service)
 
-| Var | Default | Options / Notes |
+| Var | Default | Options |
 |---|---|---|
-| `STT_ENGINE` | `whisper-cpp` | `whisper-cpp` (needs manual cmake build), `faster-whisper` (pip-installed, slower) |
-| `STT_MODEL` | `base.en` | any whisper model name (`tiny.en`, `small.en`, …) |
-| `WHISPER_CPP_DIR` | `../../sandbox/student_taurajgreig/vendor/whisper.cpp` | Path to the built whisper.cpp source tree — only used when `STT_ENGINE=whisper-cpp` |
-| `STT_MIN_CONFIDENCE` | `0.65` | Discard transcripts below this whisper confidence |
-| `STT_MIN_TEXT_CHARS` | `5` | Discard transcripts shorter than this |
-| `EMOTION_MODEL_ID` | unset | An id in `models.yaml` (e.g. `empathbot_final`). Preferred over `EMOTION_VARIANT`. |
-| `EMOTION_VARIANT` | `placeholder` | `placeholder`, `resnet18`, `empathbot`. Used only when `EMOTION_MODEL_ID` is unset. |
-| `EMOTION_CHECKPOINT_PATH` | `models/resnet18_emotion.pth` | Only used when `EMOTION_MODEL_ID` is unset. |
-| `EMOTION_DEVICE` | unset (auto) | `cpu`, `mps`, `cuda`. Auto-detected when unset. |
-| `EMOTION_CYCLE_TEST_LABELS` | `false` | Debug: cycle through `EMOTIONS` on a timer instead of running the model. |
-| `EMOTION_CYCLE_INTERVAL_SECONDS` | `30` | Seconds per label when cycling. |
-| `EMOTION_FORCE_LABEL` | unset | Debug: pin a label (must be in `EMOTIONS`). |
-| `EMOTION_LOG_PREDICTIONS` | `false` | Debug: log every prediction at INFO. |
-| `LLM_PROVIDER` | `openai` | `openai`, `gemini`, `anthropic`, `ollama` |
+| `STT_ENGINE` | `whisper-cpp` | `whisper-cpp`, `faster-whisper` |
+| `EMOTION_VARIANT` | `placeholder` | `placeholder` (real model TBD) |
+| `LLM_PROVIDER` | `openai` | `openai`, `anthropic`, `ollama` |
 | `LLM_MODEL` | `gpt-4o-mini` | any model string for the chosen provider |
-
-## Face cropper for teammates
-
-`face_cropper.py` (repo root) + `face_cropper/` (docs, demo, smoke test) — wraps the **same** `FaceDetector` class the model service uses, so dataset preprocessing in notebooks stays consistent with live inference.
-
-- CLI: `python face_cropper.py crop-dir <in> <out> --recursive --resize 224 --padding 0.1 --report r.json`
-- Library: `from face_cropper import crop_face` (accepts path / PIL / numpy)
-- Demo: `face_cropper/demo.ipynb` (runnable end-to-end)
+| `TEST_EMOTIONS` | `true` | set `false` to use face detector output |
 
 ## Code conventions
 
