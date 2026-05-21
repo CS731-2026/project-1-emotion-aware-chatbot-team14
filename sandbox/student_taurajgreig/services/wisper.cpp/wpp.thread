@@ -1,4 +1,5 @@
 {
   "repo": "git@github.com:ggml-org/whisper.cpp.git",
-  "branch": "master"
+  "branch": "master",
+  "hash": "afa2ea544fb4b0448916b4a31ecd33c8685bd482"
 }
