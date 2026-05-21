@@ -345,7 +345,6 @@
     utterance.volume = 1;
 
     utterance.onstart = () => {
-      isSpeaking = true;
       speechPulse = 0.4;
     };
     utterance.onboundary = (event) => {
@@ -368,9 +367,34 @@
       speechPulse = 0;
     };
     activeChatUtterance = utterance;
-    // No cancel() — calling cancel followed by speak races in Chrome and
-    // silently drops the utterance. If a previous reply is still
-    // speaking, the new one queues; that's an acceptable trade.
+    // Flip isSpeaking BEFORE calling speak() — onstart fires when audio
+    // begins, which is a few ms later than we need. The VAD has to be
+    // gated before the speaker actually emits any sound, otherwise the
+    // first phoneme gets captured back into the mic.
+    isSpeaking = true;
+    synth.speak(utterance);
+  }
+
+  // Neutral TTS for non-chat prompts (e.g. form question prompts). Same
+  // mic-gating discipline as speak() — flip isSpeaking pre-emptively so
+  // the VAD pauses before audio reaches the speaker. No speechPulse
+  // bookkeeping since the SpeakingCircle is the chat-surface animation.
+  let activeNeutralUtterance: SpeechSynthesisUtterance | null = null;
+  function speakNeutral(text: string) {
+    if (!browser || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const synth = window.speechSynthesis;
+    if (synth.paused) synth.resume();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    utterance.onend = () => { isSpeaking = false; };
+    utterance.onerror = (event) => {
+      console.warn("[tts] neutral prompt failed:", event.error, text);
+      isSpeaking = false;
+    };
+    activeNeutralUtterance = utterance;
+    isSpeaking = true;
     synth.speak(utterance);
   }
 
@@ -877,6 +901,7 @@
           locked={micGated}
           pendingInputText={pendingFormInputText}
           onInputConsumed={() => (pendingFormInputText = null)}
+          speakPrompt={speakNeutral}
         />
       </section>
     {:else if backendView.surface === "done"}

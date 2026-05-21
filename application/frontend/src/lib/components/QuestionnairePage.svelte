@@ -22,6 +22,7 @@
     locked = false,
     pendingInputText = null,
     onInputConsumed,
+    speakPrompt,
   }: {
     spec: PageSpec;
     /**
@@ -47,6 +48,10 @@
      * resets the prop to null so a duplicate text doesn't get processed
      * twice on rerender. */
     onInputConsumed?: () => void;
+    /** TTS handler injected by the parent — owned there so the parent's
+     * isSpeaking state flips before audio leaves the speaker, gating the
+     * mic in time to avoid recording the TTS itself. */
+    speakPrompt?: (text: string) => void;
   } = $props();
 
   // Per-question local state. Resets when a different spec object arrives.
@@ -61,26 +66,13 @@
     spokenQuestionIds = new Set();
   });
 
-  // Held outside the function so Chrome doesn't GC the utterance before
-  // it starts speaking — a documented quirk of the Web Speech API.
-  let activeUtterance: SpeechSynthesisUtterance | null = null;
-  function speakPrompt(text: string) {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    const synth = window.speechSynthesis;
-    // Chrome / Safari sometimes leave the synth in a paused state when
-    // the tab regains focus — without resume() speak() is a no-op.
-    if (synth.paused) synth.resume();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1;
-    utterance.pitch = 1;
-    utterance.volume = 1;
-    utterance.onerror = (event) => {
-      console.warn("[tts] question prompt failed:", event.error, text);
-    };
-    activeUtterance = utterance;
-    // No cancel() — calling cancel followed by speak races in Chrome,
-    // and we already gate question reveal so utterances don't overlap.
-    synth.speak(utterance);
+  // TTS for question prompts is owned by the parent (via the
+  // `speakPrompt` prop) so the parent's isSpeaking can flip
+  // synchronously and gate the mic before audio reaches the speaker.
+  // If the parent didn't pass one (e.g. debug-overlay direct mount),
+  // we silently skip reading the prompt aloud.
+  function readPrompt(text: string) {
+    speakPrompt?.(text);
   }
 
   const visibleQuestions = $derived.by(() => {
@@ -103,7 +95,7 @@
   $effect(() => {
     for (const q of visibleQuestions) {
       if (!spokenQuestionIds.has(q.id)) {
-        speakPrompt(q.prompt);
+        readPrompt(q.prompt);
         spokenQuestionIds = new Set([...spokenQuestionIds, q.id]);
         break;  // one new prompt per tick — don't stack utterances
       }
