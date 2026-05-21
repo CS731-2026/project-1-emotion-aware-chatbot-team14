@@ -7,6 +7,7 @@ import time
 from core.conductor import Conductor
 from core.conductor.states import SESSION_FLOW
 from core.emotion.buffer import EmotionBuffer
+from core.events import SystemEvent
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,10 @@ class HarnessSession:
     conductor: Conductor = field(default_factory=lambda: Conductor(SESSION_FLOW))
     # Turns spent in the current conductor state. Reset on transition.
     turn_in_state: int = 0
+    # Append-only log of typed system events (form answers, emotion windows,
+    # segment summaries, silences). Merged with transcript_buffer at
+    # LLM-prompt-assembly time via core.transcript_render.compose_stream.
+    system_events: list[SystemEvent] = field(default_factory=list)
     frame_count: int = 0
     audio_chunk_count: int = 0
     emotion_cycle_started_at: float = 0.0
