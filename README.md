@@ -1,243 +1,134 @@
 # COMPSCI-731 Human-Robot Interaction — Team Project
 
-## What we're building
+An **emotion-aware empathy bot**. A webcam reads the user's face, a trained classifier labels their emotional state, and an LLM adapts its response using two separate inputs: the emotional signal from the face and a timestamped transcript from speech-to-text.
 
-An **emotion-aware empathy bot** that watches a person's face via webcam and adapts its conversational behaviour in real time.
-
-Emotionally sensitive conversation is hard for conventional chatbots, which tend to respond the same way regardless of how a person feels. This system treats the face as an honest, unfiltered signal of emotional state. When the model detects frustration or sadness, it shifts toward patient, supportive dialogue. When it detects anxiety or fear, it moves toward calming, confidence-building responses. The LLM prompt is dynamically conditioned on the detected emotion so that the same input can receive a different answer depending on how the person appears.
-
-The target use case is live empathic conversation, where the bot can adapt its tone in real time based on non-verbal emotional cues.
+The bot shifts tone in real time based on non-verbal cues: more patient when the user looks frustrated or sad, more calming when anxious. The same input can produce a different reply depending on how the person appears.
 
 ---
 
-## The journey
+## Run it in 60 seconds
 
-This project moves through four stages. Each stage answered a question before the next one began.
+```bash
+# First time only
+make install
 
+# Start all three services
+make dev
 ```
-Stage 1 — Research     What is the right approach? (sandbox/)
-Stage 2 — Integration  Does it work end-to-end? (application/mock_programs/)
-Stage 3 — Product      Can it be used by anyone? (application/)
-```
+
+Then open `http://localhost:5173`.
+
+`make dev` brings up:
+- **Frontend** (SvelteKit) → `localhost:5173`
+- **Backend** (Express) → `localhost:3001`
+- **Model service** (FastAPI) → `localhost:8000`
+
+The browser talks to the frontend; everything else is internal.
+
+If ports are busy: `make kill`. To clean up cleanly: Ctrl-C, then `make kill`.
 
 ---
 
-## Repository structure
+## What's where
 
 ```
 .
-├── application/          The application code for our final product: frontend + backend + python ai model service
-├── experiments/          any experiments we need to run (separate from our training pipeline)
-├── sandbox/              A place for us to dump our files as we are working on our individual tasks, files that are pre mature for the application code (there will be a lot of these)
-├── training_pipeline/    The training pipeline we are going to use for our hand trained models
-├── report/               where we will be writing our final report in markdown
-├── models/               Downloaded model weights (.gitignored TODO: we need to remove this)
-└── Makefile              Root orchestration
+├── application/         The three-service web app (frontend + backend + model_service)
+├── face_cropper/        CLI + library wrapping the production face detector
+│                          for use in training notebooks
+├── face_cropper.py      ↑ the actual entry point (re-exports the model service's
+│                          FaceDetector — single source of truth)
+├── training_pipeline/   ML training harness (YAML config, step persistence, resumption)
+├── sandbox/             Per-student exploratory research
+├── experiments/         Shared cross-team experiments
+├── report/              Academic paper (Markdown → PDF via pandoc)
+├── models/              Downloaded model weights (gitignored)
+└── Makefile             dev / install / kill / crop-faces / report targets
 ```
+
+For deeper internals — request flow, WebSocket protocol, file-by-file map, "what's working / what isn't" — see [ARCHITECTURE.md](ARCHITECTURE.md).
+Reference for AI-pair-programming tools: [CLAUDE.md](CLAUDE.md).
 
 ---
 
-## Stage 1 — Research: `sandbox/`
+## I'm new to this repo. Where do I start?
 
-Before building anything, each team member used their sandbox folder to answer a specific question.
+Pick the doc that matches what you're about to do — they're each focused and short.
 
-```
-sandbox/
-├── student_taurajgreig/     Face detection + speech recognition research
-├── student_preeti/
-└── student-kanishka/
-```
-
-**Questions answered:**
-
-| Question | Where | Result |
-|---|---|---|
-| Which face detector is fastest and most reliable? | `sandbox/student_taurajgreig/` | YOLOv8-face outperforms RetinaFace, MediaPipe, and Haar cascades |
-| Which speech-to-text backend fits our constraints? | `sandbox/student_taurajgreig/services/` | whisper.cpp gives the best speed/accuracy tradeoff without an API dependency |
-
-The sandbox follows a strict rule: exploratory work stays in `sandbox/student_[name]/` until it has answered its question.
-
-### Running sandbox work
-
-Each sandbox has its own setup. See `sandbox/student_[name]/README.md` for instructions.
-
-A convenience script activates the correct environment:
-
-```bash
-source sandbox-activate.sh
-```
+| You want to… | Read this first |
+|---|---|
+| Run the app and see it work | This file (above) |
+| Add or change a frontend component | [ARCHITECTURE.md](ARCHITECTURE.md) → "Service Internals" → Frontend, plus `application/frontend/src/.example/Svelte5Reference.svelte` |
+| Change a backend route | [ARCHITECTURE.md](ARCHITECTURE.md) → "Service Internals" → Backend |
+| Add a new emotion model | [ARCHITECTURE.md](ARCHITECTURE.md) → "Integration Points" |
+| Train a model in a notebook | "Training a model" section below — uses the face cropper to preprocess data |
+| Work on a feature without breaking other peoples' branches | [WORKTREES.md](WORKTREES.md) — parallel worktrees with isolated ports |
+| Understand the team's branching philosophy | [CONTRIBUTIONS.md](CONTRIBUTIONS.md) |
+| Write the report | [report/README.md](report/README.md) |
 
 ---
 
-## `experiments/`
+## Training a model
 
-A shared space for work that doesn't belong to any one person and isn't ready for the application. If something needs to be run, tested, or documented collaboratively but has no obvious home elsewhere, it lives here.
+The emotion model is currently **EmpathBotV1** (EfficientNet-B2 backbone, EmpathBot 6-class schema). It loads from `models/empathbot/empath_final.pth` via `application/model_service/models.yaml`.
+
+If you're training your own model — in Kaggle, Colab, or a local notebook — you need to crop faces from your raw dataset first so your classifier trains on the same inputs the live service will hand it at inference.
+
+**Use the face cropper.** Same `FaceDetector` class the model service uses, no duplication:
 
 ```bash
-source experiments-activate.sh
+# Bulk preprocess a dataset
+make crop-faces INPUT=./raw_dataset OUTPUT=./crops RESIZE=224 PADDING=0.1
+
+# Or directly
+python face_cropper.py crop-dir ./raw ./crops --recursive --resize 224 --report report.json
 ```
+
+In a notebook:
+
+```python
+from face_cropper import crop_face
+face = crop_face("path/to/image.jpg")   # PIL.Image or None
+```
+
+Walk through [`face_cropper/demo.ipynb`](face_cropper/demo.ipynb) for a runnable demo, and see [`face_cropper/README.md`](face_cropper/README.md) for the three usage patterns + tips. The training pipeline harness itself lives in [`training_pipeline/`](training_pipeline/README.md) if you want step-level persistence and YAML config merging.
 
 ---
 
-## Stage 2 — Integration: `application/mock_programs/`
+## Plugging a new trained model into the service
 
-With working face detection and a trained emotion model, the next question was: does the full pipeline work end-to-end?
+`application/model_service/models.yaml` is a registry — id → checkpoint path + model class. Pick a slot, add an entry, set the env var:
 
-`mock_programs/` is a complete, runnable terminal chatbot that integrates every component:
-
+```yaml
+# application/model_service/models.yaml
+models:
+  my_model_v3:
+    path:    models/my_model_v3.pth     # under gitignored models/
+    variant: empathbot                  # or "resnet18", or your own variant
 ```
-application/mock_programs/
-├── main.py               Entry point (terminal UI, conversation loop)
-├── face_detector.py      YOLOv8-face detection with drawing utilities
-├── emotion_inferencer.py Inference wrapper + rolling-window emotion smoothing
-├── chatbot.py            LLM integration (OpenAI) + 3-way model comparison
-└── speech.py             FasterWhisper speech-to-text
-```
-
-### Running the mock chatbot
 
 ```bash
-cd application/mock_programs
-pip install -r requirements.txt
-cp .env.example .env   # add GEMINI_API_KEY or OPENAI_API_KEY
-
-# Full pipeline: webcam + voice + chatbot
-python main.py --checkpoint path/to/emotion_model.pt --voice
-
-# No webcam (fixed mock emotion for testing)
-python main.py --no_webcam --mock_emotion happy
-
-# Text only
-python main.py --no_webcam --no_voice
+# application/model_service/.env
+EMOTION_MODEL_ID=my_model_v3
 ```
 
-**Terminal controls:**
-- Type a message and press Enter to send
-- Press Enter with empty input to record voice (if `--voice` enabled)
-- Type `reset` to clear history, `quit` to exit
+Restart `make dev` and the service picks it up. If you need a new architecture (different from `empathbot` / `resnet18`), see [ARCHITECTURE.md](ARCHITECTURE.md) → "Integration Points" — it's a four-step recipe.
 
-See [application/mock_programs/README.md](application/mock_programs/README.md) for full setup including dataset and model download instructions.
+**Debugging emotion behaviour live:** there are runtime flags in `core/debug_flags.py` for cycling through labels, pinning a single label, or logging every prediction. Set them in `.env` or flip them in code. CLAUDE.md has the full list.
 
 ---
 
-## Stage 3 — Product: `application/`
+## Environment variables
 
-The mock program proved the concept. The production application is a three-service web app that packages the same pipeline for real users.
-
-### Request flow
-
-```
-Browser
-  └─▶ SvelteKit frontend       localhost:5173
-        └─▶ Express backend    localhost:3000
-              └─▶ FastAPI model service   localhost:8000
-                    └─▶ Face detector + emotion classifier + LLM
-```
-
-The browser only ever talks to SvelteKit. SvelteKit's server-side load functions call Express. Express forwards to the model service. The model service runs inference and calls the LLM.
-
-### Getting started
-
-```bash
-# Install all dependencies (first time only)
-make web-install
-
-# Start all three services
-make web-dev
-```
-
-`make web-install` creates a Python virtual environment at `application/model_service/.venv`.
-
-### Environment variables
-
-Each service has a `.env` file (gitignored) and a committed `.env.example`:
+Each service has a `.env` (gitignored) and a committed `.env.example`. Copy `.env.example` → `.env` in each service the first time you set up.
 
 | Service | File | Key variables |
 |---|---|---|
 | backend | `application/backend/.env` | `PORT`, `NODE_ENV`, `MODEL_SERVICE_URL` |
-| frontend | `application/frontend/.env` | `BACKEND_URL` |
-| model_service | `application/model_service/.env` | `PORT`, `HOST`, `LLM_PROVIDER`, `LLM_MODEL`, `GEMINI_API_KEY`, `OPENAI_API_KEY` |
+| frontend | `application/frontend/.env` | `PUBLIC_BACKEND_URL`, `PUBLIC_HARNESS_WS_URL` |
+| model_service | `application/model_service/.env` | `PORT`, `HOST`, `LLM_PROVIDER`, `LLM_MODEL`, `EMOTION_MODEL_ID`, `OPENAI_API_KEY` / `GEMINI_API_KEY` |
 
-Copy `.env.example` to `.env` in each service directory when setting up a new environment.
-
-### Services
-
-#### frontend — SvelteKit (TypeScript)
-
-| Tool | Purpose |
-|---|---|
-| SvelteKit | Meta-framework (routing, SSR, build) |
-| Svelte 5 | UI component framework |
-| Vite | Dev server and bundler |
-
-#### backend — Express (TypeScript)
-
-| Tool | Purpose |
-|---|---|
-| Express 4 | HTTP server and routing |
-| tsx | Run TypeScript directly in dev |
-| dotenv | Environment variable loading |
-
-#### model_service — FastAPI (Python)
-
-| Tool | Purpose |
-|---|---|
-| FastAPI | HTTP server and routing |
-| Uvicorn | ASGI server |
-| Pydantic | Request/response validation |
-
----
-
-## Support infrastructure
-
-### `training_pipeline/`
-
-A reusable ML harness used by `experiments/`. Handles config merging (multiple YAML files deep-merged left to right), step-level persistence to disk, and automatic run resumption after failures.
-
-**Key concepts:**
-- **Store** — the only channel through which steps pass data; serialised to disk after each step
-- **Step** — a plain function `(store, config) → Success | Failure`
-- **Routine** — ordered list of steps with a named `runs/` directory
-
-See [training_pipeline/README.md](training_pipeline/README.md) for full documentation.
-
-**Common commands:**
-
-| Command | What it does |
-|---|---|
-| `make train` | Run the training pipeline |
-
-### `report/`
-
-The academic paper is written in Markdown and compiled to PDF via pandoc and LaTeX.
-
-**Common commands:**
-
-| Command | What it does |
-|---|---|
-| `make report` | Build PDF |
-| `make report-docx` | Build DOCX |
-| `make report-clean` | Remove build artefacts |
-| `make report-deps` | Install dependencies |
-
-See [report/README.md](report/README.md) for authoring instructions and citation syntax.
-
----
-
-## Workflow
-
-This project uses a **research-first workflow**. Every branch represents a question, not a task.
-
-```
-invest/question-name     → explore and answer the question
-integration/result-name  → merge the answer into the main application
-```
-
-- `main` — shared branch for the main application
-- `sandbox/student_[name]/` — each team member's exploratory space
-- `application/`, `training_pipeline/`, `report/` — production folders; changes require a PR and approval
-
-See [CONTRIBUTIONS.md](CONTRIBUTIONS.md) for the full workflow.
+Full env-var catalogue: [CLAUDE.md](CLAUDE.md).
 
 ---
 
@@ -273,8 +164,35 @@ onclick={fn}                   // not: on:click={fn}
 
 - `main.py` — entry point only
 - `app.py` — FastAPI app creation and router registration
-- `config.py` — all environment variables
+- `config.py` — all environment variables + `load_model_registry()` for models.yaml
 - `routers/<domain>.py` — one file per domain
 - All routes prefixed `/api/v1/`
 - Use Pydantic `BaseModel` for all request/response bodies
-- Always work inside `model_service/.venv`; never install packages globally
+- Factory pattern for swappable ML backends: `base.py` (ABC) → `<name>.py` → `factory.py`
+
+---
+
+## Workflow
+
+Branches and PRs follow the philosophy in [CONTRIBUTIONS.md](CONTRIBUTIONS.md). Short version:
+
+- `main` is the shared trunk
+- `sandbox/student_<name>/` is each person's exploratory space
+- `application/`, `training_pipeline/`, `report/` are protected — changes go through a PR
+- Branch names should describe a **question** being answered, not a ticket: `invest/<q>` for research, `integration/<q>` for landing the result, `feat/<thing>` for product work
+
+For working on multiple branches in parallel without port collisions, use [WORKTREES.md](WORKTREES.md).
+
+---
+
+## History
+
+This project moved through three stages. Each stage answered a question before the next began.
+
+| Stage | Folder | Question |
+|---|---|---|
+| 1 — Research | `sandbox/` | Which face detector? Which STT backend? |
+| 2 — Integration | `application/mock_programs/` (**deprecated**) | Does the pipeline work end-to-end? |
+| 3 — Product | `application/` | Can a real user use it? |
+
+`application/mock_programs/` is **deprecated** — do not extend it or use it as a reference. The production application supersedes it entirely.
