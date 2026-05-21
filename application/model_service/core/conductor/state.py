@@ -67,3 +67,10 @@ class State:
     advance_instruction: Optional[str] = None       # i4
     facts_schema_name: Optional[str] = None         # i5 (label only; schema lives in code)
     facts_extraction_prompt: Optional[str] = None   # i5
+
+    # Late-phase guidance — appended to the intention prompt once the user
+    # has been in the state for `late_guidance_after` turns. Used to nudge
+    # the LLM toward a soft hand-off (e.g. "ready to give feedback?")
+    # without changing the state's first-impression tone.
+    late_guidance: Optional[str] = None
+    late_guidance_after: int = 0

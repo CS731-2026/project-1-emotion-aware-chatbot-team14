@@ -59,6 +59,13 @@ class Conductor:
 
         hard wins if both fire on the same turn — same end state, same
         net effect.
+
+        After deciding the (possibly new) current state, builds the
+        intention string the LLM will see. If the state defines
+        `late_guidance` and the turn counter (post-transition, so 0 on
+        the first turn of a fresh state) has reached
+        `late_guidance_after`, that guidance is appended to the base
+        intention.
         """
         prev = self.current
         transitioned = False
@@ -73,9 +80,15 @@ class Conductor:
                 self._idx += 1
                 transitioned = True
         cur = self.current
+        # turn_in_state resets on transition; on the same-state path
+        # it reflects the turn we're about to take.
+        effective_turn = 0 if transitioned else ctx.turn_in_state
+        intention = cur.intention_prompt
+        if cur.late_guidance and effective_turn >= cur.late_guidance_after:
+            intention = f"{intention}\n\n{cur.late_guidance}".strip()
         return ConductorDecision(
             state=cur,
-            intention=cur.intention_prompt,
+            intention=intention,
             surface=_surface_for(cur),
             transitioned=transitioned,
             prev_state_name=prev.name if transitioned else None,

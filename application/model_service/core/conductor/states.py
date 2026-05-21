@@ -163,7 +163,23 @@ POST_QA_YARN = State(
     hard_advance=lambda ctx: ctx.turn_in_state >= 24 or ctx.elapsed_in_state >= 900.0,
     advance_instruction=_advance(
         "the user has reached a natural pause — they sound settled, or "
-        "they've signalled they're ready to move on"
+        "they've signalled they're ready to move on, or they've agreed "
+        "to share feedback about this assistant"
+    ),
+    # After a few warm-up turns, start gently steering toward the
+    # feedback hand-off. Soft language only — never pressure the user.
+    # The LLM exits via [[advance]] when the user agrees (see the
+    # advance_instruction above).
+    late_guidance_after=3,
+    late_guidance=(
+        "By now the user has had a few turns to settle. Begin to gently "
+        "steer the conversation toward sharing brief feedback about this "
+        "assistant — only when it feels natural and the user seems "
+        "ready. Phrase it as a soft invitation ('if you're up for it, I'd "
+        "love to hear how this felt'), not a demand. If they decline or "
+        "deflect, let it go and follow their lead. Do not mention "
+        "'feedback form' or any UI vocabulary — just frame it as "
+        "sharing their thoughts."
     ),
     facts_schema_name="post_qa_yarn",
     facts_extraction_prompt=(
