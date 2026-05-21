@@ -38,8 +38,12 @@ def create_llm(provider: str, model: str, **kwargs: Any) -> LLMProvider:
         from .ollama import OllamaProvider
         return OllamaProvider(model=model, **kwargs)
 
+    elif provider == "claude-code":
+        from .claude_code import ClaudeCodeProvider
+        return ClaudeCodeProvider(model=model, **kwargs)
+
     else:
         raise ValueError(
             f"Unknown LLM provider: '{provider}'. "
-            "Valid options: 'openai', 'gemini', 'anthropic', 'ollama'."
+            "Valid options: 'openai', 'gemini', 'anthropic', 'ollama', 'claude-code'."
         )

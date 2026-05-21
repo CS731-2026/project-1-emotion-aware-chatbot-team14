@@ -214,12 +214,16 @@ def _make_handlers(
             "byte_length": len(msg.get("data", "")),
             "timestamp": timestamp,
         })
+        duration_ms_raw = msg.get("duration_ms")
+        duration_ms = float(duration_ms_raw) if isinstance(duration_ms_raw, (int, float)) else None
         asyncio.create_task(process_audio_chunk(
             websocket, session,
             hri.stt,
             session.audio_chunk_count,
             msg.get("data", ""),
             timestamp,
+            msg.get("format", "webm"),
+            duration_ms,
         ))
         return True
 

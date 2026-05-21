@@ -41,6 +41,36 @@ BASE_PERSONA = (
     "Speak naturally, warmly, clearly, and briefly. "
     "Use the hidden emotional and transcript context to calibrate your tone, "
     "but do not explicitly mention the hidden signals, the webcam analysis, or internal system components unless the user directly asks about them."
+    "\n\n"
+    "HIDDEN HEARING-QUALITY CONTEXT — read carefully, never reveal:\n"
+    "Each transcript line may carry a tag like (conf NN%). It is a private "
+    "signal of how well the audio came through — higher means clear, lower "
+    "means hard to make out. You use it silently to decide whether you "
+    "understood the user. It is not part of the conversation.\n"
+    "\n"
+    "ABSOLUTELY DO NOT, under any circumstances, mention or reference:\n"
+    "- the words 'confidence', 'threshold', 'percent', 'score', 'signal', "
+    "'tag', 'system', 'audio quality', or any number from these tags\n"
+    "- the fact that any such metadata exists\n"
+    "- phrases like 'that came through at X%', 'I heard you with high "
+    "confidence', 'the audio quality was…', 'on my end it sounds…'\n"
+    "If you find yourself about to say any of the above, stop and rewrite "
+    "your reply as a normal human conversational turn.\n"
+    "\n"
+    "WHEN TO ACT on a low value:\n"
+    "Only when the latest user line is *genuinely hard to make out* — the "
+    "words read garbled, fragmentary, or out of context AND the tag value is "
+    "low. A clear, sensible sentence is fine even if its tag isn't 100%. "
+    "Most turns, you should not act on the tag at all and just respond "
+    "naturally to what the user said.\n"
+    "\n"
+    "HOW to act, when you do:\n"
+    "Speak like a person who didn't quite catch what someone said in a "
+    "noisy room. Examples of the right tone:\n"
+    "  - 'Sorry, I didn't quite catch that — could you say it again?'\n"
+    "  - 'I missed that, would you mind repeating?'\n"
+    "  - 'It's a bit hard to hear you — could you speak up a touch?'\n"
+    "Never explain *why* you missed it. Never reference any number."
 )
 
 # TODO: tune mode prompts after user testing.
@@ -85,6 +115,13 @@ STAGE_PROMPTS: dict[Stage, str] = {
 }
 
 
+# Temporarily disabled: we don't want the LLM proposing mode/stage transitions
+# yet. When False, the LLM is asked to reply naturally (no JSON envelope) and
+# parse_reasoning_output's raw-text fallback returns reply with next_mode /
+# next_stage carried over from the caller. Flip back to True once the reasoner
+# is wired to drive check-ins through the proper channel.
+INCLUDE_OUTPUT_INSTRUCTIONS = False
+
 # Appended to every system prompt so the LLM emits the structured transition
 # response the rest of the stack expects. The parser is forgiving — see
 # parse_reasoning_output — but the prompt is written as if the schema is strict.
@@ -116,7 +153,8 @@ def _system_prompt(mode: Mode, stage: Stage | None) -> str:
         stage_part = STAGE_PROMPTS.get(stage, "")
         if stage_part:
             parts.append(stage_part)
-    parts.append(OUTPUT_INSTRUCTIONS)
+    if INCLUDE_OUTPUT_INSTRUCTIONS:
+        parts.append(OUTPUT_INSTRUCTIONS)
     return "\n\n".join(parts)
 
 
@@ -226,10 +264,48 @@ def _emotional_message(emotional_context: str) -> Message | None:
         return None
     return {"role": "system", "content": emotional_context}
 
+import math
+
+# Sigmoid-style remap of raw STT confidence into an LLM-friendly 0-100 scale.
+# Raw confidence from whisper for real, accepted speech tends to cluster
+# tightly in [0.65, 1.0] — a linear or percent-above-threshold mapping
+# squashes that into a narrow range that reads as "low" even for good
+# transcripts. The sigmoid below spreads that band out:
+#
+#   raw 0.65 (barely passed)  → ~46
+#   raw 0.80 (typical)        → ~65
+#   raw 0.92 (clean)          → ~81
+#   raw 0.99 (very clean)     → ~87
+#
+# Tune via the constants below if the spread feels wrong for the LLM.
+_CONF_REMAP_FLOOR = 30      # minimum displayed value
+_CONF_REMAP_RANGE = 70      # max displayed = floor + range
+_CONF_REMAP_MIDPOINT = 0.80 # raw value that lands near the curve's centre
+_CONF_REMAP_STEEPNESS = 8.0
+
+
+def _confidence_for_llm(raw: float | None) -> int | None:
+    """Map raw confidence in [0,1] to a sigmoid-shaped 0-100 score for the LLM.
+
+    Returns None when the engine didn't expose a confidence value.
+    """
+    if raw is None:
+        return None
+    value = _CONF_REMAP_FLOOR + _CONF_REMAP_RANGE / (
+        1.0 + math.exp(-_CONF_REMAP_STEEPNESS * (raw - _CONF_REMAP_MIDPOINT))
+    )
+    return max(0, min(100, round(value)))
+
+
 def _transcript_lines(transcript_segments: list) -> list[str]:
     if not transcript_segments:
         return []
-    return [f"[{segment.timestamp:.1f}s] {segment.text}" for segment in transcript_segments]
+    lines: list[str] = []
+    for segment in transcript_segments:
+        pct = _confidence_for_llm(getattr(segment, "confidence", None))
+        conf_tag = f" (conf {pct}%)" if pct is not None else ""
+        lines.append(f"[{segment.timestamp:.1f}s]{conf_tag} {segment.text}")
+    return lines
 
 
 def _build_transcript_message(transcript_segments: list[TranscriptSegment]) -> Message | None:
