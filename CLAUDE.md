@@ -72,6 +72,7 @@ All routes under `/api/v1/`. All async handlers use `try/catch → next(err)`.
 - `ws/video.py` — frame decode, YOLO call, encode — prepares `face_crop` for the emotion model
 - `ws/protocol.py` — dataclass definitions for all WS message types
 - `core/__init__.py` — re-exports `debug_flags` for `from core import debug_flags`
+- `core/app_state.py` — `HRIAppState` dataclass holding loaded ML components (face_detector, emotion_model, stt, llm, llm_agent, emotion_agent). One instance lives at `app.state.hri` for the life of the process; every router and WS handler reaches loaded components through it.
 - `core/debug_flags.py` — mutable runtime flags (cycle / force / log); seeded from `.env`, can be overridden in code
 - `core/face_detector.py` — YOLOv8 face detector (HuggingFace, auto-downloaded)
 - `core/emotion/base.py` — `EmotionModel` ABC + `EMOTIONS` list (EmpathBot 6-class)
@@ -83,6 +84,7 @@ All routes under `/api/v1/`. All async handlers use `try/catch → next(err)`.
 - `core/llm/base.py` — `LLMProvider` ABC + `Message` TypedDict
 - `core/llm/openai.py` — OpenAI Chat Completions provider
 - `core/llm/anthropic.py` — Anthropic stub (not yet implemented)
+- `core/llm/gemini.py` — Google Gemini provider
 - `core/llm/ollama.py` — Ollama local provider
 - `core/llm/factory.py` — `create_llm(provider, model)`
 - `core/llm/reasoning_agent.py` — `LLMReasoningAgent`; assembles system prompt + history + emotional context + transcript
@@ -131,7 +133,11 @@ Resolution order in `ws/handler.py::pick_emotion()`:
 
 | Var | Default | Options / Notes |
 |---|---|---|
-| `STT_ENGINE` | `whisper-cpp` | `whisper-cpp`, `faster-whisper` |
+| `STT_ENGINE` | `whisper-cpp` | `whisper-cpp` (needs manual cmake build), `faster-whisper` (pip-installed, slower) |
+| `STT_MODEL` | `base.en` | any whisper model name (`tiny.en`, `small.en`, …) |
+| `WHISPER_CPP_DIR` | `../../sandbox/student_taurajgreig/vendor/whisper.cpp` | Path to the built whisper.cpp source tree — only used when `STT_ENGINE=whisper-cpp` |
+| `STT_MIN_CONFIDENCE` | `0.65` | Discard transcripts below this whisper confidence |
+| `STT_MIN_TEXT_CHARS` | `5` | Discard transcripts shorter than this |
 | `EMOTION_MODEL_ID` | unset | An id in `models.yaml` (e.g. `empathbot_final`). Preferred over `EMOTION_VARIANT`. |
 | `EMOTION_VARIANT` | `placeholder` | `placeholder`, `resnet18`, `empathbot`. Used only when `EMOTION_MODEL_ID` is unset. |
 | `EMOTION_CHECKPOINT_PATH` | `models/resnet18_emotion.pth` | Only used when `EMOTION_MODEL_ID` is unset. |
