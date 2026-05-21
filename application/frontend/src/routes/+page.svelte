@@ -4,13 +4,28 @@
   import { PUBLIC_HARNESS_WS_URL } from "$env/static/public";
   import { api, type ChatDebug, type Message, type Profile } from "$lib/api";
   import { conversationState, setMode, setStage } from "$lib/conversation/store.svelte";
+  import {
+    checkInState,
+    openCheckIn,
+    closeCheckIn,
+    advanceOverlayStep,
+  } from "$lib/conversation/checkInState.svelte";
+  import {
+    SAMPLE_OVERLAY_CONVERSATIONAL,
+    SAMPLE_OVERLAY_STATIC,
+    SAMPLE_PAGE_SEQUENTIAL,
+    SAMPLE_PAGE_ALL_AT_ONCE,
+  } from "$lib/conversation/sampleCheckIns";
   import ChatInput from "$lib/components/ChatInput.svelte";
   import DebugDashboard from "$lib/components/DebugDashboard.svelte";
+  import ModePanel from "$lib/components/ModePanel.svelte";
   import ProfileModal from "$lib/components/ProfileModal.svelte";
+  import QuestionnairePage from "$lib/components/QuestionnairePage.svelte";
   import SpeakingCircle from "$lib/components/SpeakingCircle.svelte";
   import WebcamPreview from "$lib/components/WebcamPreview.svelte";
   import {
     deriveAssistantPhase,
+    isRealTranscript,
     phaseLabel,
     shouldPromoteTranscript,
     transcriptPreview,
@@ -27,6 +42,11 @@
 
   const HARNESS_WS_URL = PUBLIC_HARNESS_WS_URL || "ws://127.0.0.1:8000/ws";
   const DEBUG_ENV_ENABLED = publicEnv.PUBLIC_DEBUG_DASHBOARD === "true";
+  // Temporary kill-switch for reasoner-driven mode transitions. The LLM still
+  // emits next_mode / next_stage (visible in the debug snapshot), but we don't
+  // apply them. Check-ins are debug-key only until the reasoner can drive them
+  // through the proper channel.
+  const APPLY_REASONER_MODE_TRANSITIONS = false;
 
   let messages = $state<Message[]>([]);
   let emotion = $state<Emotion>("neutral");
@@ -54,10 +74,26 @@
   let websocketDebug = $state("No websocket events received yet");
   let websocketEvents = $state<string[]>([]);
   let transcriptEntries = $state<TranscriptEntry[]>([]);
+  let latestConfidence = $state<number | null>(null);
+  type RejectedTranscript = {
+    id: string;
+    timestamp: string;
+    text: string;
+    reason: string;
+    confidence: number | null;
+    durationMs: number | null;
+  };
+  let rejectedTranscripts = $state<RejectedTranscript[]>([]);
   let audioDebugEvents = $state<string[]>([]);
   let currentAudioLevel = $state(0);
   let vadState = $state("Mic idle");
+  const DEBUG_VISIBLE_KEY = "debug:visible";
   let showDebugDashboard = $state(DEBUG_ENV_ENABLED);
+
+  function toggleDebugDashboard() {
+    showDebugDashboard = !showDebugDashboard;
+    if (browser) localStorage.setItem(DEBUG_VISIBLE_KEY, String(showDebugDashboard));
+  }
   let pendingTranscript = $state<string | null>(null);
   let lastPromotedTranscript = $state<string | null>(null);
   let speechPulse = $state(0);
@@ -69,6 +105,38 @@
   let browserVad: BrowserVadController | null = null;
 
   const bgColour = $derived(EMOTION_COLOURS[emotion]);
+  const isOverlayActive = $derived(
+    checkInState.active && checkInState.spec?.elevation === "overlay"
+  );
+  const isPageActive = $derived(
+    checkInState.active && checkInState.spec?.elevation === "page"
+  );
+
+  function cancelMicIfRecording() {
+    if (isListening) browserVad?.stop(isListening);
+  }
+
+  // Single funnel for every answer source — chip click, typed text, and
+  // speech transcript all flow through here so multi-step overlays advance
+  // consistently regardless of input mode.
+  function handleCheckInAnswer(value: string) {
+    void sendMessage(value);
+    if (!checkInState.active) return;
+    if (checkInState.spec?.elevation === "overlay") {
+      // Multi-step: advance if there's a next step, otherwise close.
+      // Single-step: advanceOverlayStep returns false → close.
+      if (!advanceOverlayStep()) closeCheckIn();
+    }
+    // Page elevation keeps its own per-question state and doesn't close on
+    // each answer; QuestionnairePage handles that.
+  }
+
+  // Page-elevation per-question hook. For now identical to the overlay path
+  // (just send), but takes the questionId so once the reasoner is wired this
+  // can carry per-question metadata.
+  function handlePageAnswer(_questionId: string, value: string) {
+    void sendMessage(value);
+  }
   const assistantPhase = $derived(deriveAssistantPhase({
     backendOnline,
     profileReady: Boolean(profile),
@@ -77,12 +145,13 @@
     isSpeaking,
   }));
   const transcriptText = $derived(transcriptPreview(liveTranscript, transcriptEntries));
+  // Indicator tracks MediaRecorder lifecycle: ON while the recorder is still
+  // capturing (active speech OR the silence-wait grace period), OFF once
+  // .stop() has been called or the clip has been sent.
   const isActivelyRecording = $derived(
     isListening && (
       vadState.startsWith("Recording speech")
       || vadState.startsWith("Silence detected")
-      || vadState.startsWith("Stopping speech clip")
-      || vadState.startsWith("Clip sent")
     )
   );
   const micPulse = $derived(
@@ -116,6 +185,9 @@
     if (browser) {
       const params = new URLSearchParams(window.location.search);
       if (params.get("debug") === "1") showDebugDashboard = true;
+      // User toggle preference wins over env/URL once they've expressed it.
+      const stored = localStorage.getItem(DEBUG_VISIBLE_KEY);
+      if (stored !== null) showDebugDashboard = stored === "true";
     }
 
     try {
@@ -244,8 +316,10 @@
       speak(response);
       // Reasoner decides where the conversation goes next. Apply transitions
       // to the store; the view block below re-renders to match.
-      if (next_mode !== conversationState.mode) setMode(next_mode);
-      if (next_stage !== conversationState.stage) setStage(next_stage);
+      if (APPLY_REASONER_MODE_TRANSITIONS) {
+        if (next_mode !== conversationState.mode) setMode(next_mode);
+        if (next_stage !== conversationState.stage) setStage(next_stage);
+      }
     } catch {
       backendOnline = false;
       const errMsg: Message = {
@@ -318,10 +392,17 @@
           ? `Face detected at ${new Date().toLocaleTimeString()}`
           : `No face detected at ${new Date().toLocaleTimeString()}`;
       } else if (msg.type === "transcript_chunk") {
-        liveTranscript = msg.text || "Harness received audio but produced no transcript";
-        if (msg.text && shouldPromoteTranscript(msg.text, lastPromotedTranscript)) {
-          pendingTranscript = msg.text;
-          lastPromotedTranscript = msg.text;
+        // Only display real transcripts. Filtered/placeholder strings like
+        // [whisper.cpp transcript filtered] or [blank_audio] are dropped here
+        // so the prior real transcript stays visible until the user produces
+        // something new. shouldPromoteTranscript already guards chat sends.
+        const text = msg.text as string | undefined;
+        if (text && isRealTranscript(text)) {
+          liveTranscript = text;
+          if (shouldPromoteTranscript(text, lastPromotedTranscript)) {
+            pendingTranscript = text;
+            lastPromotedTranscript = text;
+          }
         }
       } else if (msg.type === "harness_status") {
         harnessStatus =
@@ -347,6 +428,8 @@
       } else if (msg.type === "audio_debug") {
         harnessAudioCount = Number(msg.audio_chunk_count ?? harnessAudioCount);
         const timings = formatTimings(msg.timings_ms);
+        const rawConf = typeof msg.stt_confidence === "number" ? msg.stt_confidence : null;
+        latestConfidence = rawConf;
         sttStatus = msg.stt_error
           ? `whisper.cpp error: ${msg.stt_error}`
           : `${msg.stt_loaded ? "whisper.cpp ran" : "whisper.cpp missing"} (${msg.stt_engine})`;
@@ -366,6 +449,18 @@
           error: msg.stt_error ?? null,
           timings,
         }, ...transcriptEntries].slice(0, 12);
+        // Rejected-transcript log: surfaces what whisper actually heard for
+        // clips that didn't pass the filter, so we can debug threshold tuning.
+        if (msg.accepted === false && typeof msg.raw_text === "string" && msg.raw_text.trim() !== "") {
+          rejectedTranscripts = [{
+            id: crypto.randomUUID(),
+            timestamp: new Date().toLocaleTimeString(),
+            text: msg.raw_text,
+            reason: (msg.stt_filter_reason as string | undefined) ?? "unknown",
+            confidence: typeof msg.stt_confidence === "number" ? msg.stt_confidence : null,
+            durationMs: typeof msg.duration_ms === "number" ? msg.duration_ms : null,
+          }, ...rejectedTranscripts].slice(0, 10);
+        }
       }
     };
 
@@ -380,9 +475,10 @@
       }
     };
 
-    socket.onerror = () => {
+    socket.onerror = (error) => {
       harnessOnline = false;
       lastDetection = "Harness unavailable";
+      console.log(error)
     };
   }
 
@@ -433,7 +529,13 @@
     if (pendingTranscript && !chatBusy) {
       const nextTranscript = pendingTranscript;
       pendingTranscript = null;
-      void sendMessage(nextTranscript);
+      // Route speech through the check-in funnel when active so the current
+      // overlay step advances; otherwise fall back to a plain chat turn.
+      if (isOverlayActive) {
+        handleCheckInAnswer(nextTranscript);
+      } else {
+        void sendMessage(nextTranscript);
+      }
     }
   });
 
@@ -445,6 +547,34 @@
 
   $effect(() => {
     init();
+  });
+
+  // Debug-only keypresses to open sample check-ins without backend involvement.
+  // Shift+1/2 → overlay variants. Shift+3/4 → full-page variants. Esc closes.
+  // Gated on the env flag (not the dashboard's visible state) so the shortcuts
+  // keep working when the dashboard panel is collapsed.
+  $effect(() => {
+    if (!DEBUG_ENV_ENABLED || !browser) return;
+
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+
+      if (e.shiftKey && e.code === "Digit1") {
+        openCheckIn(SAMPLE_OVERLAY_CONVERSATIONAL, "debug");
+      } else if (e.shiftKey && e.code === "Digit2") {
+        openCheckIn(SAMPLE_OVERLAY_STATIC, "debug");
+      } else if (e.shiftKey && e.code === "Digit3") {
+        openCheckIn(SAMPLE_PAGE_SEQUENTIAL, "debug");
+      } else if (e.shiftKey && e.code === "Digit4") {
+        openCheckIn(SAMPLE_PAGE_ALL_AT_ONCE, "debug");
+      } else if (e.key === "Escape" && checkInState.active) {
+        closeCheckIn();
+      }
+    }
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   });
 
   $effect(() => {
@@ -487,7 +617,19 @@
     </div>
   </header>
 
-  <main class="main-layout">
+  {#if isPageActive && checkInState.spec?.elevation === "page"}
+    <main class="page-mount">
+      <QuestionnairePage
+        spec={checkInState.spec}
+        onAnswer={handlePageAnswer}
+        onTextSubmit={sendMessage}
+        onCancelMic={cancelMicIfRecording}
+        {isListening}
+        onMicToggle={toggleMic}
+      />
+    </main>
+  {:else}
+  <main class="main-layout" class:hero-recede={isOverlayActive}>
     {#if conversationState.mode === "qa"}
       <section class="hero-shell">
         <div class="hero-copy">
@@ -518,10 +660,17 @@
           </div>
         </div>
 
-        <SpeakingCircle phase={assistantPhase} pulse={speechPulse} />
+        <SpeakingCircle phase={assistantPhase} pulse={speechPulse} compact={isOverlayActive} />
 
         <div class="transcript-shell">
-          <p class="transcript-label">Live transcript</p>
+          <p class="transcript-label">
+            Live transcript
+            {#if latestConfidence !== null}
+              <span class="transcript-confidence">
+                · STT confidence {(latestConfidence * 100).toFixed(0)}%
+              </span>
+            {/if}
+          </p>
           <p class="transcript-text">{transcriptText}</p>
         </div>
 
@@ -560,6 +709,26 @@
     {/if}
   </main>
 
+  {#if isOverlayActive && checkInState.spec?.elevation === "overlay"}
+    <div class="overlay-mount">
+      <ModePanel
+        spec={checkInState.spec}
+        currentStep={checkInState.currentStep}
+        onAnswer={(_stepId, value) => handleCheckInAnswer(value)}
+        onCancelMic={cancelMicIfRecording}
+        {isListening}
+        onMicToggle={toggleMic}
+      />
+    </div>
+  {/if}
+  {/if}
+
+  {#if DEBUG_ENV_ENABLED}
+    <button class="debug-toggle" type="button" onclick={toggleDebugDashboard}>
+      {showDebugDashboard ? "Hide debug" : "Show debug"}
+    </button>
+  {/if}
+
   {#if showDebugDashboard}
     <DebugDashboard
       {profile}
@@ -569,6 +738,7 @@
       {latestFaceCrop}
       {latestFrameSummary}
       {emotion}
+      {rejectedTranscripts}
       reasoningDebug={latestReasoningDebug}
     />
   {/if}
@@ -807,6 +977,13 @@
     color: rgba(255, 255, 255, 0.94);
   }
 
+  .transcript-confidence {
+    color: rgba(255, 255, 255, 0.5);
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
   .transcript-text {
     min-height: 1.6em;
   }
@@ -846,6 +1023,80 @@
     }
     50% {
       transform: scaleY(calc(1 + var(--mic-pulse) * 0.6));
+    }
+  }
+
+  .debug-toggle {
+    position: fixed;
+    top: 1rem;
+    left: 1rem;
+    z-index: 60;
+    background: rgba(15, 18, 28, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: rgba(255, 255, 255, 0.82);
+    border-radius: 999px;
+    padding: 0.4rem 0.85rem;
+    font-size: 0.78rem;
+    cursor: pointer;
+    backdrop-filter: blur(20px);
+    transition: background 120ms ease, border-color 120ms ease;
+  }
+  .debug-toggle:hover {
+    background: rgba(15, 18, 28, 0.92);
+    border-color: rgba(255, 255, 255, 0.28);
+  }
+
+  /* Check-in overlay (elevation 1): floats over the hero, which recedes. */
+  .main-layout.hero-recede .hero-shell {
+    filter: brightness(0.78) saturate(0.85);
+    transform: scale(0.97);
+    transition: filter 280ms cubic-bezier(0.22, 1, 0.36, 1),
+                transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .main-layout.hero-recede .transcript-shell,
+  .main-layout.hero-recede .response-shell,
+  .main-layout.hero-recede .composer-shell {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .main-layout .hero-shell {
+    transition: filter 280ms cubic-bezier(0.22, 1, 0.36, 1),
+                transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .overlay-mount {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 1.5rem;
+    z-index: 50;
+    pointer-events: none;
+  }
+  .overlay-mount > :global(*) {
+    pointer-events: auto;
+  }
+
+  /* Full-page check-in (elevation 2): replaces the conversation surface. */
+  .page-mount {
+    flex: 1;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 2rem 1.5rem;
+    overflow-y: auto;
+    background:
+      radial-gradient(circle at top, rgba(255, 255, 255, 0.06), transparent 40%);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .main-layout .hero-shell,
+    .main-layout.hero-recede .hero-shell,
+    .main-layout.hero-recede .transcript-shell,
+    .main-layout.hero-recede .response-shell,
+    .main-layout.hero-recede .composer-shell {
+      transition: none;
     }
   }
 

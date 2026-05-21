@@ -1,4 +1,5 @@
 from typing import cast
+import asyncio
 import logging
 import random
 
@@ -98,13 +99,17 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
         )
 
         # Step 4: run the current LLM reasoning pipeline to produce a structured result.
-        result = hri.llm_agent.reason(
+        # Offload to a worker thread — providers like ClaudeCodeProvider spawn a
+        # subprocess and block; running them on the event loop stalls the WS
+        # face-detection pipeline until the LLM returns.
+        result = await asyncio.to_thread(
+            hri.llm_agent.reason,
             body.message,
             emotional_context,
             history,
             transcript_segments,
-            mode=body.mode,
-            stage=body.stage,
+            body.mode,
+            body.stage,
         )
     else:
         latest_emotion = emotion_observations[-1].emotion if emotion_observations else "unknown"
