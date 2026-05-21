@@ -1,4 +1,5 @@
 /models
+application/model_service/models/
 .env
 node_modules
 sandbox/student_taurajgreig/vendor/
