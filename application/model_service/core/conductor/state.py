@@ -18,6 +18,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, Literal, Optional
 
+from .check_in_spec import CheckInSpec
+
 
 @dataclass(frozen=True)
 class StateContext:
@@ -49,12 +51,16 @@ class State:
     the debug dashboard. It is never sent to the LLM. The LLM only ever
     sees `intention_prompt` (always) and `advance_instruction` (yarn states,
     later iterations).
+
+    `spec` is the check-in form the frontend mounts when kind == "form".
+    Required for form states; ignored for yarn / done.
     """
 
     name: str
     kind: Literal["form", "yarn", "done"]
     intention_prompt: str = ""
     hard_advance: HardAdvance = field(default=_never)
+    spec: Optional[CheckInSpec] = None
 
     # Filled in by later iterations:
     advance_instruction: Optional[str] = None       # i4
