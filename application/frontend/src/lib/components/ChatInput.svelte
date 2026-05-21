@@ -4,11 +4,13 @@
     isListening,
     onMicToggle,
     disabled = false,
+    placeholder = "Type if you'd rather not speak...",
   }: {
     onSend: (text: string) => void;
     isListening: boolean;
     onMicToggle: () => void;
     disabled?: boolean;
+    placeholder?: string;
   } = $props();
 
   let text = $state("");
@@ -32,7 +34,7 @@
   <textarea
     bind:value={text}
     onkeydown={handleKeydown}
-    placeholder="Type if you'd rather not speak..."
+    {placeholder}
     rows="1"
     {disabled}
   ></textarea>

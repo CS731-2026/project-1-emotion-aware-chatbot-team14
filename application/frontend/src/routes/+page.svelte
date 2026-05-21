@@ -46,6 +46,14 @@
   } from "$lib/harness/types";
 
   const HARNESS_WS_URL = PUBLIC_HARNESS_WS_URL || "ws://127.0.0.1:8000/ws";
+
+  // Mic-gating feature flag. When true (current behaviour): the moment the
+  // user sends a chat message OR a form completes, the VAD pauses until
+  // the assistant has finished thinking + speaking. When false, the user
+  // can talk over a pending reply — useful for testing "barge-in" UX
+  // later. Flip this to wire up that experiment without touching the
+  // dozen call sites that drive assistantThinking.
+  const LOCK_MIC_DURING_REPLY = true;
   const DEBUG_ENV_ENABLED = publicEnv.PUBLIC_DEBUG_DASHBOARD === "true";
 
   let messages = $state<Message[]>([]);
@@ -186,6 +194,19 @@
   // event; the final chip also emits form_complete so the conductor's
   // qa_form → next-state transition fires. No /chat round-trip for chip
   // clicks — the answers are structured signals, not user speech.
+  // Free-text supplementary input on the conductor's form surface. Both
+  // typed text and STT route through here — chip clicks still drive form
+  // completion, but the user can add colour via speech or typing. The
+  // text rides into the next yarn as a {{free_text_input: …}} line in
+  // the LLM's transcript context.
+  let lastFreeTextNote = $state("");
+  function handleFormFreeText(text: string) {
+    const cleaned = text.trim();
+    if (!cleaned) return;
+    sendSystemEvent("free_text_input", { text: cleaned });
+    lastFreeTextNote = cleaned;
+  }
+
   function handleConductorPageAnswer(questionId: string, value: string, isLast: boolean) {
     sendSystemEvent("form_answer", { question_id: questionId, value });
     if (isLast) {
@@ -351,6 +372,9 @@
   async function sendMessage(text: string) {
     if (chatBusy) return;
     chatBusy = true;
+    // Lock the mic the moment the message goes to the backend — gated by
+    // LOCK_MIC_DURING_REPLY so the barge-in experiment can flip it later.
+    if (LOCK_MIC_DURING_REPLY) startAssistantThinking();
 
     const userMsg: Message = {
       id: crypto.randomUUID(),
@@ -372,7 +396,16 @@
         timestamp: new Date().toISOString(),
       };
       messages = [...messages, agentMsg];
-      speak(response);
+      // Clear the thinking flag — isSpeaking (from speak()) now drives
+      // the mic gate while TTS reads the reply aloud.
+      clearAssistantThinking();
+      // If the conductor just transitioned us into a form, the form's
+      // own TTS will read the first question — speaking the LLM's
+      // wind-down reply on top of it overlaps. Skip TTS unless we're
+      // staying on the chat surface.
+      if (view.surface === "chat") {
+        speak(response);
+      }
     } catch {
       backendOnline = false;
       const errMsg: Message = {
@@ -382,6 +415,7 @@
         timestamp: new Date().toISOString(),
       };
       messages = [...messages, errMsg];
+      clearAssistantThinking();
     } finally {
       chatBusy = false;
     }
@@ -609,15 +643,14 @@
       pendingTranscript = null;
       // Route speech depending on what surface is mounted:
       //   - debug Shift+overlay active → funnel into its step advancement
-      //   - conductor-driven form surface → swallow. Forms take input via
-      //     chips, not free speech. The audio is still captured for emotion
-      //     analysis but doesn't fire a /chat turn (which would be silent
-      //     anyway — the backend skips LLM during form states).
+      //   - conductor-driven form surface → free-text supplement; chips
+      //     still drive form_complete, but the speech rides into the
+      //     next yarn as a {{free_text_input}} line for the LLM.
       //   - otherwise (yarn / chat) → normal chat turn
       if (isOverlayActive) {
         handleCheckInAnswer(nextTranscript);
       } else if (backendView.surface === "checkin") {
-        return;
+        handleFormFreeText(nextTranscript);
       } else {
         void sendMessage(nextTranscript);
       }
@@ -640,6 +673,21 @@
   $effect(() => {
     if (micGated) browserVad?.pause();
     else browserVad?.resume();
+  });
+
+  // When the conductor moves us into a form, the form's own TTS reads
+  // the first question — cancel any in-flight assistant TTS so the two
+  // don't overlap. Runs once on surface change.
+  let previousSurface: ChatView["surface"] = "chat";
+  $effect(() => {
+    const surface = backendView.surface;
+    if (surface !== previousSurface) {
+      previousSurface = surface;
+      if (surface === "checkin" || surface === "done") {
+        if (browser && "speechSynthesis" in window) window.speechSynthesis.cancel();
+        isSpeaking = false;
+      }
+    }
   });
 
   $effect(() => {
@@ -808,10 +856,11 @@
         <QuestionnairePage
           spec={backendView.spec}
           onAnswer={handleConductorPageAnswer}
-          onTextSubmit={sendMessage}
+          onTextSubmit={handleFormFreeText}
           onCancelMic={cancelMicIfRecording}
           {isListening}
           onMicToggle={toggleMic}
+          freeTextNote={lastFreeTextNote}
         />
       </section>
     {:else if backendView.surface === "done"}
@@ -988,7 +1037,7 @@
     --mic-pulse: 0;
     display: inline-flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: 0.7rem;
     align-self: center;
     margin-top: 0.35rem;
@@ -997,11 +1046,22 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.04);
     color: rgba(255, 255, 255, 0.68);
+    /* Hold a stable width so the bars + dot don't slide as the copy
+       length flips between "Listening for a strong enough signal…" and
+       "I can hear you, but I can't reply until I finish — one moment." */
+    min-width: min(440px, 90vw);
     transition:
       background 140ms ease,
       border-color 140ms ease,
       color 140ms ease,
       transform 140ms ease;
+  }
+  .recording-subtitle .recording-copy {
+    flex: 1 1 auto;
+  }
+  .recording-subtitle .recording-bars {
+    margin-left: auto;
+    flex: 0 0 auto;
   }
 
   .recording-subtitle.listening {

@@ -17,6 +17,7 @@
     onCancelMic,
     isListening,
     onMicToggle,
+    freeTextNote = "",
   }: {
     spec: PageSpec;
     /**
@@ -29,6 +30,9 @@
     onCancelMic?: () => void;
     isListening: boolean;
     onMicToggle: () => void;
+    /** Most recent free-text supplementary note (typed or spoken). Shown as
+     * an acknowledgement under the composer so the user knows it landed. */
+    freeTextNote?: string;
   } = $props();
 
   // Per-question local state. Resets when a different spec object arrives.
@@ -133,7 +137,15 @@
   </div>
 
   <footer class="composer" in:fade={{ duration: 240, delay: 700 }}>
-    <ChatInput onSend={onTextSubmit} {isListening} {onMicToggle} />
+    <ChatInput
+      onSend={onTextSubmit}
+      {isListening}
+      {onMicToggle}
+      placeholder="Add anything else you'd like to share (optional)"
+    />
+    {#if freeTextNote}
+      <p class="free-text-ack" aria-live="polite">Got it: &ldquo;{freeTextNote}&rdquo;</p>
+    {/if}
   </footer>
 </div>
 
@@ -200,8 +212,16 @@
   }
   .composer {
     display: flex;
-    justify-content: center;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
     padding-top: 0.5rem;
+  }
+  .free-text-ack {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #4f46e5;
+    font-style: italic;
   }
   @media (max-width: 720px) {
     .page {
