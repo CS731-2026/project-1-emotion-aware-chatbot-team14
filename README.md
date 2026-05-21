@@ -27,6 +27,22 @@ The browser talks to the frontend; everything else is internal.
 
 If ports are busy: `make kill`. To clean up cleanly: Ctrl-C, then `make kill`.
 
+### Out of the box, what does it do?
+
+With the default `.env`, the model service runs in **placeholder mode** — it emits random emotion labels instead of running a trained classifier. The UI, LLM calls, STT, and WebSocket pipeline are fully functional; only the emotion classifier is stubbed. This lets you exercise the whole app without needing any model files on disk.
+
+### Switching to the real model
+
+The real emotion model is **EmpathBotV1** (EfficientNet-B2, EmpathBot 6-class). The checkpoint (`empath_final.pth`) lives at `models/empathbot/empath_final.pth` under the gitignored `models/` directory.
+
+1. **Get the file.** It's not in git (too large) and not yet hosted publicly. Ask another teammate to share it (Google Drive / Slack / etc.). A Kaggle dataset for this is planned but not live yet.
+2. **Place it.** `models/empathbot/empath_final.pth` — create the directory if needed.
+3. **Switch the service to use it.** In `application/model_service/.env`, uncomment:
+   ```
+   EMOTION_MODEL_ID=empathbot_final
+   ```
+4. Restart `make dev`. You should see `[model_service] INFO EmpathBot emotion model loaded: …` in the logs.
+
 ---
 
 ## What's where
@@ -62,7 +78,7 @@ Pick the doc that matches what you're about to do — they're each focused and s
 | Change a backend route | [ARCHITECTURE.md](ARCHITECTURE.md) → "Service Internals" → Backend |
 | Add a new emotion model | [ARCHITECTURE.md](ARCHITECTURE.md) → "Integration Points" |
 | Train a model in a notebook | "Training a model" section below — uses the face cropper to preprocess data |
-| Work on a feature without breaking other peoples' branches | [WORKTREES.md](WORKTREES.md) — parallel worktrees with isolated ports |
+| Work on a feature without breaking other peoples' branches | "Working in parallel branches" section below |
 | Understand the team's branching philosophy | [CONTRIBUTIONS.md](CONTRIBUTIONS.md) |
 | Write the report | [report/README.md](report/README.md) |
 
@@ -181,7 +197,28 @@ Branches and PRs follow the philosophy in [CONTRIBUTIONS.md](CONTRIBUTIONS.md). 
 - `application/`, `training_pipeline/`, `report/` are protected — changes go through a PR
 - Branch names should describe a **question** being answered, not a ticket: `invest/<q>` for research, `integration/<q>` for landing the result, `feat/<thing>` for product work
 
-For working on multiple branches in parallel without port collisions, use [WORKTREES.md](WORKTREES.md).
+## Working in parallel branches
+
+Use git worktrees to develop several branches simultaneously without port collisions or duplicating the multi-GB `models/` and `dataset/` directories.
+
+```bash
+# Create a new worktree branched off your current HEAD
+git worktree add ../hri-worktrees/feat--my-thing -b feat/my-thing
+
+# Inside the new worktree: set per-service ports so two `make dev` runs
+# don't fight over 3001 / 5173 / 8000
+cd ../hri-worktrees/feat--my-thing
+echo "PORT=3011" >> application/backend/.env
+echo "PUBLIC_BACKEND_URL=http://localhost:3011" > application/frontend/.env
+# …and so on for model_service. See application/*/.env.example for the keys.
+```
+
+To save the heavy `models/` weights from being duplicated, symlink it from the main checkout:
+```bash
+ln -s /path/to/main-checkout/models ./models
+```
+
+The team also has helper scripts (`scripts/worktree-add.sh`, `worktree-list.sh`, `worktree-remove.sh`) that automate this — currently only on your local machine. Ask the maintainer to share them or copy them across; they're not committed.
 
 ---
 

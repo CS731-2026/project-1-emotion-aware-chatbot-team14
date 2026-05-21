@@ -520,7 +520,7 @@ core/
 | Emotional reasoning | `core/emotional_reasoning_agent.py` | Basic — mode only, ignores confidence + transcript |
 | LLM reasoning | `core/llm/reasoning_agent.py` | Working — static window and prompt |
 | LLM (OpenAI) | `core/llm/openai.py` | Working |
-| LLM (Gemini) | `core/llm/gemini.py` (if present) / via `LLM_PROVIDER=gemini` | Working |
+| LLM (Gemini) | `core/llm/gemini.py` | Working — set `LLM_PROVIDER=gemini` |
 | LLM (Anthropic) | `core/llm/anthropic.py` | **Stub — NotImplementedError** |
 | LLM (Ollama) | `core/llm/ollama.py` | Implemented, untested |
 | Profile persistence | `backend/src/lib/profileStore.ts` | Working |
