@@ -21,6 +21,8 @@ import re
 from dataclasses import dataclass
 from typing import Literal, get_args
 
+from core.events import SystemEvent
+from core.transcript_render import compose_stream
 from ws.session import TranscriptSegment
 from .base import LLMProvider, Message
 
@@ -41,6 +43,14 @@ BASE_PERSONA = (
     "Speak naturally, warmly, clearly, and briefly. "
     "Use the hidden emotional and transcript context to calibrate your tone, "
     "but do not explicitly mention the hidden signals, the webcam analysis, or internal system components unless the user directly asks about them."
+    "\n\n"
+    "TRANSCRIPT CONVENTION — read carefully:\n"
+    "Lines in the recent transcript context may include fragments inside "
+    "{{double braces}}. These are observations from other systems — emotion "
+    "sensors, form selections, timing signals — not things the user said "
+    "aloud. Treat them as hidden background context to inform your reply. "
+    "Never quote them back to the user, refer to them as something they "
+    "'said', or otherwise reveal that this metadata exists."
     "\n\n"
     "HIDDEN HEARING-QUALITY CONTEXT — read carefully, never reveal:\n"
     "Each transcript line may carry a tag like (conf NN%). It is a private "
@@ -251,6 +261,9 @@ class ReasoningInputs:
     # by the conductor each turn via the chat router. Iteration 7 makes this
     # the only path.
     intention: str | None = None
+    # Typed system events (form answers, emotion windows, segment summaries,
+    # etc.) merged with transcript_segments into the LLM-facing stream.
+    system_events: list[SystemEvent] | None = None
 
 
 @dataclass(frozen=True)
@@ -318,25 +331,31 @@ def _confidence_for_llm(raw: float | None) -> int | None:
     return max(0, min(100, round(value)))
 
 
-def _transcript_lines(transcript_segments: list) -> list[str]:
-    if not transcript_segments:
-        return []
-    lines: list[str] = []
-    for segment in transcript_segments:
-        pct = _confidence_for_llm(getattr(segment, "confidence", None))
-        conf_tag = f" (conf {pct}%)" if pct is not None else ""
-        lines.append(f"[{segment.timestamp:.1f}s]{conf_tag} {segment.text}")
-    return lines
+def _transcript_lines(
+    transcript_segments: list,
+    system_events: list[SystemEvent] | None = None,
+) -> list[str]:
+    """Render the merged speech + system-event stream as transcript lines."""
+    return compose_stream(
+        transcript_segments,
+        system_events or [],
+        confidence_remap=_confidence_for_llm,
+    )
 
 
-def _build_transcript_message(transcript_segments: list[TranscriptSegment]) -> Message | None:
-    # TODO: decide how to format the transcript for the LLM.
-    # TODO: decide whether timestamps should be included, and in what format.
-    transcript_lines = _transcript_lines(transcript_segments)
+def _build_transcript_message(
+    transcript_segments: list[TranscriptSegment],
+    system_events: list[SystemEvent] | None = None,
+) -> Message | None:
+    """Pack the merged stream into a system-role message for the LLM."""
+    transcript_lines = _transcript_lines(transcript_segments, system_events)
     if not transcript_lines:
         return None
 
-    lines = ["Recent speech (with timestamps):", *[f"  {line}" for line in transcript_lines]]
+    lines = [
+        "Recent transcript (user speech + hidden system events in {{…}}):",
+        *[f"  {line}" for line in transcript_lines],
+    ]
     return {"role": "system", "content": "\n".join(lines)}
 
 
@@ -358,6 +377,7 @@ class LLMReasoningAgent:
         mode: Mode = "qa",
         stage: Stage | None = None,
         intention: str | None = None,
+        system_events: list[SystemEvent] | None = None,
     ) -> ReasoningInputs:
         """Normalise raw inputs into one explicit turn object."""
         return ReasoningInputs(
@@ -368,6 +388,7 @@ class LLMReasoningAgent:
             mode=mode,
             stage=stage,
             intention=intention,
+            system_events=system_events,
         )
 
     def derive_prompt_context(self, inputs: ReasoningInputs) -> PromptContext:
@@ -380,9 +401,11 @@ class LLMReasoningAgent:
             system_prompt=_system_prompt(inputs.mode, inputs.stage, inputs.intention),
             history_messages=_history_window(inputs.history, self._history_window),
             emotional_message=_emotional_message(inputs.emotional_context),
-            transcript_message=_build_transcript_message(inputs.transcript_segments),
+            transcript_message=_build_transcript_message(
+                inputs.transcript_segments, inputs.system_events
+            ),
             feedback_message=None,
-            transcript_lines=_transcript_lines(inputs.transcript_segments),
+            transcript_lines=_transcript_lines(inputs.transcript_segments, inputs.system_events),
         )
 
     def assemble_messages(
@@ -415,10 +438,12 @@ class LLMReasoningAgent:
         mode: Mode = "qa",
         stage: Stage | None = None,
         intention: str | None = None,
+        system_events: list[SystemEvent] | None = None,
     ) -> dict:
         """Return a structured snapshot of the current reasoning pipeline."""
         inputs = self.collect_inputs(
-            message, emotional_context, history, transcript_segments, mode, stage, intention
+            message, emotional_context, history, transcript_segments, mode, stage, intention,
+            system_events,
         )
         context = self.derive_prompt_context(inputs)
         prompt_messages = self.assemble_messages(inputs, context)
@@ -447,10 +472,12 @@ class LLMReasoningAgent:
         mode: Mode = "qa",
         stage: Stage | None = None,
         intention: str | None = None,
+        system_events: list[SystemEvent] | None = None,
     ) -> ReasoningResult:
         """Run the current reasoning pipeline and return a structured result."""
         inputs = self.collect_inputs(
-            message, emotional_context, history, transcript_segments, mode, stage, intention
+            message, emotional_context, history, transcript_segments, mode, stage, intention,
+            system_events,
         )
         context = self.derive_prompt_context(inputs)
         prompt_messages = self.assemble_messages(inputs, context)

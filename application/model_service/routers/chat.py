@@ -145,6 +145,7 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
         # Step 1: collect the contextual state for this profile and turn.
         history = [{"role": m.role, "content": m.content} for m in body.history]
         transcript_segments = session.transcript_buffer[-20:] if session else []
+        system_events = session.system_events[-20:] if session else []
 
         # Step 2: summarise the emotional signal into a compact reasoning input.
         emotional_context = hri.emotion_agent.analyse(emotion_observations, transcript_segments)
@@ -158,6 +159,7 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
             mode=body.mode,
             stage=body.stage,
             intention=intention,
+            system_events=system_events,
         )
 
         # Step 4: run the current LLM reasoning pipeline to produce a structured result.
@@ -173,6 +175,7 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
             body.mode,
             body.stage,
             intention,
+            system_events,
         )
     else:
         latest_emotion = emotion_observations[-1].emotion if emotion_observations else "unknown"
