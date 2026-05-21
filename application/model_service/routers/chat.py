@@ -76,6 +76,45 @@ def _fallback_debug_snapshot(body: ChatRequest, latest_emotion: str, intention: 
 _Surface = Literal["chat", "checkin", "done"]
 
 
+def generate_yarn_opener(
+    session: HarnessSession,
+    hri: HRIAppState,
+) -> str | None:
+    """Run the LLM once with no user message to produce a yarn-opening reply.
+
+    Called right after the conductor transitions into a yarn state via a
+    form_complete event — there's no user chat turn to ride; we want the
+    assistant to acknowledge the form answers and open the next phase.
+
+    Returns the cleaned reply text, or None if the LLM agent isn't loaded
+    or the call fails. Caller is responsible for transporting the reply
+    to the frontend (e.g. via an assistant_reply WS message).
+    """
+    if hri.llm_agent is None or hri.emotion_agent is None:
+        return None
+    transcript_segments = session.transcript_buffer[-20:]
+    system_events = session.system_events[-20:]
+    emotional_context = hri.emotion_agent.analyse(
+        session.emotion_buffer.history(), transcript_segments,
+    )
+    current = session.conductor.current
+    try:
+        result = hri.llm_agent.reason(
+            "",  # no user input — the LLM is opening the yarn from the
+                 # intention prompt + recent form_answer events
+            emotional_context,
+            [],
+            transcript_segments,
+            current.intention_prompt,
+            system_events,
+            current.advance_instruction,
+        )
+    except Exception:
+        logger.exception("yarn opener LLM call failed")
+        return None
+    return result.reply.strip() or None
+
+
 def _run_extraction_on_transition(
     session: HarnessSession,
     prev_state_name: str,

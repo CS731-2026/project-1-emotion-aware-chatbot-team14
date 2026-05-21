@@ -20,7 +20,7 @@ from ws.session import (
     remove_session,
     emit_debug,
 )
-from routers.chat import _run_extraction_on_transition
+from routers.chat import _run_extraction_on_transition, generate_yarn_opener
 from ws.audio import process_audio_chunk
 from ws.video import FrameDetectionResult, detect_from_message
 
@@ -125,6 +125,35 @@ async def _send_frame_messages(
         "confidence": confidence,
         "timestamp": timestamp,
     }))
+
+
+async def _run_yarn_opener(
+    websocket: WebSocket,
+    session: HarnessSession,
+    hri: HRIAppState,
+) -> None:
+    """Generate a yarn-opening assistant reply and push it to the frontend.
+
+    Runs the (potentially slow) LLM call in a worker thread, then sends an
+    assistant_reply WS message. On failure, sends assistant_reply_error so
+    the frontend can clear its thinking indicator and surface the issue.
+    """
+    try:
+        reply = await asyncio.to_thread(generate_yarn_opener, session, hri)
+    except Exception:
+        logger.exception("yarn opener crashed")
+        reply = None
+    if reply:
+        await _send(websocket, {
+            "type": "assistant_reply",
+            "text": reply,
+            "state_name": session.conductor.current.name,
+        })
+    else:
+        await _send(websocket, {
+            "type": "assistant_reply_error",
+            "state_name": session.conductor.current.name,
+        })
 
 
 def _make_handlers(
@@ -293,6 +322,13 @@ def _make_handlers(
                         decision.prev_state_name,
                         hri,
                     ))
+                # If the new state is a yarn, kick off an LLM call to open
+                # the conversation. The frontend showed a thinking
+                # indicator the moment it sent form_complete; we'll clear
+                # it by sending assistant_reply (or assistant_reply_error)
+                # below.
+                if decision.state.kind == "yarn" and decision.state.intention_prompt:
+                    asyncio.create_task(_run_yarn_opener(websocket, session, hri))
 
         return True
 
