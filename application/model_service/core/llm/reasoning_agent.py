@@ -19,7 +19,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Literal, get_args
+from typing import Literal
 
 from core.events import SystemEvent
 from core.tool_emissions import ToolEmission, extract_emissions
@@ -124,51 +124,8 @@ class ReasoningResult:
     emissions: list[ToolEmission] = field(default_factory=list)
 
 
-_MODES: tuple[str, ...] = get_args(Mode)
-_STAGES: tuple[str, ...] = get_args(Stage)
+# Used by extract_json() to strip ```json fences around JSON-mode outputs.
 _JSON_FENCE_RE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$", re.IGNORECASE)
-
-
-def parse_reasoning_output(
-    raw_text: str,
-    current_mode: Mode,
-    current_stage: Stage | None,
-) -> ReasoningResult:
-    """Parse the LLM's JSON output. Degrade gracefully on any failure."""
-    stripped = _JSON_FENCE_RE.sub("", raw_text).strip()
-
-    try:
-        data = json.loads(stripped)
-    except json.JSONDecodeError:
-        logger.warning("reasoner output was not valid JSON; falling back to raw text")
-        return ReasoningResult(reply=raw_text.strip(), next_mode=current_mode, next_stage=current_stage)
-
-    if not isinstance(data, dict):
-        logger.warning("reasoner output JSON was not an object; falling back to raw text")
-        return ReasoningResult(reply=raw_text.strip(), next_mode=current_mode, next_stage=current_stage)
-
-    reply = data.get("reply")
-    if not isinstance(reply, str) or not reply.strip():
-        logger.warning("reasoner output missing 'reply' field; falling back to raw text")
-        reply = raw_text.strip()
-
-    raw_next_mode = data.get("next_mode")
-    next_mode: Mode = current_mode
-    if isinstance(raw_next_mode, str) and raw_next_mode in _MODES:
-        next_mode = raw_next_mode  # type: ignore[assignment]
-    elif raw_next_mode is not None:
-        logger.warning("reasoner emitted unknown next_mode=%r; keeping current=%s", raw_next_mode, current_mode)
-
-    raw_next_stage = data.get("next_stage")
-    next_stage: Stage | None = current_stage
-    if raw_next_stage is None:
-        next_stage = None
-    elif isinstance(raw_next_stage, str) and raw_next_stage in _STAGES:
-        next_stage = raw_next_stage  # type: ignore[assignment]
-    else:
-        logger.warning("reasoner emitted unknown next_stage=%r; keeping current=%s", raw_next_stage, current_stage)
-
-    return ReasoningResult(reply=reply, next_mode=next_mode, next_stage=next_stage)
 
 
 @dataclass(frozen=True)
@@ -452,14 +409,12 @@ class LLMReasoningAgent:
         system_events: list[SystemEvent] | None = None,
         advance_instruction: str | None = None,
     ) -> ReasoningResult:
-        """Run the current reasoning pipeline and return a structured result.
+        """Run the reasoning pipeline and return the parsed result.
 
-        Two-step parse on the raw LLM output:
-          1. Strip any recognised inline [[…]] tool-emission markers and
-             collect them into `emissions`.
-          2. Run the legacy parse_reasoning_output on the cleaned text
-             (still used for the JSON-envelope path; iteration 7 retires
-             this once the legacy fields go).
+        Strips any inline [[…]] tool-emission markers from the raw LLM
+        output and collects them into `emissions`. The cleaned text is
+        returned verbatim as the reply — the LLM is no longer asked to
+        emit JSON, so there's no envelope to parse.
         """
         inputs = self.collect_inputs(
             message, emotional_context, history, transcript_segments, mode, stage, intention,
@@ -469,10 +424,9 @@ class LLMReasoningAgent:
         prompt_messages = self.assemble_messages(inputs, context)
         raw_response = self._llm.chat(prompt_messages)
         cleaned, emissions = extract_emissions(raw_response)
-        legacy = parse_reasoning_output(cleaned, mode, stage)
         return ReasoningResult(
-            reply=legacy.reply,
-            next_mode=legacy.next_mode,
-            next_stage=legacy.next_stage,
+            reply=cleaned.strip(),
+            next_mode=mode,         # echo caller; field is dead, kept for response compat
+            next_stage=stage,
             emissions=emissions,
         )
