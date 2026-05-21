@@ -160,7 +160,7 @@ POST_QA_YARN = State(
     # Safety net only — preferred exit is the [[advance]] emission below,
     # fired by the LLM when it senses the user is ready to move on. The
     # turn / time caps stop a stuck conversation from trapping the user.
-    hard_advance=lambda ctx: ctx.turn_in_state >= 12 or ctx.elapsed_in_state >= 300.0,
+    hard_advance=lambda ctx: ctx.turn_in_state >= 24 or ctx.elapsed_in_state >= 900.0,
     advance_instruction=_advance(
         "the user has reached a natural pause — they sound settled, or "
         "they've signalled they're ready to move on"
