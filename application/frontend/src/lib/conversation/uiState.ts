@@ -50,6 +50,7 @@ function isPlaceholderTranscript(text: string): boolean {
   const normalized = text.trim().toLowerCase();
   if (normalized === "") return true;
   if (normalized === "listening for harness transcript...") return true;
+  if (normalized === "start speaking when you're ready.") return true;
   if (normalized === "mic idle") return true;
   if (normalized.startsWith("sent speech clip ")) return true;
   if (normalized === "harness received audio but produced no transcript") return true;

@@ -20,6 +20,14 @@
     onSelect: (value: string) => void;
     disabled?: boolean;
   } = $props();
+
+  // True when the user answered via free-form text/STT and the value
+  // doesn't correspond to any chip.
+  const freeFormAnswer = $derived.by(() => {
+    if (!selectedValue) return null;
+    const hit = question.choices.some((c) => c.value === selectedValue);
+    return hit ? null : selectedValue;
+  });
 </script>
 
 <section class="card">
@@ -39,6 +47,10 @@
       </button>
     {/each}
   </div>
+
+  {#if freeFormAnswer}
+    <p class="free-form-answer">Your answer: &ldquo;{freeFormAnswer}&rdquo;</p>
+  {/if}
 
   {#if reactions.length > 0}
     <div class="reactions">
@@ -109,5 +121,15 @@
     display: flex;
     flex-direction: column;
     gap: 0.6rem;
+  }
+  .free-form-answer {
+    margin: 0;
+    padding: 0.55rem 0.8rem;
+    background: rgba(79, 70, 229, 0.08);
+    border: 1px solid rgba(79, 70, 229, 0.22);
+    border-radius: 10px;
+    color: #312e81;
+    font-size: 0.9rem;
+    font-style: italic;
   }
 </style>
