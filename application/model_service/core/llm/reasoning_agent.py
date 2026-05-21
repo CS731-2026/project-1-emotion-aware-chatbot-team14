@@ -18,19 +18,21 @@ from __future__ import annotations
 import json
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from typing import Literal, get_args
 
-from core.events import SystemEvent
-from core.tool_emissions import ToolEmission, extract_emissions
-from core.transcript_render import compose_stream
 from ws.session import TranscriptSegment
 from .base import LLMProvider, Message
 
 logger = logging.getLogger(__name__)
 
+# Which page / overall conversational mode the user is currently in.
+Mode = Literal["qa", "feedback", "consent", "done"]
 
-# Shared persona used by every state. The conductor's intention_prompt
-# layers on top per turn.
+# Within `qa` mode, which scripted stage of the anxiety-reduction arc.
+Stage = Literal["open", "explore", "ground", "close"]
+
+# Shared persona used across every mode. Mode / stage prompts layer on top.
 BASE_PERSONA = (
     "You are the live empathy system the user is speaking with inside this application. "
     "You can hear the user's speech and the application can also observe the user's face through the webcam. "
@@ -39,63 +41,82 @@ BASE_PERSONA = (
     "Speak naturally, warmly, clearly, and briefly. "
     "Use the hidden emotional and transcript context to calibrate your tone, "
     "but do not explicitly mention the hidden signals, the webcam analysis, or internal system components unless the user directly asks about them."
-    "\n\n"
-    "TRANSCRIPT CONVENTION — read carefully:\n"
-    "Lines in the recent transcript context may include fragments inside "
-    "{{double braces}}. These are observations from other systems — emotion "
-    "sensors, form selections, timing signals — not things the user said "
-    "aloud. Treat them as hidden background context to inform your reply. "
-    "Never quote them back to the user, refer to them as something they "
-    "'said', or otherwise reveal that this metadata exists."
-    "\n\n"
-    "HIDDEN HEARING-QUALITY CONTEXT — read carefully, never reveal:\n"
-    "Each transcript line may carry a tag like (conf NN%). It is a private "
-    "signal of how well the audio came through — higher means clear, lower "
-    "means hard to make out. You use it silently to decide whether you "
-    "understood the user. It is not part of the conversation.\n"
-    "\n"
-    "ABSOLUTELY DO NOT, under any circumstances, mention or reference:\n"
-    "- the words 'confidence', 'threshold', 'percent', 'score', 'signal', "
-    "'tag', 'system', 'audio quality', or any number from these tags\n"
-    "- the fact that any such metadata exists\n"
-    "- phrases like 'that came through at X%', 'I heard you with high "
-    "confidence', 'the audio quality was…', 'on my end it sounds…'\n"
-    "If you find yourself about to say any of the above, stop and rewrite "
-    "your reply as a normal human conversational turn.\n"
-    "\n"
-    "WHEN TO ACT on a low value:\n"
-    "Only when the latest user line is *genuinely hard to make out* — the "
-    "words read garbled, fragmentary, or out of context AND the tag value is "
-    "low. A clear, sensible sentence is fine even if its tag isn't 100%. "
-    "Most turns, you should not act on the tag at all and just respond "
-    "naturally to what the user said.\n"
-    "\n"
-    "HOW to act, when you do:\n"
-    "Speak like a person who didn't quite catch what someone said in a "
-    "noisy room. Examples of the right tone:\n"
-    "  - 'Sorry, I didn't quite catch that — could you say it again?'\n"
-    "  - 'I missed that, would you mind repeating?'\n"
-    "  - 'It's a bit hard to hear you — could you speak up a touch?'\n"
-    "Never explain *why* you missed it. Never reference any number."
 )
 
-def _system_prompt(
-    intention: str | None = None,
-    advance_instruction: str | None = None,
-) -> str:
-    """Compose the system prompt: BASE_PERSONA + (intention) + (advance_instruction).
+# TODO: tune mode prompts after user testing.
+MODE_PROMPTS: dict[Mode, str] = {
+    "qa": (
+        "You are guiding the user through a brief anxiety-reduction conversation. "
+        "Stay focused on listening and helping the user feel heard. "
+        "Do not give clinical advice."
+    ),
+    "feedback": (
+        "The user is on the feedback check-in page and is periodically self-reporting how they feel. "
+        "Stay mostly silent and brief. Only speak up when recent self-reports or emotional context suggest the user would benefit from acknowledgement. "
+        "When you do speak, keep it to one or two short sentences."
+    ),
+    "consent": "",
+    "done": "",
+}
 
-    The intention is the conductor's state-specific stance for the LLM.
-    advance_instruction is the optional tool-emission directive that lets
-    the conductor pick up an [[advance]] marker if the LLM senses a
-    natural pause. The LLM sees no state-machine vocabulary, no mode/stage
-    enum, no transition JSON.
-    """
+# TODO: tune stage prompts after user testing. These only apply when mode == "qa".
+STAGE_PROMPTS: dict[Stage, str] = {
+    "open": (
+        "You are in the OPENING stage. "
+        "Greet the user warmly in one or two sentences and invite them to share what is on their mind. "
+        "Do not problem-solve. Do not ask multiple questions."
+    ),
+    "explore": (
+        "You are in the EXPLORE stage. Actively listen. "
+        "Reflect what the user has said in your own words, then ask one curious follow-up. "
+        "Do not give advice."
+    ),
+    "ground": (
+        "You are in the GROUND stage. "
+        "Offer one short, concrete grounding or regulation exercise appropriate to the user's current emotional state "
+        "(for example: a brief breathing pattern, a 5-4-3-2-1 sensory exercise, or a body-awareness check). "
+        "Lead the exercise — do not just suggest it. Keep it to a few short turns."
+    ),
+    "close": (
+        "You are in the CLOSE stage. "
+        "Briefly summarise one or two things the user shared, affirm them, and end gently. "
+        "Do not open new threads."
+    ),
+}
+
+
+# Appended to every system prompt so the LLM emits the structured transition
+# response the rest of the stack expects. The parser is forgiving — see
+# parse_reasoning_output — but the prompt is written as if the schema is strict.
+OUTPUT_INSTRUCTIONS = (
+    "Respond with a single JSON object and nothing else. No markdown fences. "
+    "The object must have exactly these keys:\n"
+    '  "reply": a string — your spoken reply to the user, natural conversational text.\n'
+    '  "next_mode": one of "qa", "feedback", or "done".\n'
+    '  "next_stage": when next_mode is "qa", one of "open", "explore", "ground", "close"; otherwise null.\n'
+    "\n"
+    "You decide where the conversation goes next:\n"
+    "- Stay in qa while supportive conversation is still useful.\n"
+    "- Advance through qa stages: open → explore → ground → close.\n"
+    '- Move to "feedback" when a brief self-report check-in would help (for example, a natural pause, or a disconnect between what the user says and how they sound).\n'
+    '- Move to "done" when the conversation has reached a meaningful close.\n'
+    "- Returning to qa from feedback is fine if the user wants to keep talking.\n"
+    "\n"
+    "Do not announce these transitions to the user. They are internal."
+)
+
+
+def _system_prompt(mode: Mode, stage: Stage | None) -> str:
+    """Compose the system prompt from base persona + mode + (optional) stage + output instructions."""
     parts = [BASE_PERSONA]
-    if intention and intention.strip():
-        parts.append(intention)
-    if advance_instruction:
-        parts.append(advance_instruction)
+    mode_part = MODE_PROMPTS.get(mode, "")
+    if mode_part:
+        parts.append(mode_part)
+    if stage is not None and mode == "qa":
+        stage_part = STAGE_PROMPTS.get(stage, "")
+        if stage_part:
+            parts.append(stage_part)
+    parts.append(OUTPUT_INSTRUCTIONS)
     return "\n\n".join(parts)
 
 
@@ -103,19 +124,62 @@ def _system_prompt(
 class ReasoningResult:
     """Structured output of one reasoning turn.
 
-    `reply` is the user-facing text with any inline tool-emission markers
-    (e.g. `[[advance]]`) stripped. `emissions` contains the parsed
-    ToolEmission objects the LLM produced — empty when the model didn't
-    emit anything. The conductor reads emissions[*].name to decide
-    transitions.
+    The LLM is asked to emit JSON containing all three fields. When parsing
+    fails, `reply` falls back to the raw text and the mode/stage carry over
+    from the caller's current state — so a malformed response degrades to a
+    plain text reply with no transition rather than a hard failure.
     """
 
     reply: str
-    emissions: list[ToolEmission] = field(default_factory=list)
+    next_mode: Mode
+    next_stage: Stage | None
 
 
-# Used by extract_json() to strip ```json fences around JSON-mode outputs.
+_MODES: tuple[str, ...] = get_args(Mode)
+_STAGES: tuple[str, ...] = get_args(Stage)
 _JSON_FENCE_RE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$", re.IGNORECASE)
+
+
+def parse_reasoning_output(
+    raw_text: str,
+    current_mode: Mode,
+    current_stage: Stage | None,
+) -> ReasoningResult:
+    """Parse the LLM's JSON output. Degrade gracefully on any failure."""
+    stripped = _JSON_FENCE_RE.sub("", raw_text).strip()
+
+    try:
+        data = json.loads(stripped)
+    except json.JSONDecodeError:
+        logger.warning("reasoner output was not valid JSON; falling back to raw text")
+        return ReasoningResult(reply=raw_text.strip(), next_mode=current_mode, next_stage=current_stage)
+
+    if not isinstance(data, dict):
+        logger.warning("reasoner output JSON was not an object; falling back to raw text")
+        return ReasoningResult(reply=raw_text.strip(), next_mode=current_mode, next_stage=current_stage)
+
+    reply = data.get("reply")
+    if not isinstance(reply, str) or not reply.strip():
+        logger.warning("reasoner output missing 'reply' field; falling back to raw text")
+        reply = raw_text.strip()
+
+    raw_next_mode = data.get("next_mode")
+    next_mode: Mode = current_mode
+    if isinstance(raw_next_mode, str) and raw_next_mode in _MODES:
+        next_mode = raw_next_mode  # type: ignore[assignment]
+    elif raw_next_mode is not None:
+        logger.warning("reasoner emitted unknown next_mode=%r; keeping current=%s", raw_next_mode, current_mode)
+
+    raw_next_stage = data.get("next_stage")
+    next_stage: Stage | None = current_stage
+    if raw_next_stage is None:
+        next_stage = None
+    elif isinstance(raw_next_stage, str) and raw_next_stage in _STAGES:
+        next_stage = raw_next_stage  # type: ignore[assignment]
+    else:
+        logger.warning("reasoner emitted unknown next_stage=%r; keeping current=%s", raw_next_stage, current_stage)
+
+    return ReasoningResult(reply=reply, next_mode=next_mode, next_stage=next_stage)
 
 
 @dataclass(frozen=True)
@@ -126,15 +190,8 @@ class ReasoningInputs:
     emotional_context: str
     history: list[Message]
     transcript_segments: list
-    # Supplied by the conductor each turn via the chat router. The
-    # conductor's per-state intention_prompt.
-    intention: str | None = None
-    # Typed system events (form answers, emotion windows, segment summaries,
-    # etc.) merged with transcript_segments into the LLM-facing stream.
-    system_events: list[SystemEvent] | None = None
-    # Yarn-state directive appended to the system prompt telling the LLM to
-    # append [[advance]] when it senses a natural pause. None for form states.
-    advance_instruction: str | None = None
+    mode: Mode = "qa"
+    stage: Stage | None = None
 
 
 @dataclass(frozen=True)
@@ -169,64 +226,20 @@ def _emotional_message(emotional_context: str) -> Message | None:
         return None
     return {"role": "system", "content": emotional_context}
 
-import math
-
-# Sigmoid-style remap of raw STT confidence into an LLM-friendly 0-100 scale.
-# Raw confidence from whisper for real, accepted speech tends to cluster
-# tightly in [0.65, 1.0] — a linear or percent-above-threshold mapping
-# squashes that into a narrow range that reads as "low" even for good
-# transcripts. The sigmoid below spreads that band out:
-#
-#   raw 0.65 (barely passed)  → ~46
-#   raw 0.80 (typical)        → ~65
-#   raw 0.92 (clean)          → ~81
-#   raw 0.99 (very clean)     → ~87
-#
-# Tune via the constants below if the spread feels wrong for the LLM.
-_CONF_REMAP_FLOOR = 30      # minimum displayed value
-_CONF_REMAP_RANGE = 70      # max displayed = floor + range
-_CONF_REMAP_MIDPOINT = 0.80 # raw value that lands near the curve's centre
-_CONF_REMAP_STEEPNESS = 8.0
+def _transcript_lines(transcript_segments: list) -> list[str]:
+    if not transcript_segments:
+        return []
+    return [f"[{segment.timestamp:.1f}s] {segment.text}" for segment in transcript_segments]
 
 
-def _confidence_for_llm(raw: float | None) -> int | None:
-    """Map raw confidence in [0,1] to a sigmoid-shaped 0-100 score for the LLM.
-
-    Returns None when the engine didn't expose a confidence value.
-    """
-    if raw is None:
-        return None
-    value = _CONF_REMAP_FLOOR + _CONF_REMAP_RANGE / (
-        1.0 + math.exp(-_CONF_REMAP_STEEPNESS * (raw - _CONF_REMAP_MIDPOINT))
-    )
-    return max(0, min(100, round(value)))
-
-
-def _transcript_lines(
-    transcript_segments: list,
-    system_events: list[SystemEvent] | None = None,
-) -> list[str]:
-    """Render the merged speech + system-event stream as transcript lines."""
-    return compose_stream(
-        transcript_segments,
-        system_events or [],
-        confidence_remap=_confidence_for_llm,
-    )
-
-
-def _build_transcript_message(
-    transcript_segments: list[TranscriptSegment],
-    system_events: list[SystemEvent] | None = None,
-) -> Message | None:
-    """Pack the merged stream into a system-role message for the LLM."""
-    transcript_lines = _transcript_lines(transcript_segments, system_events)
+def _build_transcript_message(transcript_segments: list[TranscriptSegment]) -> Message | None:
+    # TODO: decide how to format the transcript for the LLM.
+    # TODO: decide whether timestamps should be included, and in what format.
+    transcript_lines = _transcript_lines(transcript_segments)
     if not transcript_lines:
         return None
 
-    lines = [
-        "Recent transcript (user speech + hidden system events in {{…}}):",
-        *[f"  {line}" for line in transcript_lines],
-    ]
+    lines = ["Recent speech (with timestamps):", *[f"  {line}" for line in transcript_lines]]
     return {"role": "system", "content": "\n".join(lines)}
 
 
@@ -239,62 +252,14 @@ class LLMReasoningAgent:
         self._llm = llm
         self._history_window = history_window
 
-    def extract_json(
-        self,
-        instruction: str,
-        segment_slice: list[str],
-    ) -> dict:
-        """One-shot JSON-mode LLM call used by the conductor at state-end.
-
-        `instruction` is the state's facts_extraction_prompt — it describes
-        what fields to return. `segment_slice` is the rendered list of
-        transcript + event lines from the state we're closing.
-
-        Always returns a dict. On parse failure, returns {_raw: text,
-        _error: msg} so the caller can record what came back without
-        blocking the transition.
-        """
-        slice_text = "\n".join(segment_slice) if segment_slice else "(empty)"
-        system = (
-            "You are a fact-extraction helper. Read the conversation slice "
-            "between <slice> tags and return a single JSON object as "
-            "instructed. Return ONLY the JSON object — no prose, no "
-            "markdown fences, no commentary. If a field can't be determined "
-            "from the slice, use null."
-        )
-        user = (
-            f"{instruction}\n\n"
-            f"<slice>\n{slice_text}\n</slice>"
-        )
-        try:
-            raw = self._llm.chat([
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ])
-        except Exception as exc:  # noqa: BLE001 — never block the transition
-            logger.warning("extraction LLM call failed: %s", exc)
-            return {"_raw": "", "_error": str(exc)}
-
-        stripped = _JSON_FENCE_RE.sub("", raw).strip()
-        try:
-            parsed = json.loads(stripped)
-        except json.JSONDecodeError as exc:
-            logger.warning("extraction output not valid JSON; recording raw")
-            return {"_raw": raw.strip(), "_error": str(exc)}
-        if not isinstance(parsed, dict):
-            logger.warning("extraction output JSON was not an object; recording raw")
-            return {"_raw": raw.strip(), "_error": "top-level value not an object"}
-        return parsed
-
     def collect_inputs(
         self,
         message: str,
         emotional_context: str,
         history: list[Message],
         transcript_segments: list | None = None,
-        intention: str | None = None,
-        system_events: list[SystemEvent] | None = None,
-        advance_instruction: str | None = None,
+        mode: Mode = "qa",
+        stage: Stage | None = None,
     ) -> ReasoningInputs:
         """Normalise raw inputs into one explicit turn object."""
         return ReasoningInputs(
@@ -302,9 +267,8 @@ class LLMReasoningAgent:
             emotional_context=emotional_context,
             history=history,
             transcript_segments=transcript_segments or [],
-            intention=intention,
-            system_events=system_events,
-            advance_instruction=advance_instruction,
+            mode=mode,
+            stage=stage,
         )
 
     def derive_prompt_context(self, inputs: ReasoningInputs) -> PromptContext:
@@ -314,14 +278,12 @@ class LLMReasoningAgent:
         touching the chat route or provider adapters.
         """
         return PromptContext(
-            system_prompt=_system_prompt(inputs.intention, inputs.advance_instruction),
+            system_prompt=_system_prompt(inputs.mode, inputs.stage),
             history_messages=_history_window(inputs.history, self._history_window),
             emotional_message=_emotional_message(inputs.emotional_context),
-            transcript_message=_build_transcript_message(
-                inputs.transcript_segments, inputs.system_events
-            ),
+            transcript_message=_build_transcript_message(inputs.transcript_segments),
             feedback_message=None,
-            transcript_lines=_transcript_lines(inputs.transcript_segments, inputs.system_events),
+            transcript_lines=_transcript_lines(inputs.transcript_segments),
         )
 
     def assemble_messages(
@@ -351,15 +313,11 @@ class LLMReasoningAgent:
         emotional_context: str,
         history: list[Message],
         transcript_segments: list | None = None,
-        intention: str | None = None,
-        system_events: list[SystemEvent] | None = None,
-        advance_instruction: str | None = None,
+        mode: Mode = "qa",
+        stage: Stage | None = None,
     ) -> dict:
         """Return a structured snapshot of the current reasoning pipeline."""
-        inputs = self.collect_inputs(
-            message, emotional_context, history, transcript_segments, intention,
-            system_events, advance_instruction,
-        )
+        inputs = self.collect_inputs(message, emotional_context, history, transcript_segments, mode, stage)
         context = self.derive_prompt_context(inputs)
         prompt_messages = self.assemble_messages(inputs, context)
 
@@ -367,7 +325,8 @@ class LLMReasoningAgent:
             "provider": self._llm.provider_name,
             "model": self._llm.model_name,
             "current_message": inputs.current_message,
-            "intention": inputs.intention,
+            "mode": inputs.mode,
+            "stage": inputs.stage,
             "system_prompt": context.system_prompt,
             "history_window": self._history_window,
             "history_messages": context.history_messages,
@@ -382,23 +341,12 @@ class LLMReasoningAgent:
         emotional_context: str,
         history: list[Message],
         transcript_segments: list[TranscriptSegment] | None = None,
-        intention: str | None = None,
-        system_events: list[SystemEvent] | None = None,
-        advance_instruction: str | None = None,
+        mode: Mode = "qa",
+        stage: Stage | None = None,
     ) -> ReasoningResult:
-        """Run the reasoning pipeline and return the parsed result.
-
-        Strips any inline [[…]] tool-emission markers from the raw LLM
-        output and collects them into `emissions`. The cleaned text is
-        returned verbatim as the reply — the LLM is no longer asked to
-        emit JSON, so there's no envelope to parse.
-        """
-        inputs = self.collect_inputs(
-            message, emotional_context, history, transcript_segments, intention,
-            system_events, advance_instruction,
-        )
+        """Run the current reasoning pipeline and return a structured result."""
+        inputs = self.collect_inputs(message, emotional_context, history, transcript_segments, mode, stage)
         context = self.derive_prompt_context(inputs)
         prompt_messages = self.assemble_messages(inputs, context)
         raw_response = self._llm.chat(prompt_messages)
-        cleaned, emissions = extract_emissions(raw_response)
-        return ReasoningResult(reply=cleaned.strip(), emissions=emissions)
+        return parse_reasoning_output(raw_response, mode, stage)
