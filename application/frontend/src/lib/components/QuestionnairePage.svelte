@@ -149,29 +149,23 @@
   }
 
   /** Process composer or STT text against the first unanswered visible
-   * question. A successful chip match advances the form; allowFreeText
-   * questions accept the raw text as the answer; otherwise the text
-   * becomes a free-text supplement (parent handles ack + system_event).
+   * question. ALWAYS advances the form:
+   *   - matched chip → selectChoice with the matched value (chip highlights)
+   *   - unmatched text → selectChoice with the raw text (rendered as a
+   *     free-form annotation under the chips by QuestionCard)
+   * If the form is already filled, the text becomes a free-text
+   * supplement that the parent forwards to the LLM via system_event.
    */
   function consumeInputText(text: string) {
     const clean = text.trim();
     if (!clean) return;
     const target = visibleQuestions.find((q) => !answers[q.id]?.selected);
     if (!target) {
-      onTextSubmit(clean);  // form already filled — treat as supplementary
+      onTextSubmit(clean);
       return;
     }
     const matched = matchChip(target, clean);
-    if (matched !== null) {
-      selectChoice(target, matched);
-      return;
-    }
-    if (target.allowFreeText) {
-      selectChoice(target, clean);  // raw text is the answer
-      return;
-    }
-    // Couldn't progress; fall through to the supplementary free-text path.
-    onTextSubmit(clean);
+    selectChoice(target, matched ?? clean);
   }
 
   function handleComposerSubmit(text: string) {
