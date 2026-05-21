@@ -143,16 +143,33 @@ OUTPUT_INSTRUCTIONS = (
 )
 
 
-def _system_prompt(mode: Mode, stage: Stage | None) -> str:
-    """Compose the system prompt from base persona + mode + (optional) stage + output instructions."""
+def _system_prompt(
+    mode: Mode,
+    stage: Stage | None,
+    intention: str | None = None,
+) -> str:
+    """Compose the system prompt.
+
+    When `intention` is provided (the conductor-driven path), the result is
+    BASE_PERSONA + intention. The intention is the only state-specific text;
+    the LLM gets no other vocabulary about the state machine.
+
+    When `intention` is None (legacy path, while callers are still being
+    migrated), fall back to the MODE_PROMPTS / STAGE_PROMPTS composition.
+    Iteration 7 deletes the legacy path along with the mode/stage dicts.
+    """
     parts = [BASE_PERSONA]
-    mode_part = MODE_PROMPTS.get(mode, "")
-    if mode_part:
-        parts.append(mode_part)
-    if stage is not None and mode == "qa":
-        stage_part = STAGE_PROMPTS.get(stage, "")
-        if stage_part:
-            parts.append(stage_part)
+    if intention is not None:
+        if intention.strip():
+            parts.append(intention)
+    else:
+        mode_part = MODE_PROMPTS.get(mode, "")
+        if mode_part:
+            parts.append(mode_part)
+        if stage is not None and mode == "qa":
+            stage_part = STAGE_PROMPTS.get(stage, "")
+            if stage_part:
+                parts.append(stage_part)
     if INCLUDE_OUTPUT_INSTRUCTIONS:
         parts.append(OUTPUT_INSTRUCTIONS)
     return "\n\n".join(parts)
@@ -230,6 +247,10 @@ class ReasoningInputs:
     transcript_segments: list
     mode: Mode = "qa"
     stage: Stage | None = None
+    # When provided, replaces MODE_PROMPTS/STAGE_PROMPTS composition. Supplied
+    # by the conductor each turn via the chat router. Iteration 7 makes this
+    # the only path.
+    intention: str | None = None
 
 
 @dataclass(frozen=True)
@@ -336,6 +357,7 @@ class LLMReasoningAgent:
         transcript_segments: list | None = None,
         mode: Mode = "qa",
         stage: Stage | None = None,
+        intention: str | None = None,
     ) -> ReasoningInputs:
         """Normalise raw inputs into one explicit turn object."""
         return ReasoningInputs(
@@ -345,6 +367,7 @@ class LLMReasoningAgent:
             transcript_segments=transcript_segments or [],
             mode=mode,
             stage=stage,
+            intention=intention,
         )
 
     def derive_prompt_context(self, inputs: ReasoningInputs) -> PromptContext:
@@ -354,7 +377,7 @@ class LLMReasoningAgent:
         touching the chat route or provider adapters.
         """
         return PromptContext(
-            system_prompt=_system_prompt(inputs.mode, inputs.stage),
+            system_prompt=_system_prompt(inputs.mode, inputs.stage, inputs.intention),
             history_messages=_history_window(inputs.history, self._history_window),
             emotional_message=_emotional_message(inputs.emotional_context),
             transcript_message=_build_transcript_message(inputs.transcript_segments),
@@ -391,9 +414,12 @@ class LLMReasoningAgent:
         transcript_segments: list | None = None,
         mode: Mode = "qa",
         stage: Stage | None = None,
+        intention: str | None = None,
     ) -> dict:
         """Return a structured snapshot of the current reasoning pipeline."""
-        inputs = self.collect_inputs(message, emotional_context, history, transcript_segments, mode, stage)
+        inputs = self.collect_inputs(
+            message, emotional_context, history, transcript_segments, mode, stage, intention
+        )
         context = self.derive_prompt_context(inputs)
         prompt_messages = self.assemble_messages(inputs, context)
 
@@ -403,6 +429,7 @@ class LLMReasoningAgent:
             "current_message": inputs.current_message,
             "mode": inputs.mode,
             "stage": inputs.stage,
+            "intention": inputs.intention,
             "system_prompt": context.system_prompt,
             "history_window": self._history_window,
             "history_messages": context.history_messages,
@@ -419,9 +446,12 @@ class LLMReasoningAgent:
         transcript_segments: list[TranscriptSegment] | None = None,
         mode: Mode = "qa",
         stage: Stage | None = None,
+        intention: str | None = None,
     ) -> ReasoningResult:
         """Run the current reasoning pipeline and return a structured result."""
-        inputs = self.collect_inputs(message, emotional_context, history, transcript_segments, mode, stage)
+        inputs = self.collect_inputs(
+            message, emotional_context, history, transcript_segments, mode, stage, intention
+        )
         context = self.derive_prompt_context(inputs)
         prompt_messages = self.assemble_messages(inputs, context)
         raw_response = self._llm.chat(prompt_messages)
