@@ -52,43 +52,24 @@ class Conductor:
     def observe(self, ctx: StateContext) -> ConductorDecision:
         """Possibly advance to the next state and return the resulting view.
 
-        Order of evaluation:
-          1. hard_advance(ctx) — deterministic rule (form completion, turn cap).
-          2. soft advance: yarn states with ctx.advance_emission=True
-             advance when the LLM has appended an [[advance]] marker.
-
-        hard wins if both fire on the same turn — same end state, same
-        net effect.
-
-        After deciding the (possibly new) current state, builds the
-        intention string the LLM will see. If the state defines
-        `late_guidance` and the turn counter (post-transition, so 0 on
-        the first turn of a fresh state) has reached
-        `late_guidance_after`, that guidance is appended to the base
-        intention.
+        Walks one step:
+          1. Ask the current state via `should_advance(ctx)`.
+          2. If it returns True (and we're not already on the last
+             state), move forward.
+          3. Build the new current state's intention via
+             `intention_for(ctx)` — using a fresh ctx with turn 0 on
+             transitions so the new state sees its first turn.
         """
         prev = self.current
         transitioned = False
-        if self._idx < len(self._states) - 1:
-            cur = self.current
-            should_advance = cur.hard_advance(ctx) or (
-                cur.kind == "yarn"
-                and cur.advance_instruction is not None
-                and ctx.advance_emission
-            )
-            if should_advance:
-                self._idx += 1
-                transitioned = True
+        if self._idx < len(self._states) - 1 and self.current.should_advance(ctx):
+            self._idx += 1
+            transitioned = True
         cur = self.current
-        # turn_in_state resets on transition; on the same-state path
-        # it reflects the turn we're about to take.
-        effective_turn = 0 if transitioned else ctx.turn_in_state
-        intention = cur.intention_prompt
-        if cur.late_guidance and effective_turn >= cur.late_guidance_after:
-            intention = f"{intention}\n\n{cur.late_guidance}".strip()
+        intention_ctx = StateContext() if transitioned else ctx
         return ConductorDecision(
             state=cur,
-            intention=intention,
+            intention=cur.intention_for(intention_ctx),
             surface=_surface_for(cur),
             transitioned=transitioned,
             prev_state_name=prev.name if transitioned else None,
