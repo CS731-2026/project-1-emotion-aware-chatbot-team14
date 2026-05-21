@@ -267,15 +267,14 @@ def _make_handlers(
             decision = session.conductor.observe(ctx)
             if decision.transitioned:
                 session.turn_in_state = 0
-                # Run end-of-state fact extraction off-thread so we don't
-                # block the WS event loop while the LLM thinks.
-                if decision.prev_state_name:
-                    await asyncio.to_thread(
-                        _run_extraction_on_transition,
-                        session,
-                        decision.prev_state_name,
-                        hri,
-                    )
+                # Send the new view FIRST so the frontend swaps surfaces
+                # immediately. Extraction (an LLM call that can take 10-30s
+                # with the claude-code provider) runs in the background; its
+                # segment_summary event lands in session.system_events when
+                # the worker thread finishes. If the user speaks before
+                # then, the next yarn's LLM call just doesn't see the
+                # summary — acceptable, since the raw {{form_answer: …}}
+                # lines are still in the transcript.
                 await _send(websocket, {
                     "type": "view_update",
                     "view": {
@@ -286,6 +285,13 @@ def _make_handlers(
                     },
                     "prev_state_name": decision.prev_state_name,
                 })
+                if decision.prev_state_name:
+                    asyncio.create_task(asyncio.to_thread(
+                        _run_extraction_on_transition,
+                        session,
+                        decision.prev_state_name,
+                        hri,
+                    ))
 
         return True
 
