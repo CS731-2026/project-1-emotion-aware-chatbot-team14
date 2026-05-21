@@ -2,14 +2,34 @@
   import { browser } from "$app/environment";
   import { env as publicEnv } from "$env/dynamic/public";
   import { PUBLIC_HARNESS_WS_URL } from "$env/static/public";
-  import { api, type ChatDebug, type Message, type Profile } from "$lib/api";
+  import { api, type ChatDebug, type ChatView, type Message, type Profile } from "$lib/api";
+  // conversationState is still imported because it carries unrelated fields
+  // (qaTurnCount, feedbackEvents, etc.) some other modules read. The
+  // top-level `mode` / `stage` are no longer used here — the conductor
+  // drives the surface via backendView. setMode / setStage retired.
+  import { conversationState } from "$lib/conversation/store.svelte";
+  import {
+    checkInState,
+    openCheckIn,
+    closeCheckIn,
+    advanceOverlayStep,
+  } from "$lib/conversation/checkInState.svelte";
+  import {
+    SAMPLE_OVERLAY_CONVERSATIONAL,
+    SAMPLE_OVERLAY_STATIC,
+    SAMPLE_PAGE_SEQUENTIAL,
+    SAMPLE_PAGE_ALL_AT_ONCE,
+  } from "$lib/conversation/sampleCheckIns";
   import ChatInput from "$lib/components/ChatInput.svelte";
   import DebugDashboard from "$lib/components/DebugDashboard.svelte";
+  import ModePanel from "$lib/components/ModePanel.svelte";
   import ProfileModal from "$lib/components/ProfileModal.svelte";
+  import QuestionnairePage from "$lib/components/QuestionnairePage.svelte";
   import SpeakingCircle from "$lib/components/SpeakingCircle.svelte";
   import WebcamPreview from "$lib/components/WebcamPreview.svelte";
   import {
     deriveAssistantPhase,
+    isRealTranscript,
     phaseLabel,
     shouldPromoteTranscript,
     transcriptPreview,
@@ -17,14 +37,23 @@
   import { BrowserVadController } from "$lib/harness/browserVad";
   import {
     EMOTION_COLOURS,
-    EMOTION_MAP,
     FRAME_INTERVAL_MS,
+    SPEECH_THRESHOLD,
     formatTimings,
+    isEmotion,
     type Emotion,
     type TranscriptEntry,
   } from "$lib/harness/types";
 
   const HARNESS_WS_URL = PUBLIC_HARNESS_WS_URL || "ws://127.0.0.1:8000/ws";
+
+  // Mic-gating feature flag. When true (current behaviour): the moment the
+  // user sends a chat message OR a form completes, the VAD pauses until
+  // the assistant has finished thinking + speaking. When false, the user
+  // can talk over a pending reply — useful for testing "barge-in" UX
+  // later. Flip this to wire up that experiment without touching the
+  // dozen call sites that drive assistantThinking.
+  const LOCK_MIC_DURING_REPLY = true;
   const DEBUG_ENV_ENABLED = publicEnv.PUBLIC_DEBUG_DASHBOARD === "true";
 
   let messages = $state<Message[]>([]);
@@ -53,14 +82,60 @@
   let websocketDebug = $state("No websocket events received yet");
   let websocketEvents = $state<string[]>([]);
   let transcriptEntries = $state<TranscriptEntry[]>([]);
+  let latestConfidence = $state<number | null>(null);
+  type RejectedTranscript = {
+    id: string;
+    timestamp: string;
+    text: string;
+    reason: string;
+    confidence: number | null;
+    durationMs: number | null;
+  };
+  let rejectedTranscripts = $state<RejectedTranscript[]>([]);
   let audioDebugEvents = $state<string[]>([]);
   let currentAudioLevel = $state(0);
   let vadState = $state("Mic idle");
+  const DEBUG_VISIBLE_KEY = "debug:visible";
   let showDebugDashboard = $state(DEBUG_ENV_ENABLED);
+
+  function toggleDebugDashboard() {
+    showDebugDashboard = !showDebugDashboard;
+    if (browser) localStorage.setItem(DEBUG_VISIBLE_KEY, String(showDebugDashboard));
+  }
   let pendingTranscript = $state<string | null>(null);
   let lastPromotedTranscript = $state<string | null>(null);
   let speechPulse = $state(0);
   let latestReasoningDebug = $state<ChatDebug | null>(null);
+  // Backend-supplied view directive — the conductor's current decision about
+  // what surface the frontend should render. Source of truth lives in the
+  // model service; this is a read-only mirror.
+  let backendView = $state<ChatView>({ surface: "chat" });
+
+  // True while we're waiting for the assistant's yarn-opener reply after a
+  // form completion. Drives the thinking indicator + mic pause. Cleared
+  // when an assistant_reply (or assistant_reply_error) message arrives, or
+  // when a safety timeout fires.
+  let assistantThinking = $state(false);
+  let assistantThinkingTimeout = $state<ReturnType<typeof setTimeout> | null>(null);
+
+  function clearAssistantThinking() {
+    assistantThinking = false;
+    if (assistantThinkingTimeout) {
+      clearTimeout(assistantThinkingTimeout);
+      assistantThinkingTimeout = null;
+    }
+  }
+
+  function startAssistantThinking() {
+    assistantThinking = true;
+    if (assistantThinkingTimeout) clearTimeout(assistantThinkingTimeout);
+    // Safety net — claude-code subprocess may hang or never respond. After
+    // 60s, give up and let the user speak again.
+    assistantThinkingTimeout = setTimeout(() => {
+      assistantThinking = false;
+      assistantThinkingTimeout = null;
+    }, 60_000);
+  }
 
   let ws = $state<WebSocket | null>(null);
   let frameInterval = $state<ReturnType<typeof setInterval> | null>(null);
@@ -68,6 +143,85 @@
   let browserVad: BrowserVadController | null = null;
 
   const bgColour = $derived(EMOTION_COLOURS[emotion]);
+  const isOverlayActive = $derived(
+    checkInState.active && checkInState.spec?.elevation === "overlay"
+  );
+  const isPageActive = $derived(
+    checkInState.active && checkInState.spec?.elevation === "page"
+  );
+
+  function cancelMicIfRecording() {
+    // Abort any in-progress utterance but keep the audio engine alive —
+    // calling stop() here would close the AudioContext and never restart
+    // (the auto-listen $effect bails because isListening is still true).
+    browserVad?.cancelUtterance();
+  }
+
+  // Single funnel for every answer source — chip click, typed text, and
+  // speech transcript all flow through here so multi-step overlays advance
+  // consistently regardless of input mode.
+  function handleCheckInAnswer(value: string) {
+    void sendMessage(value);
+    if (!checkInState.active) return;
+    if (checkInState.spec?.elevation === "overlay") {
+      // Multi-step: advance if there's a next step, otherwise close.
+      // Single-step: advanceOverlayStep returns false → close.
+      if (!advanceOverlayStep()) closeCheckIn();
+    }
+    // Page elevation keeps its own per-question state and doesn't close on
+    // each answer; QuestionnairePage handles that.
+  }
+
+  // Page-elevation per-question hook. For now identical to the overlay path
+  // (just send), but takes the questionId so once the reasoner is wired this
+  // can carry per-question metadata.
+  // Debug-fixture path (Shift+3/4 checkInState overlay). Ignores isLast — the
+  // debug overlay is dismissed via Esc, not by form completion.
+  function handlePageAnswer(_questionId: string, value: string, _isLast?: boolean) {
+    void sendMessage(value);
+  }
+
+  // Send a typed system event over the harness WebSocket. The model service
+  // appends it to the session's events buffer (merged into the LLM-facing
+  // transcript stream) and, for kind="form_complete", steps the conductor
+  // and pushes back a view_update.
+  function sendSystemEvent(kind: string, payload: Record<string, unknown> = {}) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: "system_event", kind, payload, t: Date.now() / 1000 }));
+  }
+
+  // Conductor-driven check-in path. Each chip click emits a form_answer
+  // event; the final chip also emits form_complete so the conductor's
+  // qa_form → next-state transition fires. No /chat round-trip for chip
+  // clicks — the answers are structured signals, not user speech.
+  // Text / STT during the form surface flows through QuestionnairePage:
+  //   - chip match found → form_answer event + advance
+  //   - matchless free-text → handleFormFreeText emits free_text_input
+  // pendingFormInputText is set by STT (parent owns the transcript pipe);
+  // composer-typed text reaches QuestionnairePage directly via ChatInput.
+  let lastFreeTextNote = $state("");
+  let pendingFormInputText = $state<string | null>(null);
+  function handleFormFreeText(text: string) {
+    const cleaned = text.trim();
+    if (!cleaned) return;
+    sendSystemEvent("free_text_input", { text: cleaned });
+    lastFreeTextNote = cleaned;
+  }
+
+  function handleConductorPageAnswer(questionId: string, value: string, isLast: boolean) {
+    sendSystemEvent("form_answer", { question_id: questionId, value });
+    if (isLast) {
+      // Empty payload — the backend conductor knows which form is current;
+      // exposing the state name to the LLM via the rendered event would
+      // violate "the LLM never sees state-machine vocabulary".
+      sendSystemEvent("form_complete", {});
+      // Note: deliberately no startAssistantThinking() here. After the
+      // form, we want the user to be able to keep going immediately —
+      // the yarn-opener LLM call runs in the background and the reply
+      // will be spoken when it lands (which pauses the mic during TTS,
+      // not during the wait).
+    }
+  }
   const assistantPhase = $derived(deriveAssistantPhase({
     backendOnline,
     profileReady: Boolean(profile),
@@ -76,12 +230,13 @@
     isSpeaking,
   }));
   const transcriptText = $derived(transcriptPreview(liveTranscript, transcriptEntries));
+  // Indicator tracks MediaRecorder lifecycle: ON while the recorder is still
+  // capturing (active speech OR the silence-wait grace period), OFF once
+  // .stop() has been called or the clip has been sent.
   const isActivelyRecording = $derived(
     isListening && (
       vadState.startsWith("Recording speech")
       || vadState.startsWith("Silence detected")
-      || vadState.startsWith("Stopping speech clip")
-      || vadState.startsWith("Clip sent")
     )
   );
   const micPulse = $derived(
@@ -115,6 +270,9 @@
     if (browser) {
       const params = new URLSearchParams(window.location.search);
       if (params.get("debug") === "1") showDebugDashboard = true;
+      // User toggle preference wins over env/URL once they've expressed it.
+      const stored = localStorage.getItem(DEBUG_VISIBLE_KEY);
+      if (stored !== null) showDebugDashboard = stored === "true";
     }
 
     try {
@@ -172,23 +330,21 @@
     }
   }
 
+  // Held outside speak() so the utterance survives until the speech
+  // engine fires onend — Chrome occasionally GCs in-flight utterances.
+  let activeChatUtterance: SpeechSynthesisUtterance | null = null;
   function speak(text: string) {
     if (!browser || typeof window === "undefined" || !("speechSynthesis" in window)) return;
-
+    const synth = window.speechSynthesis;
+    // Chrome / Safari sometimes leave the synth in a paused state when
+    // the tab regains focus — without resume() speak() is a no-op.
+    if (synth.paused) synth.resume();
     const utterance = new SpeechSynthesisUtterance(text);
-    const preferredVoice = window.speechSynthesis.getVoices()
-      .find((voice) => voice.lang.toLowerCase().startsWith("en"));
-
-    if (preferredVoice) {
-      utterance.voice = preferredVoice;
-    }
-
     utterance.rate = 1;
     utterance.pitch = 1;
     utterance.volume = 1;
 
     utterance.onstart = () => {
-      isSpeaking = true;
       speechPulse = 0.4;
     };
     utterance.onboundary = (event) => {
@@ -205,17 +361,49 @@
       isSpeaking = false;
       speechPulse = 0;
     };
-    utterance.onerror = () => {
+    utterance.onerror = (event) => {
+      console.warn("[tts] chat reply failed:", event.error, text);
       isSpeaking = false;
       speechPulse = 0;
     };
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
+    activeChatUtterance = utterance;
+    // Flip isSpeaking BEFORE calling speak() — onstart fires when audio
+    // begins, which is a few ms later than we need. The VAD has to be
+    // gated before the speaker actually emits any sound, otherwise the
+    // first phoneme gets captured back into the mic.
+    isSpeaking = true;
+    synth.speak(utterance);
+  }
+
+  // Neutral TTS for non-chat prompts (e.g. form question prompts). Same
+  // mic-gating discipline as speak() — flip isSpeaking pre-emptively so
+  // the VAD pauses before audio reaches the speaker. No speechPulse
+  // bookkeeping since the SpeakingCircle is the chat-surface animation.
+  let activeNeutralUtterance: SpeechSynthesisUtterance | null = null;
+  function speakNeutral(text: string) {
+    if (!browser || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const synth = window.speechSynthesis;
+    if (synth.paused) synth.resume();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    utterance.onend = () => { isSpeaking = false; };
+    utterance.onerror = (event) => {
+      console.warn("[tts] neutral prompt failed:", event.error, text);
+      isSpeaking = false;
+    };
+    activeNeutralUtterance = utterance;
+    isSpeaking = true;
+    synth.speak(utterance);
   }
 
   async function sendMessage(text: string) {
     if (chatBusy) return;
     chatBusy = true;
+    // Lock the mic the moment the message goes to the backend — gated by
+    // LOCK_MIC_DURING_REPLY so the barge-in experiment can flip it later.
+    if (LOCK_MIC_DURING_REPLY) startAssistantThinking();
 
     const userMsg: Message = {
       id: crypto.randomUUID(),
@@ -226,9 +414,10 @@
     messages = [...messages, userMsg];
 
     try {
-      const { response, debug } = await api.sendChat(text);
+      const { response, view, debug } = await api.sendChat(text);
       backendOnline = true;
       latestReasoningDebug = debug;
+      backendView = view;
       const agentMsg: Message = {
         id: crypto.randomUUID(),
         role: "agent",
@@ -236,7 +425,16 @@
         timestamp: new Date().toISOString(),
       };
       messages = [...messages, agentMsg];
-      speak(response);
+      // Clear the thinking flag — isSpeaking (from speak()) now drives
+      // the mic gate while TTS reads the reply aloud.
+      clearAssistantThinking();
+      // If the conductor just transitioned us into a form, the form's
+      // own TTS will read the first question — speaking the LLM's
+      // wind-down reply on top of it overlaps. Skip TTS unless we're
+      // staying on the chat surface.
+      if (view.surface === "chat") {
+        speak(response);
+      }
     } catch {
       backendOnline = false;
       const errMsg: Message = {
@@ -246,6 +444,7 @@
         timestamp: new Date().toISOString(),
       };
       messages = [...messages, errMsg];
+      clearAssistantThinking();
     } finally {
       chatBusy = false;
     }
@@ -302,18 +501,24 @@
           `Harness received audio chunk ${msg.audio_chunk_count} - ` +
           `${msg.byte_length} base64 chars`;
       } else if (msg.type === "emotion_update") {
-        const mapped = EMOTION_MAP[msg.emotion as string];
-        if (mapped) emotion = mapped;
+        if (isEmotion(msg.emotion)) emotion = msg.emotion;
       } else if (msg.type === "face_detection") {
         faceDetected = Boolean(msg.detected);
         lastDetection = msg.detected
           ? `Face detected at ${new Date().toLocaleTimeString()}`
           : `No face detected at ${new Date().toLocaleTimeString()}`;
       } else if (msg.type === "transcript_chunk") {
-        liveTranscript = msg.text || "Harness received audio but produced no transcript";
-        if (msg.text && shouldPromoteTranscript(msg.text, lastPromotedTranscript)) {
-          pendingTranscript = msg.text;
-          lastPromotedTranscript = msg.text;
+        // Only display real transcripts. Filtered/placeholder strings like
+        // [whisper.cpp transcript filtered] or [blank_audio] are dropped here
+        // so the prior real transcript stays visible until the user produces
+        // something new. shouldPromoteTranscript already guards chat sends.
+        const text = msg.text as string | undefined;
+        if (text && isRealTranscript(text)) {
+          liveTranscript = text;
+          if (shouldPromoteTranscript(text, lastPromotedTranscript)) {
+            pendingTranscript = text;
+            lastPromotedTranscript = text;
+          }
         }
       } else if (msg.type === "harness_status") {
         harnessStatus =
@@ -325,6 +530,31 @@
         sttStatus = msg.stt_loaded
           ? `whisper.cpp ready: ${msg.stt_engine}/${msg.stt_model}`
           : "whisper.cpp not loaded";
+      } else if (msg.type === "view_update") {
+        // Conductor stepped on the model service (e.g. form_complete event)
+        // and pushed us a new view. Mirror it; render reactively.
+        if (msg.view) backendView = msg.view as ChatView;
+      } else if (msg.type === "assistant_reply") {
+        // Backend's yarn opener — assistant speaks first after a form
+        // completion. Append to chat history + persist server-side so
+        // subsequent /chat calls include it in the LLM's context.
+        const text = String(msg.text ?? "").trim();
+        if (text) {
+          const agentMsg: Message = {
+            id: crypto.randomUUID(),
+            role: "agent",
+            content: text,
+            timestamp: new Date().toISOString(),
+          };
+          messages = [...messages, agentMsg];
+          speak(text);
+          void api.appendHistory(agentMsg).catch(() => { /* non-fatal */ });
+        }
+        clearAssistantThinking();
+      } else if (msg.type === "assistant_reply_error") {
+        // Backend's yarn opener failed. Surface a soft fallback so the
+        // user isn't left waiting and can speak again.
+        clearAssistantThinking();
       } else if (msg.type === "frame_debug") {
         harnessFrameCount = Number(msg.frame_count ?? harnessFrameCount);
         latestHarnessFrame = `data:image/jpeg;base64,${msg.image_data}`;
@@ -339,6 +569,8 @@
       } else if (msg.type === "audio_debug") {
         harnessAudioCount = Number(msg.audio_chunk_count ?? harnessAudioCount);
         const timings = formatTimings(msg.timings_ms);
+        const rawConf = typeof msg.stt_confidence === "number" ? msg.stt_confidence : null;
+        latestConfidence = rawConf;
         sttStatus = msg.stt_error
           ? `whisper.cpp error: ${msg.stt_error}`
           : `${msg.stt_loaded ? "whisper.cpp ran" : "whisper.cpp missing"} (${msg.stt_engine})`;
@@ -358,6 +590,18 @@
           error: msg.stt_error ?? null,
           timings,
         }, ...transcriptEntries].slice(0, 12);
+        // Rejected-transcript log: surfaces what whisper actually heard for
+        // clips that didn't pass the filter, so we can debug threshold tuning.
+        if (msg.accepted === false && typeof msg.raw_text === "string" && msg.raw_text.trim() !== "") {
+          rejectedTranscripts = [{
+            id: crypto.randomUUID(),
+            timestamp: new Date().toLocaleTimeString(),
+            text: msg.raw_text,
+            reason: (msg.stt_filter_reason as string | undefined) ?? "unknown",
+            confidence: typeof msg.stt_confidence === "number" ? msg.stt_confidence : null,
+            durationMs: typeof msg.duration_ms === "number" ? msg.duration_ms : null,
+          }, ...rejectedTranscripts].slice(0, 10);
+        }
       }
     };
 
@@ -372,9 +616,10 @@
       }
     };
 
-    socket.onerror = () => {
+    socket.onerror = (error) => {
       harnessOnline = false;
       lastDetection = "Harness unavailable";
+      console.log(error)
     };
   }
 
@@ -425,7 +670,20 @@
     if (pendingTranscript && !chatBusy) {
       const nextTranscript = pendingTranscript;
       pendingTranscript = null;
-      void sendMessage(nextTranscript);
+      // Route speech depending on what surface is mounted:
+      //   - debug Shift+overlay active → funnel into its step advancement
+      //   - conductor-driven form surface → hand the text to
+      //     QuestionnairePage via pendingFormInputText; it tries to
+      //     match a chip on the current question, falls back to
+      //     free-text if there's no match.
+      //   - otherwise (yarn / chat) → normal chat turn
+      if (isOverlayActive) {
+        handleCheckInAnswer(nextTranscript);
+      } else if (backendView.surface === "checkin") {
+        pendingFormInputText = nextTranscript;
+      } else {
+        void sendMessage(nextTranscript);
+      }
     }
   });
 
@@ -435,8 +693,67 @@
     startAudioStreaming();
   });
 
+  // Pause the mic while the assistant is generating its yarn-opener OR
+  // while TTS is speaking the reply aloud — we don't want the mic
+  // picking up the speaker's own voice. The VAD still reports the audio
+  // level while paused so the UI can show "I hear you but can't respond
+  // yet" via the micGated/userTryingToSpeak flags below.
+  const micGated = $derived(assistantThinking || isSpeaking);
+  const userTryingToSpeak = $derived(micGated && currentAudioLevel > SPEECH_THRESHOLD);
+  $effect(() => {
+    if (micGated) browserVad?.pause();
+    else browserVad?.resume();
+  });
+
+  // React to surface transitions driven by the conductor. The form's
+  // speakPrompt manages its own TTS lifecycle (and sendMessage already
+  // skips chat-reply TTS when view.surface !== "chat") — so we don't
+  // need to cancel speechSynthesis here. We DO want to show the
+  // "forming a response" lock when the user finishes a form and the
+  // surface flips to chat while the yarn-opener LLM call runs on the
+  // server. It clears when assistant_reply (or its error twin) arrives.
+  let previousSurface: ChatView["surface"] = "chat";
+  $effect(() => {
+    const surface = backendView.surface;
+    if (surface !== previousSurface) {
+      const prev = previousSurface;
+      previousSurface = surface;
+      if (prev === "checkin" && surface === "chat") {
+        startAssistantThinking();
+      }
+    }
+  });
+
   $effect(() => {
     init();
+  });
+
+  // Debug-only keypresses to open sample check-ins without backend involvement.
+  // Shift+1/2 → overlay variants. Shift+3/4 → full-page variants. Esc closes.
+  // Gated on the env flag (not the dashboard's visible state) so the shortcuts
+  // keep working when the dashboard panel is collapsed.
+  $effect(() => {
+    if (!DEBUG_ENV_ENABLED || !browser) return;
+
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+
+      if (e.shiftKey && e.code === "Digit1") {
+        openCheckIn(SAMPLE_OVERLAY_CONVERSATIONAL, "debug");
+      } else if (e.shiftKey && e.code === "Digit2") {
+        openCheckIn(SAMPLE_OVERLAY_STATIC, "debug");
+      } else if (e.shiftKey && e.code === "Digit3") {
+        openCheckIn(SAMPLE_PAGE_SEQUENTIAL, "debug");
+      } else if (e.shiftKey && e.code === "Digit4") {
+        openCheckIn(SAMPLE_PAGE_ALL_AT_ONCE, "debug");
+      } else if (e.key === "Escape" && checkInState.active) {
+        closeCheckIn();
+      }
+    }
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   });
 
   $effect(() => {
@@ -479,56 +796,142 @@
     </div>
   </header>
 
-  <main class="main-layout">
-    <section class="hero-shell">
-      <div class="hero-copy">
-        <p class="hero-kicker">{phaseLabel(assistantPhase)}</p>
-        <h2>A calmer, voice-first conversation.</h2>
-        <p class="helper-text">{bootMessage}</p>
-        <div
-          class="recording-subtitle"
-          class:listening={isListening}
-          class:recording={isActivelyRecording}
-          style={`--mic-pulse:${micPulse};`}
-        >
-          <span class="recording-dot" aria-hidden="true"></span>
-          <span class="recording-copy">
-            {#if isActivelyRecording}
-              Frontend is recording your voice
-            {:else if isListening}
-              Listening for a strong enough signal to record
-            {:else}
-              Voice capture is idle
-            {/if}
-          </span>
-          <span class="recording-bars" aria-hidden="true">
-            <span></span>
-            <span></span>
-            <span></span>
-          </span>
+  {#if isPageActive && checkInState.spec?.elevation === "page"}
+    <main class="page-mount">
+      <QuestionnairePage
+        spec={checkInState.spec}
+        onAnswer={handlePageAnswer}
+        onTextSubmit={sendMessage}
+        onCancelMic={cancelMicIfRecording}
+        {isListening}
+        onMicToggle={toggleMic}
+      />
+    </main>
+  {:else}
+  <main class="main-layout" class:hero-recede={isOverlayActive}>
+    {#if backendView.surface === "chat"}
+      <section class="hero-shell">
+        <div class="hero-copy">
+          <p class="hero-kicker">{phaseLabel(assistantPhase)}</p>
+          <h2>A calmer, voice-first conversation.</h2>
+          <p class="helper-text">{bootMessage}</p>
+          <div
+            class="recording-subtitle"
+            class:listening={isListening && !micGated}
+            class:recording={isActivelyRecording}
+            class:locked={micGated}
+            class:locked-attempt={userTryingToSpeak}
+            style={`--mic-pulse:${micPulse};`}
+          >
+            <span class="recording-dot" aria-hidden="true"></span>
+            <span class="recording-copy">
+              {#if userTryingToSpeak}
+                I can hear you, but I can't reply until I finish — one moment.
+              {:else if micGated}
+                Mic is paused while I'm replying.
+              {:else if isActivelyRecording}
+                Frontend is recording your voice
+              {:else if isListening}
+                Listening for a strong enough signal to record
+              {:else}
+                Voice capture is idle
+              {/if}
+            </span>
+            <span class="recording-bars" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+          </div>
         </div>
-      </div>
 
-      <SpeakingCircle phase={assistantPhase} pulse={speechPulse} />
+        <SpeakingCircle phase={assistantPhase} pulse={speechPulse} compact={isOverlayActive} />
 
-      <div class="transcript-shell">
-        <p class="transcript-label">Live transcript</p>
-        <p class="transcript-text">{transcriptText}</p>
-      </div>
+        <div class="transcript-shell">
+          <p class="transcript-label">
+            Live transcript
+            {#if latestConfidence !== null}
+              <span class="transcript-confidence">
+                · STT confidence {(latestConfidence * 100).toFixed(0)}%
+              </span>
+            {/if}
+          </p>
+          <p class="transcript-text">{transcriptText}</p>
+        </div>
 
-      <div class="response-shell">
-        <p class="response-label">Latest response</p>
-        <p class="response-text">{latestAssistantMessage}</p>
-      </div>
+        <div class="response-shell">
+          <p class="response-label">Latest response</p>
+          {#if assistantThinking}
+            <p class="response-text thinking" aria-live="polite">
+              <span class="thinking-dot"></span>
+              <span class="thinking-dot"></span>
+              <span class="thinking-dot"></span>
+              <span class="thinking-label">Forming a response…</span>
+            </p>
+          {:else}
+            <p class="response-text">{latestAssistantMessage}</p>
+          {/if}
+        </div>
 
-      <div class="composer-shell">
-        <ChatInput onSend={sendMessage} {isListening} onMicToggle={toggleMic} disabled={chatBusy || showModal} />
-        <p class="composer-hint">
-          Speak to send a voice prompt automatically, or type if you want a quieter fallback.
-        </p>
-      </div>
-    </section>
+        <div class="composer-shell">
+          <ChatInput
+            onSend={sendMessage}
+            {isListening}
+            onMicToggle={toggleMic}
+            disabled={chatBusy || showModal || assistantThinking}
+            audioLevel={currentAudioLevel}
+            locked={micGated}
+          />
+          <p class="composer-hint">
+            Speak to send a voice prompt automatically, or type if you want a quieter fallback.
+          </p>
+        </div>
+      </section>
+    {:else if backendView.surface === "checkin" && backendView.spec}
+      <section class="checkin-mount">
+        <QuestionnairePage
+          spec={backendView.spec}
+          onAnswer={handleConductorPageAnswer}
+          onTextSubmit={handleFormFreeText}
+          onCancelMic={cancelMicIfRecording}
+          {isListening}
+          onMicToggle={toggleMic}
+          freeTextNote={lastFreeTextNote}
+          audioLevel={currentAudioLevel}
+          locked={micGated}
+          pendingInputText={pendingFormInputText}
+          onInputConsumed={() => (pendingFormInputText = null)}
+          speakPrompt={speakNeutral}
+        />
+      </section>
+    {:else if backendView.surface === "done"}
+      <section class="mode-stub">
+        <p class="hero-kicker">All done</p>
+        <h2>Thanks for talking with us.</h2>
+        <p class="helper-text">You can close this window now.</p>
+      </section>
+    {/if}
   </main>
+
+  {#if isOverlayActive && checkInState.spec?.elevation === "overlay"}
+    <div class="overlay-mount">
+      <ModePanel
+        spec={checkInState.spec}
+        currentStep={checkInState.currentStep}
+        onAnswer={(_stepId, value) => handleCheckInAnswer(value)}
+        onCancelMic={cancelMicIfRecording}
+        {isListening}
+        onMicToggle={toggleMic}
+      />
+    </div>
+  {/if}
+  {/if}
+
+  {#if DEBUG_ENV_ENABLED}
+    <button class="debug-toggle" type="button" onclick={toggleDebugDashboard}>
+      {showDebugDashboard ? "Hide debug" : "Show debug"}
+    </button>
+  {/if}
 
   {#if showDebugDashboard}
     <DebugDashboard
@@ -539,6 +942,7 @@
       {latestFaceCrop}
       {latestFrameSummary}
       {emotion}
+      {rejectedTranscripts}
       reasoningDebug={latestReasoningDebug}
     />
   {/if}
@@ -627,6 +1031,27 @@
     backdrop-filter: blur(18px);
   }
 
+  .mode-stub {
+    width: min(640px, 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 2rem 1.5rem;
+    text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 28px;
+    background: rgba(7, 10, 18, 0.24);
+    backdrop-filter: blur(18px);
+  }
+
+  .mode-stub h2 {
+    font-size: clamp(1.6rem, 4vw, 2.4rem);
+    line-height: 1.1;
+    margin: 0;
+    letter-spacing: -0.02em;
+  }
+
   .hero-copy {
     display: flex;
     flex-direction: column;
@@ -653,7 +1078,7 @@
     --mic-pulse: 0;
     display: inline-flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: 0.7rem;
     align-self: center;
     margin-top: 0.35rem;
@@ -662,11 +1087,22 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.04);
     color: rgba(255, 255, 255, 0.68);
+    /* Hold a stable width so the bars + dot don't slide as the copy
+       length flips between "Listening for a strong enough signal…" and
+       "I can hear you, but I can't reply until I finish — one moment." */
+    min-width: min(440px, 90vw);
     transition:
       background 140ms ease,
       border-color 140ms ease,
       color 140ms ease,
       transform 140ms ease;
+  }
+  .recording-subtitle .recording-copy {
+    flex: 1 1 auto;
+  }
+  .recording-subtitle .recording-bars {
+    margin-left: auto;
+    flex: 0 0 auto;
   }
 
   .recording-subtitle.listening {
@@ -680,6 +1116,30 @@
     background: rgba(255, 82, 82, 0.08);
     color: rgba(255, 255, 255, 0.94);
     transform: translateY(calc(var(--mic-pulse) * -1px));
+  }
+
+  /* Mic is paused while assistant is thinking or speaking. Purple to make
+     "you can't talk right now" obviously distinct from listening / recording. */
+  .recording-subtitle.locked {
+    border-color: rgba(168, 85, 247, 0.28);
+    background: rgba(124, 58, 237, 0.12);
+    color: rgba(233, 213, 255, 0.94);
+  }
+  .recording-subtitle.locked .recording-dot {
+    background: rgb(168, 85, 247);
+  }
+  .recording-subtitle.locked .recording-bars span {
+    background: rgba(216, 180, 254, 0.55);
+  }
+  /* User is actively trying to speak through the lock — pulse to acknowledge
+     we hear them even though we can't act on it. */
+  .recording-subtitle.locked-attempt {
+    border-color: rgba(192, 132, 252, 0.65);
+    background: rgba(124, 58, 237, 0.22);
+  }
+  .recording-subtitle.locked-attempt .recording-dot {
+    background: rgb(216, 180, 254);
+    animation: record-pulse 1s ease-out infinite;
   }
 
   .recording-dot {
@@ -756,6 +1216,13 @@
     color: rgba(255, 255, 255, 0.94);
   }
 
+  .transcript-confidence {
+    color: rgba(255, 255, 255, 0.5);
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
   .transcript-text {
     min-height: 1.6em;
   }
@@ -763,6 +1230,31 @@
   .response-text {
     max-height: 4.8em;
     overflow: hidden;
+  }
+
+  .response-text.thinking {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: rgba(255, 255, 255, 0.85);
+  }
+  .thinking-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.85);
+    animation: thinkingPulse 1.2s ease-in-out infinite;
+  }
+  .thinking-dot:nth-child(2) { animation-delay: 0.18s; }
+  .thinking-dot:nth-child(3) { animation-delay: 0.36s; }
+  .thinking-label {
+    margin-left: 0.4rem;
+    font-style: italic;
+    opacity: 0.75;
+  }
+  @keyframes thinkingPulse {
+    0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+    40% { transform: scale(1); opacity: 1; }
   }
 
   .composer-shell {
@@ -795,6 +1287,80 @@
     }
     50% {
       transform: scaleY(calc(1 + var(--mic-pulse) * 0.6));
+    }
+  }
+
+  .debug-toggle {
+    position: fixed;
+    top: 1rem;
+    left: 1rem;
+    z-index: 60;
+    background: rgba(15, 18, 28, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: rgba(255, 255, 255, 0.82);
+    border-radius: 999px;
+    padding: 0.4rem 0.85rem;
+    font-size: 0.78rem;
+    cursor: pointer;
+    backdrop-filter: blur(20px);
+    transition: background 120ms ease, border-color 120ms ease;
+  }
+  .debug-toggle:hover {
+    background: rgba(15, 18, 28, 0.92);
+    border-color: rgba(255, 255, 255, 0.28);
+  }
+
+  /* Check-in overlay (elevation 1): floats over the hero, which recedes. */
+  .main-layout.hero-recede .hero-shell {
+    filter: brightness(0.78) saturate(0.85);
+    transform: scale(0.97);
+    transition: filter 280ms cubic-bezier(0.22, 1, 0.36, 1),
+                transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .main-layout.hero-recede .transcript-shell,
+  .main-layout.hero-recede .response-shell,
+  .main-layout.hero-recede .composer-shell {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .main-layout .hero-shell {
+    transition: filter 280ms cubic-bezier(0.22, 1, 0.36, 1),
+                transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .overlay-mount {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 1.5rem;
+    z-index: 50;
+    pointer-events: none;
+  }
+  .overlay-mount > :global(*) {
+    pointer-events: auto;
+  }
+
+  /* Full-page check-in (elevation 2): replaces the conversation surface. */
+  .page-mount {
+    flex: 1;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 2rem 1.5rem;
+    overflow-y: auto;
+    background:
+      radial-gradient(circle at top, rgba(255, 255, 255, 0.06), transparent 40%);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .main-layout .hero-shell,
+    .main-layout.hero-recede .hero-shell,
+    .main-layout.hero-recede .transcript-shell,
+    .main-layout.hero-recede .response-shell,
+    .main-layout.hero-recede .composer-shell {
+      transition: none;
     }
   }
 
