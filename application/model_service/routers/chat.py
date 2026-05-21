@@ -22,10 +22,6 @@ router = APIRouter()
 
 NOISE_SYLLABLES = ["bzzt", "whirr", "tik", "vrrm", "shhh", "klik", "drrt", "ping"]
 
-# Soft safety cap. If the reasoner never emits next_mode="done", force it after
-# this many user turns so a misbehaving model can't trap a study participant.
-TURN_CAP = 30
-
 
 class ChatMessage(BaseModel):
     role: str
@@ -266,12 +262,6 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
         intention, state_name, surface, spec, _transitioned2 = await _step_conductor(
             session, form_completed=False, advance_emission=True, hri=hri,
         )
-
-    # Soft turn cap: count this user message plus prior user turns in history.
-    user_turns = sum(1 for m in body.history if m.role == "user") + 1
-    if user_turns >= TURN_CAP and result.next_mode != "done":
-        logger.info("turn cap reached (%d) — forcing next_mode='done'", user_turns)
-        result = ReasoningResult(reply=result.reply, next_mode="done", next_stage=None)
 
     # Attach session-state details to the debug payload so the dashboard
     # panel can render the conductor's view at a glance.
