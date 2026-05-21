@@ -2,7 +2,7 @@
   import { browser } from "$app/environment";
   import { env as publicEnv } from "$env/dynamic/public";
   import { PUBLIC_HARNESS_WS_URL } from "$env/static/public";
-  import { api, type ChatDebug, type Message, type Profile } from "$lib/api";
+  import { api, type ChatDebug, type ChatView, type Message, type Profile } from "$lib/api";
   import { conversationState, setMode, setStage } from "$lib/conversation/store.svelte";
   import {
     checkInState,
@@ -98,6 +98,10 @@
   let lastPromotedTranscript = $state<string | null>(null);
   let speechPulse = $state(0);
   let latestReasoningDebug = $state<ChatDebug | null>(null);
+  // Backend-supplied view directive — the conductor's current decision about
+  // what surface the frontend should render. Source of truth lives in the
+  // model service; this is a read-only mirror.
+  let backendView = $state<ChatView>({ surface: "chat" });
 
   let ws = $state<WebSocket | null>(null);
   let frameInterval = $state<ReturnType<typeof setInterval> | null>(null);
@@ -299,13 +303,14 @@
     messages = [...messages, userMsg];
 
     try {
-      const { response, next_mode, next_stage, debug } = await api.sendChat(
+      const { response, view, next_mode, next_stage, debug } = await api.sendChat(
         text,
         conversationState.mode,
         conversationState.stage,
       );
       backendOnline = true;
       latestReasoningDebug = debug;
+      backendView = view;
       const agentMsg: Message = {
         id: crypto.randomUUID(),
         role: "agent",
@@ -314,8 +319,8 @@
       };
       messages = [...messages, agentMsg];
       speak(response);
-      // Reasoner decides where the conversation goes next. Apply transitions
-      // to the store; the view block below re-renders to match.
+      // Legacy fields — the conductor drives state now via `view`; mode/stage
+      // transitions stay disabled (kill-switch retained until iteration 7).
       if (APPLY_REASONER_MODE_TRANSITIONS) {
         if (next_mode !== conversationState.mode) setMode(next_mode);
         if (next_stage !== conversationState.stage) setStage(next_stage);
@@ -630,7 +635,7 @@
     </main>
   {:else}
   <main class="main-layout" class:hero-recede={isOverlayActive}>
-    {#if conversationState.mode === "qa"}
+    {#if backendView.surface === "chat"}
       <section class="hero-shell">
         <div class="hero-copy">
           <p class="hero-kicker">{phaseLabel(assistantPhase)}</p>
@@ -686,21 +691,7 @@
           </p>
         </div>
       </section>
-    {:else if conversationState.mode === "feedback"}
-      <!-- Phase 5 will replace this stub with a timed self-report flow. -->
-      <section class="mode-stub">
-        <p class="hero-kicker">Feedback check-in</p>
-        <h2>How are you feeling right now?</h2>
-        <p class="helper-text">Self-report UI lands in Phase 5.</p>
-      </section>
-    {:else if conversationState.mode === "consent"}
-      <!-- Phase 7 will replace this stub with consent + profile select. -->
-      <section class="mode-stub">
-        <p class="hero-kicker">Before we begin</p>
-        <h2>Consent flow placeholder.</h2>
-        <p class="helper-text">Consent + profile selection ships in Phase 7.</p>
-      </section>
-    {:else if conversationState.mode === "done"}
+    {:else if backendView.surface === "done"}
       <section class="mode-stub">
         <p class="hero-kicker">All done</p>
         <h2>Thanks for talking with us.</h2>
