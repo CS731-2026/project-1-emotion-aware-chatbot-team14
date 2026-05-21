@@ -1,9 +1,11 @@
 """Session state shared between the WebSocket handler and the HTTP chat route."""
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import time
 
+from core.conductor import Conductor
+from core.conductor.states import SESSION_FLOW
 from core.emotion.buffer import EmotionBuffer
 
 logger = logging.getLogger(__name__)
@@ -24,6 +26,11 @@ class HarnessSession:
     profile_id: str
     emotion_buffer: EmotionBuffer
     transcript_buffer: list[TranscriptSegment]
+    # Per-session state machine. Each session gets its own Conductor instance
+    # so different profiles can be at different points in the flow concurrently.
+    conductor: Conductor = field(default_factory=lambda: Conductor(SESSION_FLOW))
+    # Turns spent in the current conductor state. Reset on transition.
+    turn_in_state: int = 0
     frame_count: int = 0
     audio_chunk_count: int = 0
     emotion_cycle_started_at: float = 0.0
