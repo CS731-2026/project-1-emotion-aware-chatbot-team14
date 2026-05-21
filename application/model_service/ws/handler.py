@@ -151,6 +151,23 @@ def _make_handlers(
             f"face_detector_loaded={hri.face_detector is not None})"
         )
         await _send(websocket, {**_harness_status(hri), "profile_id": profile_id})
+
+        # Push the conductor's starting view so the frontend mounts the
+        # correct surface (typically qa_form) immediately — without
+        # waiting for the user to type something first.
+        current = session.conductor.current
+        await _send(websocket, {
+            "type": "view_update",
+            "view": {
+                "surface": "checkin" if current.kind == "form" else (
+                    "done" if current.kind == "done" else "chat"
+                ),
+                "spec": current.spec.model_dump() if current.spec else None,
+                "intention": current.intention_prompt,
+                "state_name": current.name,
+            },
+            "prev_state_name": None,
+        })
         return True
 
     async def on_session_end(_msg: dict[str, Any]) -> bool:
