@@ -4,10 +4,17 @@ const BASE = PUBLIC_BACKEND_URL || "http://localhost:3001";
 
 export type Profile = { id: string; name: string; createdAt: string };
 export type Message = { id: string; role: "user" | "agent"; content: string; timestamp: string };
+
+// Must stay in sync with model_service/core/llm/reasoning_agent.py.
+export type Mode = "qa" | "feedback" | "consent" | "done";
+export type Stage = "open" | "explore" | "ground" | "close";
+
 export type ChatDebug = {
   provider: string | null;
   model: string | null;
   current_message: string;
+  mode?: Mode;
+  stage?: Stage | null;
   system_prompt: string | null;
   history_window: number;
   history_messages: Array<{ role: string; content: string }>;
@@ -30,11 +37,16 @@ export const api = {
   selectProfile: (id: string) =>
     fetch(`${BASE}/api/v1/profiles/${id}/select`, { method: "POST", credentials: "include" }).then((r) => r.json()),
   getHistory: () => fetch(`${BASE}/api/v1/history`, { credentials: "include" }).then((r) => r.json()) as Promise<Message[]>,
-  sendChat: (text: string) =>
+  sendChat: (text: string, mode?: Mode, stage?: Stage | null) =>
     fetch(`${BASE}/api/v1/chat`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    }).then((r) => r.json()) as Promise<{ response: string; debug: ChatDebug | null }>,
+      body: JSON.stringify({ text, mode, stage }),
+    }).then((r) => r.json()) as Promise<{
+      response: string;
+      next_mode: Mode;
+      next_stage: Stage | null;
+      debug: ChatDebug | null;
+    }>,
 };
