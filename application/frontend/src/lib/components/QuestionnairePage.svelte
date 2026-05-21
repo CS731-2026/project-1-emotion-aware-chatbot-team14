@@ -67,18 +67,20 @@
   function speakPrompt(text: string) {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     const synth = window.speechSynthesis;
+    // Chrome / Safari sometimes leave the synth in a paused state when
+    // the tab regains focus — without resume() speak() is a no-op.
+    if (synth.paused) synth.resume();
     const utterance = new SpeechSynthesisUtterance(text);
-    const enVoice = synth.getVoices().find((v) => v.lang.toLowerCase().startsWith("en"));
-    if (enVoice) utterance.voice = enVoice;
     utterance.rate = 1;
     utterance.pitch = 1;
     utterance.volume = 1;
+    utterance.onerror = (event) => {
+      console.warn("[tts] question prompt failed:", event.error, text);
+    };
     activeUtterance = utterance;
-    // Cancel anything currently speaking and queue the new one on the
-    // next tick. Calling speak() synchronously after cancel() races in
-    // Chrome and silently drops the utterance.
-    synth.cancel();
-    setTimeout(() => synth.speak(utterance), 60);
+    // No cancel() — calling cancel followed by speak races in Chrome,
+    // and we already gate question reveal so utterances don't overlap.
+    synth.speak(utterance);
   }
 
   const visibleQuestions = $derived.by(() => {

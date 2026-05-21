@@ -336,10 +336,10 @@
   function speak(text: string) {
     if (!browser || typeof window === "undefined" || !("speechSynthesis" in window)) return;
     const synth = window.speechSynthesis;
+    // Chrome / Safari sometimes leave the synth in a paused state when
+    // the tab regains focus — without resume() speak() is a no-op.
+    if (synth.paused) synth.resume();
     const utterance = new SpeechSynthesisUtterance(text);
-    const preferredVoice = synth.getVoices()
-      .find((voice) => voice.lang.toLowerCase().startsWith("en"));
-    if (preferredVoice) utterance.voice = preferredVoice;
     utterance.rate = 1;
     utterance.pitch = 1;
     utterance.volume = 1;
@@ -362,15 +362,16 @@
       isSpeaking = false;
       speechPulse = 0;
     };
-    utterance.onerror = () => {
+    utterance.onerror = (event) => {
+      console.warn("[tts] chat reply failed:", event.error, text);
       isSpeaking = false;
       speechPulse = 0;
     };
     activeChatUtterance = utterance;
-    // Same cancel-then-defer pattern as QuestionnairePage's speakPrompt —
-    // Chrome silently drops speak() that fires too soon after cancel().
-    synth.cancel();
-    setTimeout(() => synth.speak(utterance), 60);
+    // No cancel() — calling cancel followed by speak races in Chrome and
+    // silently drops the utterance. If a previous reply is still
+    // speaking, the new one queues; that's an acceptable trade.
+    synth.speak(utterance);
   }
 
   async function sendMessage(text: string) {
