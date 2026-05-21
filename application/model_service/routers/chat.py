@@ -208,7 +208,17 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
         session.conductor.current.advance_instruction if session else None
     )
 
-    if hri.emotion_agent and hri.llm_agent:
+    # When the conductor is sitting in a form state the LLM stays silent —
+    # forms drive the surface; chip clicks are structured signals, not
+    # things the LLM should react to with prose. A user typing or speaking
+    # during a form still lands in transcript_buffer (for future yarn
+    # states' context) but doesn't trigger a reply.
+    is_form_surface = session is not None and session.conductor.current.kind == "form"
+
+    if is_form_surface:
+        result = ReasoningResult(reply="", next_mode=body.mode, next_stage=body.stage)
+        debug = _fallback_debug_snapshot(body, "(silent: form state)", intention)
+    elif hri.emotion_agent and hri.llm_agent:
         # Step 1: collect the contextual state for this profile and turn.
         history = [{"role": m.role, "content": m.content} for m in body.history]
         transcript_segments = session.transcript_buffer[-20:] if session else []
@@ -249,7 +259,6 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
     else:
         latest_emotion = emotion_observations[-1].emotion if emotion_observations else "unknown"
         reply = f"{build_noise_reply()} Latest emotion: {latest_emotion}."
-        # Stub mode never transitions — keep the caller's state.
         result = ReasoningResult(reply=reply, next_mode=body.mode, next_stage=body.stage)
         debug = _fallback_debug_snapshot(body, latest_emotion, intention)
 
