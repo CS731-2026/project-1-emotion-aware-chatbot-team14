@@ -166,20 +166,36 @@ POST_QA_YARN = State(
         "they've signalled they're ready to move on, or they've agreed "
         "to share feedback about this assistant"
     ),
-    # After a couple of warm-up turns, start gently steering toward the
-    # feedback hand-off. Soft language only — never pressure the user.
-    # The LLM exits via [[advance]] when the user agrees (see the
+    # Past turn 2, branch based on how the conversation feels:
+    #   - bad-experience read → understand it before moving on
+    #   - otherwise          → push a little harder toward feedback
+    # Either way, exit via [[advance]] once the goal is met (see
     # advance_instruction above).
     late_guidance_after=2,
     late_guidance=(
-        "By now the user has had a couple of turns to settle. Begin to "
-        "gently steer the conversation toward sharing brief feedback "
-        "about this assistant — only when it feels natural and the user "
-        "seems ready. Phrase it as a soft invitation ('if you're up for "
-        "it, I'd love to hear how this felt'), not a demand. If they "
-        "decline or deflect, let it go and follow their lead. Do not "
-        "mention 'feedback form' or any UI vocabulary — just frame it "
-        "as sharing their thoughts."
+        "The user has had a couple of turns to settle. Read where they "
+        "are right now, then take ONE of these two paths:\n"
+        "\n"
+        "  (A) If they sound like they had a hard or negative experience "
+        "— anxious, frustrated, dismissive, sad, distrustful, or the "
+        "emotional signal in your context points that way — your "
+        "priority is to understand what specifically felt bad. Ask a "
+        "gentle, specific follow-up. Stay on this path across multiple "
+        "turns if needed; do not pivot to feedback until they've named "
+        "the thing. Once they've articulated it, acknowledge it, then "
+        "invite them to share that as feedback so it can be learned "
+        "from.\n"
+        "\n"
+        "  (B) Otherwise — the user sounds calm, neutral, or positive — "
+        "be a little more direct about inviting feedback than you would "
+        "have been earlier. Frame it as a clear ask while still warm "
+        "('would you mind taking a moment to share how this felt? it'd "
+        "really help'). If they hesitate, gently reiterate that it's "
+        "short and worth doing. Stop at one or two reiterations — never "
+        "harass.\n"
+        "\n"
+        "In both paths, never mention 'feedback form' or any UI "
+        "vocabulary — frame it as sharing thoughts."
     ),
     facts_schema_name="post_qa_yarn",
     facts_extraction_prompt=(
