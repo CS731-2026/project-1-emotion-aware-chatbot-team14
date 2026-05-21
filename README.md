@@ -27,6 +27,10 @@ The browser talks to the frontend; everything else is internal.
 
 If ports are busy: `make kill`. To clean up cleanly: Ctrl-C, then `make kill`.
 
+**Speech-to-text needs one of two backends.** The default `STT_ENGINE=whisper-cpp` requires you to build [whisper.cpp](https://github.com/ggml-org/whisper.cpp) yourself — fast but ~5 minutes of setup. If you just want the app running, set `STT_ENGINE=faster-whisper` in `application/model_service/.env` instead. It's installed automatically by `make install` and works out of the box, just slower per request.
+
+If neither STT backend loads, the model service still starts and the chat works — the mic just won't transcribe.
+
 ### Out of the box, what does it do?
 
 With the default `.env`, the model service runs in **placeholder mode** — it emits random emotion labels instead of running a trained classifier. The UI, LLM calls, STT, and WebSocket pipeline are fully functional; only the emotion classifier is stubbed. This lets you exercise the whole app without needing any model files on disk.
@@ -63,7 +67,7 @@ The real emotion model is **EmpathBotV1** (EfficientNet-B2, EmpathBot 6-class). 
 ```
 
 For deeper internals — request flow, WebSocket protocol, file-by-file map, "what's working / what isn't" — see [ARCHITECTURE.md](ARCHITECTURE.md).
-Reference for AI-pair-programming tools: [CLAUDE.md](CLAUDE.md).
+For a condensed file-by-file map and the full env-var catalogue: [CLAUDE.md](CLAUDE.md). (Originally written as instructions for AI pair-programming tools, but it's also the fastest way for a human to find which file owns which behaviour.)
 
 ---
 
