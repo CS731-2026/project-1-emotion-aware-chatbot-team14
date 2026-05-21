@@ -45,6 +45,10 @@ class Conductor:
     def current(self) -> State:
         return self._states[self._idx]
 
+    def state_named(self, name: str) -> State | None:
+        """Look up a state by its internal name. None if not in this flow."""
+        return next((s for s in self._states if s.name == name), None)
+
     def observe(self, ctx: StateContext) -> ConductorDecision:
         """Possibly advance to the next state and return the resulting view.
 

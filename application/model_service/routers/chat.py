@@ -111,11 +111,7 @@ def _run_extraction_on_transition(
     Failure-tolerant: extract_facts returns {_raw, _error} on a parse
     fail. We still record + emit so the transition completes.
     """
-    prev_state = next(
-        (s for s in session.conductor._states  # noqa: SLF001 — module-private OK
-         if s.name == prev_state_name),
-        None,
-    )
+    prev_state = session.conductor.state_named(prev_state_name)
     now = time.time()
     cutoff = session.state_started_at
     slice_events = [e for e in session.system_events if e.t >= cutoff]
