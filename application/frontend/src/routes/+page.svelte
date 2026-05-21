@@ -678,17 +678,21 @@
     else browserVad?.resume();
   });
 
-  // When the conductor moves us into a form, the form's own TTS reads
-  // the first question — cancel any in-flight assistant TTS so the two
-  // don't overlap. Runs once on surface change.
+  // React to surface transitions driven by the conductor. The form's
+  // speakPrompt manages its own TTS lifecycle (and sendMessage already
+  // skips chat-reply TTS when view.surface !== "chat") — so we don't
+  // need to cancel speechSynthesis here. We DO want to show the
+  // "forming a response" lock when the user finishes a form and the
+  // surface flips to chat while the yarn-opener LLM call runs on the
+  // server. It clears when assistant_reply (or its error twin) arrives.
   let previousSurface: ChatView["surface"] = "chat";
   $effect(() => {
     const surface = backendView.surface;
     if (surface !== previousSurface) {
+      const prev = previousSurface;
       previousSurface = surface;
-      if (surface === "checkin" || surface === "done") {
-        if (browser && "speechSynthesis" in window) window.speechSynthesis.cancel();
-        isSpeaking = false;
+      if (prev === "checkin" && surface === "chat") {
+        startAssistantThinking();
       }
     }
   });
