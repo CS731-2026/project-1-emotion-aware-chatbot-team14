@@ -38,6 +38,7 @@
   import {
     EMOTION_COLOURS,
     FRAME_INTERVAL_MS,
+    SPEECH_THRESHOLD,
     formatTimings,
     isEmotion,
     type Emotion,
@@ -629,11 +630,15 @@
     startAudioStreaming();
   });
 
-  // Pause the mic while the assistant is generating its yarn-opener so the
-  // user can't talk over a reply that hasn't arrived yet. Resume the
-  // moment the reply lands (or the safety timeout fires).
+  // Pause the mic while the assistant is generating its yarn-opener OR
+  // while TTS is speaking the reply aloud — we don't want the mic
+  // picking up the speaker's own voice. The VAD still reports the audio
+  // level while paused so the UI can show "I hear you but can't respond
+  // yet" via the micGated/userTryingToSpeak flags below.
+  const micGated = $derived(assistantThinking || isSpeaking);
+  const userTryingToSpeak = $derived(micGated && currentAudioLevel > SPEECH_THRESHOLD);
   $effect(() => {
-    if (assistantThinking) browserVad?.pause();
+    if (micGated) browserVad?.pause();
     else browserVad?.resume();
   });
 
@@ -730,13 +735,19 @@
           <p class="helper-text">{bootMessage}</p>
           <div
             class="recording-subtitle"
-            class:listening={isListening}
+            class:listening={isListening && !micGated}
             class:recording={isActivelyRecording}
+            class:locked={micGated}
+            class:locked-attempt={userTryingToSpeak}
             style={`--mic-pulse:${micPulse};`}
           >
             <span class="recording-dot" aria-hidden="true"></span>
             <span class="recording-copy">
-              {#if isActivelyRecording}
+              {#if userTryingToSpeak}
+                I can hear you, but I can't reply until I finish — one moment.
+              {:else if micGated}
+                Mic is paused while I'm replying.
+              {:else if isActivelyRecording}
                 Frontend is recording your voice
               {:else if isListening}
                 Listening for a strong enough signal to record
@@ -1004,6 +1015,30 @@
     background: rgba(255, 82, 82, 0.08);
     color: rgba(255, 255, 255, 0.94);
     transform: translateY(calc(var(--mic-pulse) * -1px));
+  }
+
+  /* Mic is paused while assistant is thinking or speaking. Purple to make
+     "you can't talk right now" obviously distinct from listening / recording. */
+  .recording-subtitle.locked {
+    border-color: rgba(168, 85, 247, 0.28);
+    background: rgba(124, 58, 237, 0.12);
+    color: rgba(233, 213, 255, 0.94);
+  }
+  .recording-subtitle.locked .recording-dot {
+    background: rgb(168, 85, 247);
+  }
+  .recording-subtitle.locked .recording-bars span {
+    background: rgba(216, 180, 254, 0.55);
+  }
+  /* User is actively trying to speak through the lock — pulse to acknowledge
+     we hear them even though we can't act on it. */
+  .recording-subtitle.locked-attempt {
+    border-color: rgba(192, 132, 252, 0.65);
+    background: rgba(124, 58, 237, 0.22);
+  }
+  .recording-subtitle.locked-attempt .recording-dot {
+    background: rgb(216, 180, 254);
+    animation: record-pulse 1s ease-out infinite;
   }
 
   .recording-dot {
