@@ -1,4 +1,4 @@
-from typing import cast
+from typing import Literal, cast
 import asyncio
 import logging
 import random
@@ -7,8 +7,9 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from core.app_state import HRIAppState
+from core.conductor import StateContext
 from core.llm.reasoning_agent import Mode, ReasoningResult, Stage
-from ws.session import get_session
+from ws.session import get_session, HarnessSession
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -29,16 +30,27 @@ class ChatRequest(BaseModel):
     profile_id: str
     message: str
     history: list[ChatMessage] = []
-    # Which page / conversational mode the user is in. Defaults preserve today's behaviour.
+    # Legacy fields; ignored by the conductor path. Removed in iteration 7.
     mode: Mode = "qa"
-    # Within `qa` mode, the current scripted stage. None means stage-agnostic.
     stage: Stage | None = None
+
+
+class ChatView(BaseModel):
+    """What the frontend should render. Derived from the conductor's current state."""
+
+    surface: Literal["chat", "checkin", "done"]
+    # Internal debug-only fields. Never used by the LLM; surfaced for the
+    # debug dashboard. Iteration 2 adds `spec` for check-in states.
+    intention: str | None = None
+    state_name: str | None = None
 
 
 class ChatResponse(BaseModel):
     response: str
-    # Where the reasoner thinks the conversation should go next. Frontend mirrors
-    # these into its conversation state to drive the view that renders.
+    view: ChatView
+    # Legacy next_mode / next_stage fields stay on the response while the
+    # frontend is migrating; the frontend now reads `view` instead. Removed
+    # in iteration 7.
     next_mode: Mode = "qa"
     next_stage: Stage | None = None
     debug: dict | None = None
@@ -50,7 +62,7 @@ def build_noise_reply() -> str:
     return f"Test harness reply: {burst}."
 
 
-def _fallback_debug_snapshot(body: ChatRequest, latest_emotion: str) -> dict:
+def _fallback_debug_snapshot(body: ChatRequest, latest_emotion: str, intention: str | None) -> dict:
     """Return a debug payload when the real reasoning pipeline is unavailable."""
     return {
         "provider": None,
@@ -58,6 +70,7 @@ def _fallback_debug_snapshot(body: ChatRequest, latest_emotion: str) -> dict:
         "current_message": body.message,
         "mode": body.mode,
         "stage": body.stage,
+        "intention": intention,
         "system_prompt": None,
         "history_window": 0,
         "history_messages": body.history,
@@ -65,6 +78,34 @@ def _fallback_debug_snapshot(body: ChatRequest, latest_emotion: str) -> dict:
         "transcript_lines": [],
         "prompt_messages": [],
     }
+
+
+_Surface = Literal["chat", "checkin", "done"]
+
+
+def _step_conductor(
+    session: HarnessSession | None,
+) -> tuple[str | None, str | None, _Surface, bool]:
+    """Advance the per-session conductor by one turn.
+
+    Returns (intention, state_name, surface, transitioned). When there is
+    no session yet (chat hit before WS session_start), surface defaults to
+    "chat" so the frontend still renders the existing hero.
+    """
+    if session is None:
+        return None, None, "chat", False
+
+    ctx = StateContext(
+        turn_in_state=session.turn_in_state,
+        form_completed=False,        # i2 plumbs this in
+        advance_emission=False,      # i4 plumbs this in
+    )
+    decision = session.conductor.observe(ctx)
+    if decision.transitioned:
+        session.turn_in_state = 0
+    else:
+        session.turn_in_state += 1
+    return decision.intention, decision.state.name, decision.surface, decision.transitioned
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -79,6 +120,10 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
     hri = cast(HRIAppState, request.app.state.hri)
     session = get_session(body.profile_id)
     emotion_observations = session.emotion_buffer.history() if session else []
+
+    # Step 0: walk the session conductor forward by one turn. Produces the
+    # intention the reasoner will use and the view the frontend will render.
+    intention, state_name, surface, _transitioned = _step_conductor(session)
 
     if hri.emotion_agent and hri.llm_agent:
         # Step 1: collect the contextual state for this profile and turn.
@@ -96,6 +141,7 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
             transcript_segments,
             mode=body.mode,
             stage=body.stage,
+            intention=intention,
         )
 
         # Step 4: run the current LLM reasoning pipeline to produce a structured result.
@@ -110,13 +156,14 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
             transcript_segments,
             body.mode,
             body.stage,
+            intention,
         )
     else:
         latest_emotion = emotion_observations[-1].emotion if emotion_observations else "unknown"
         reply = f"{build_noise_reply()} Latest emotion: {latest_emotion}."
         # Stub mode never transitions — keep the caller's state.
         result = ReasoningResult(reply=reply, next_mode=body.mode, next_stage=body.stage)
-        debug = _fallback_debug_snapshot(body, latest_emotion)
+        debug = _fallback_debug_snapshot(body, latest_emotion, intention)
 
     # Soft turn cap: count this user message plus prior user turns in history.
     user_turns = sum(1 for m in body.history if m.role == "user") + 1
@@ -126,6 +173,7 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
 
     return ChatResponse(
         response=result.reply,
+        view=ChatView(surface=surface, intention=intention, state_name=state_name),
         next_mode=result.next_mode,
         next_stage=result.next_stage,
         debug=debug,
