@@ -28,6 +28,7 @@ type ChatDebug = {
   current_message: string;
   mode?: Mode;
   stage?: Stage | null;
+  intention?: string | null;
   system_prompt: string | null;
   history_window: number;
   history_messages: Array<{ role: string; content: string }>;
@@ -35,6 +36,16 @@ type ChatDebug = {
   transcript_lines: string[];
   prompt_messages: Array<{ role: string; content: string }>;
 };
+
+type ChatView = {
+  surface: "chat" | "checkin" | "done";
+  intention?: string | null;
+  state_name?: string | null;
+};
+
+// Default view used when the model service is unreachable — keep the
+// frontend on the chat surface so the user can still see the fallback reply.
+const FALLBACK_VIEW: ChatView = { surface: "chat" };
 
 /**
  * POST /api/v1/chat
@@ -71,6 +82,7 @@ router.post("/", async (req, res, next) => {
 
     let response = buildFallbackResponse(text);
     let debug: ChatDebug | null = null;
+    let view: ChatView = FALLBACK_VIEW;
     // If the model service is unreachable we keep the caller's state — no transition.
     let nextMode: Mode = mode;
     let nextStage: Stage | null = stage;
@@ -91,12 +103,14 @@ router.post("/", async (req, res, next) => {
       if (harnessRes.ok) {
         const data = (await harnessRes.json()) as {
           response?: string;
+          view?: ChatView;
           next_mode?: string;
           next_stage?: string | null;
           debug?: ChatDebug;
         };
         if (data.response) response = data.response;
         if (data.debug) debug = data.debug;
+        if (data.view) view = data.view;
         if (data.next_mode && VALID_MODES.has(data.next_mode as Mode)) {
           nextMode = data.next_mode as Mode;
         }
@@ -116,7 +130,7 @@ router.post("/", async (req, res, next) => {
     appendMessage(profileId, userMsg);
     appendMessage(profileId, agentMsg);
 
-    res.json({ response, next_mode: nextMode, next_stage: nextStage, debug });
+    res.json({ response, view, next_mode: nextMode, next_stage: nextStage, debug });
   } catch (err) {
     next(err);
   }
