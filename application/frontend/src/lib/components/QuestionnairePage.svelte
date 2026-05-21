@@ -61,19 +61,24 @@
     spokenQuestionIds = new Set();
   });
 
+  // Held outside the function so Chrome doesn't GC the utterance before
+  // it starts speaking — a documented quirk of the Web Speech API.
+  let activeUtterance: SpeechSynthesisUtterance | null = null;
   function speakPrompt(text: string) {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    // Cancel anything that was mid-utterance — we always want the newest
-    // question to win.
-    window.speechSynthesis.cancel();
+    const synth = window.speechSynthesis;
     const utterance = new SpeechSynthesisUtterance(text);
-    const enVoice = window.speechSynthesis.getVoices()
-      .find((v) => v.lang.toLowerCase().startsWith("en"));
+    const enVoice = synth.getVoices().find((v) => v.lang.toLowerCase().startsWith("en"));
     if (enVoice) utterance.voice = enVoice;
     utterance.rate = 1;
     utterance.pitch = 1;
     utterance.volume = 1;
-    window.speechSynthesis.speak(utterance);
+    activeUtterance = utterance;
+    // Cancel anything currently speaking and queue the new one on the
+    // next tick. Calling speak() synchronously after cancel() races in
+    // Chrome and silently drops the utterance.
+    synth.cancel();
+    setTimeout(() => synth.speak(utterance), 60);
   }
 
   const visibleQuestions = $derived.by(() => {

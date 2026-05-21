@@ -330,17 +330,16 @@
     }
   }
 
+  // Held outside speak() so the utterance survives until the speech
+  // engine fires onend — Chrome occasionally GCs in-flight utterances.
+  let activeChatUtterance: SpeechSynthesisUtterance | null = null;
   function speak(text: string) {
     if (!browser || typeof window === "undefined" || !("speechSynthesis" in window)) return;
-
+    const synth = window.speechSynthesis;
     const utterance = new SpeechSynthesisUtterance(text);
-    const preferredVoice = window.speechSynthesis.getVoices()
+    const preferredVoice = synth.getVoices()
       .find((voice) => voice.lang.toLowerCase().startsWith("en"));
-
-    if (preferredVoice) {
-      utterance.voice = preferredVoice;
-    }
-
+    if (preferredVoice) utterance.voice = preferredVoice;
     utterance.rate = 1;
     utterance.pitch = 1;
     utterance.volume = 1;
@@ -367,8 +366,11 @@
       isSpeaking = false;
       speechPulse = 0;
     };
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
+    activeChatUtterance = utterance;
+    // Same cancel-then-defer pattern as QuestionnairePage's speakPrompt —
+    // Chrome silently drops speak() that fires too soon after cancel().
+    synth.cancel();
+    setTimeout(() => synth.speak(utterance), 60);
   }
 
   async function sendMessage(text: string) {
