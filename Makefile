@@ -9,7 +9,23 @@ BACKEND_PORT  ?= 3001
 FRONTEND_PORT ?= 5173
 MODEL_PORT    ?= 8000
 
-.PHONY: dev dev-services dev-harness dev-backend dev-frontend install open kill ports
+.PHONY: init dev dev-services dev-harness dev-backend dev-frontend install open kill ports
+
+# First-time bootstrap of a fresh clone. Run from the main checkout, not a
+# worktree (git-weave's init has a worktree-incompatible mkdir; see
+# .git/local-backups/WEAVE_BUG.md). After this, `make dev` should work.
+#   1. git-weave fetches the child repos declared in *.thread files
+#      (e.g. whisper.cpp) and refreshes .git/info/exclude.
+#   2. install pulls npm + pip deps for backend / frontend / model_service.
+init:
+	@echo "==> [1/2] git-weave: syncing child repos"
+	npx weave init
+	@echo "==> [2/2] installing npm + pip deps"
+	$(MAKE) install
+	@echo
+	@echo "Bootstrap complete. Next: copy each application/*/. env.example"
+	@echo "to .env (model_service needs an LLM_PROVIDER + API key), then"
+	@echo "run 'make dev'."
 
 dev: kill
 	$(MAKE) -j3 --keep-going dev-harness dev-backend dev-frontend
