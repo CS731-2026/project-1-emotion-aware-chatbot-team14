@@ -90,6 +90,29 @@
     </article>
 
     <article class="debug-panel">
+      <p class="panel-label">Session state</p>
+      {#if reasoningDebug?.session_state}
+        <div class="session-summary">
+          <span class="session-pill" data-surface={reasoningDebug.session_state.surface}>
+            {reasoningDebug.session_state.state_name ?? "(none)"}
+          </span>
+          <span class="session-pill">turn {reasoningDebug.session_state.turn_in_state}</span>
+          <span class="session-pill">segment #{reasoningDebug.session_state.segment_id}</span>
+        </div>
+        {#if reasoningDebug.session_state.emissions.length > 0}
+          <p class="panel-heading">Last emissions</p>
+          <pre class="debug-pre">{reasoningDebug.session_state.emissions.map((e) => e.name).join(", ")}</pre>
+        {/if}
+        {#if Object.keys(reasoningDebug.session_state.state_facts).length > 0}
+          <p class="panel-heading">State facts</p>
+          <pre class="debug-pre">{JSON.stringify(reasoningDebug.session_state.state_facts, null, 2)}</pre>
+        {/if}
+      {:else}
+        <p class="panel-copy">No conductor activity yet. Send a chat turn to start a session.</p>
+      {/if}
+    </article>
+
+    <article class="debug-panel">
       <p class="panel-label">Reasoning transcript</p>
 
       {#if reasoningDebug}
@@ -234,6 +257,29 @@
     color: rgba(255, 255, 255, 0.88);
     line-height: 1.5;
     font-size: 0.86rem;
+  }
+
+  .session-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-bottom: 0.3rem;
+  }
+  .session-pill {
+    border-radius: 999px;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.78rem;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.88);
+  }
+  .session-pill[data-surface="checkin"] {
+    background: rgba(249, 115, 22, 0.18);
+    border-color: rgba(249, 115, 22, 0.36);
+  }
+  .session-pill[data-surface="done"] {
+    background: rgba(74, 222, 128, 0.18);
+    border-color: rgba(74, 222, 128, 0.36);
   }
 
   .rejected-list {

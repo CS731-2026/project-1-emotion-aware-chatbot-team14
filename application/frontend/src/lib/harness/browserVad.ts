@@ -44,6 +44,11 @@ export class BrowserVadController {
   // Rolling RMS history matching `frames`.
   private levels: number[] = [];
 
+  // When true, onFrame returns immediately — no detection, no sending.
+  // Used by the page to gate recording while the assistant is generating
+  // its yarn-opener reply.
+  private paused = false;
+
   private utteranceActive = false;
   private utteranceStartedAt = 0;
   // Index into `frames` where the utterance is considered to start (already
@@ -135,6 +140,47 @@ export class BrowserVadController {
     void this.stop(false);
   }
 
+  /** Abort the current utterance (if any) and keep the audio engine running.
+   *
+   * Used when something else (a chip click) consumes the user's intent, so
+   * the in-progress speech should not become a chat turn. Unlike stop(),
+   * this leaves the AudioContext + worklet alive so the next utterance is
+   * captured normally.
+   */
+  cancelUtterance() {
+    if (!this.workletNode) return;  // not running; nothing to cancel
+    this.utteranceActive = false;
+    this.silenceStartedAt = null;
+    this.frames = [];
+    this.levels = [];
+    this.currentAudioLevel = 0;
+    this.callbacks.onAudioLevel(0);
+    this.callbacks.onVadState("Listening");
+  }
+
+  /** Pause utterance detection — RMS / level still reported so the UI can
+   * show "the user is trying to speak while the mic is gated". No frames
+   * are kept and no utterances are ever finalised.
+   */
+  pause() {
+    if (this.paused) return;
+    this.paused = true;
+    // Reset in-progress utterance state so resuming doesn't carry over a
+    // half-recorded utterance from before the pause.
+    this.utteranceActive = false;
+    this.silenceStartedAt = null;
+    this.frames = [];
+    this.levels = [];
+    this.callbacks.onVadState("Mic gated (assistant is replying)");
+  }
+
+  /** Resume detection after pause(). No-op if not paused. */
+  resume() {
+    if (!this.paused) return;
+    this.paused = false;
+    this.callbacks.onVadState("Listening");
+  }
+
   /** Receive a PCM frame from the worklet. Drives the windowed VAD state machine. */
   private onFrame(pcm: Float32Array) {
     // Compute RMS of this frame and update level history.
@@ -143,6 +189,11 @@ export class BrowserVadController {
     const rms = Math.sqrt(sumSq / pcm.length);
     this.currentAudioLevel = rms;
     this.callbacks.onAudioLevel(rms);
+
+    // While paused, we still report the level so the page can flag "user
+    // is trying to speak while the assistant is replying" — but we never
+    // commit utterances or grow the ring buffer.
+    if (this.paused) return;
 
     // Append to the ring buffer.
     this.frames.push(pcm);
