@@ -20,6 +20,7 @@ from ws.session import (
     remove_session,
     emit_debug,
 )
+from routers.chat import _run_extraction_on_transition
 from ws.audio import process_audio_chunk
 from ws.video import FrameDetectionResult, detect_from_message
 
@@ -269,7 +270,6 @@ def _make_handlers(
                 # Run end-of-state fact extraction off-thread so we don't
                 # block the WS event loop while the LLM thinks.
                 if decision.prev_state_name:
-                    from routers.chat import _run_extraction_on_transition
                     await asyncio.to_thread(
                         _run_extraction_on_transition,
                         session,
