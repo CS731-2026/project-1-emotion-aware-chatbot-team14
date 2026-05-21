@@ -8,8 +8,6 @@ from core.emotion.buffer import EmotionBuffer
 
 logger = logging.getLogger(__name__)
 
-EMOTIONS = ["angry", "disgust", "fear", "happy", "sad", "surprise", "neutral"]
-
 
 @dataclass
 class TranscriptSegment:
