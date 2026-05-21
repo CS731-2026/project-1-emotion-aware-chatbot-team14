@@ -382,6 +382,53 @@ class LLMReasoningAgent:
         self._llm = llm
         self._history_window = history_window
 
+    def extract_json(
+        self,
+        instruction: str,
+        segment_slice: list[str],
+    ) -> dict:
+        """One-shot JSON-mode LLM call used by the conductor at state-end.
+
+        `instruction` is the state's facts_extraction_prompt — it describes
+        what fields to return. `segment_slice` is the rendered list of
+        transcript + event lines from the state we're closing.
+
+        Always returns a dict. On parse failure, returns {_raw: text,
+        _error: msg} so the caller can record what came back without
+        blocking the transition.
+        """
+        slice_text = "\n".join(segment_slice) if segment_slice else "(empty)"
+        system = (
+            "You are a fact-extraction helper. Read the conversation slice "
+            "between <slice> tags and return a single JSON object as "
+            "instructed. Return ONLY the JSON object — no prose, no "
+            "markdown fences, no commentary. If a field can't be determined "
+            "from the slice, use null."
+        )
+        user = (
+            f"{instruction}\n\n"
+            f"<slice>\n{slice_text}\n</slice>"
+        )
+        try:
+            raw = self._llm.chat([
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ])
+        except Exception as exc:  # noqa: BLE001 — never block the transition
+            logger.warning("extraction LLM call failed: %s", exc)
+            return {"_raw": "", "_error": str(exc)}
+
+        stripped = _JSON_FENCE_RE.sub("", raw).strip()
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError as exc:
+            logger.warning("extraction output not valid JSON; recording raw")
+            return {"_raw": raw.strip(), "_error": str(exc)}
+        if not isinstance(parsed, dict):
+            logger.warning("extraction output JSON was not an object; recording raw")
+            return {"_raw": raw.strip(), "_error": "top-level value not an object"}
+        return parsed
+
     def collect_inputs(
         self,
         message: str,
