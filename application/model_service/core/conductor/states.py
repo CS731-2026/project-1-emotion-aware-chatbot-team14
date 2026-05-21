@@ -63,14 +63,14 @@ _QA_FORM_SPEC = PageSpec(
 )
 
 _FEEDBACK_FORM_SPEC = PageSpec(
-    title="A few quick questions about your visit",
-    subtitle="Your answers help us understand how AI is feeling in real visits.",
+    title="A few quick questions about this chat",
+    subtitle="Your answers help us understand how this assistant felt to talk to.",
     emotionAware=True,
     reveal="sequential",
     questions=[
         QuestionSpec(
-            id="doctor_listened",
-            prompt="Did you feel your doctor listened to you during today's visit?",
+            id="felt_heard",
+            prompt="Did you feel this assistant listened to you?",
             choices=[
                 Choice(label="Yes, completely", value="yes_completely", tone="positive"),
                 Choice(label="Mostly", value="mostly"),
@@ -79,31 +79,31 @@ _FEEDBACK_FORM_SPEC = PageSpec(
             ],
         ),
         QuestionSpec(
-            id="ai_explained",
-            prompt="Did the doctor explain what the AI was used for in a way you understood?",
+            id="responses_helpful",
+            prompt="Were the assistant's replies helpful to you?",
             choices=[
-                Choice(label="Yes, clearly", value="yes_clearly", tone="positive"),
-                Choice(label="Sort of", value="sort_of"),
+                Choice(label="Very helpful", value="very_helpful", tone="positive"),
+                Choice(label="Somewhat helpful", value="somewhat"),
                 Choice(label="Not really", value="not_really", tone="concerning"),
             ],
         ),
         QuestionSpec(
-            id="ai_comfort",
-            prompt="How do you feel about the AI being involved in your care?",
+            id="comfort_using",
+            prompt="How comfortable did you feel using this assistant?",
             choices=[
                 Choice(label="Very comfortable", value="very_comfortable", tone="positive"),
-                Choice(label="I feel fine", value="i_feel_fine"),
+                Choice(label="Mostly fine", value="mostly_fine"),
                 Choice(label="A bit unsure", value="a_bit_unsure"),
-                Choice(label="Worried", value="worried", tone="concerning"),
+                Choice(label="Uncomfortable", value="uncomfortable", tone="concerning"),
             ],
         ),
         QuestionSpec(
-            id="still_worried",
-            prompt="Is there anything you're still worried about?",
+            id="would_use_again",
+            prompt="Would you use this kind of assistant again?",
             choices=[
-                Choice(label="No, I'm good", value="no", tone="positive"),
-                Choice(label="A small thing", value="small_thing"),
-                Choice(label="Yes, quite a bit", value="quite_a_bit", tone="concerning"),
+                Choice(label="Yes, definitely", value="yes_definitely", tone="positive"),
+                Choice(label="Maybe", value="maybe"),
+                Choice(label="Probably not", value="probably_not", tone="concerning"),
             ],
             allowFreeText=True,
         ),
@@ -182,13 +182,13 @@ FEEDBACK_FORM = State(
     facts_schema_name="feedback",
     facts_extraction_prompt=(
         "Read the slice and return a JSON object capturing the user's "
-        "structured feedback. Required fields:\n"
-        '  "doctor_listened": one of "yes_completely" | "mostly" | '
+        "structured feedback about this assistant. Required fields:\n"
+        '  "felt_heard": one of "yes_completely" | "mostly" | '
         '"not_really" | "no" | null\n'
-        '  "ai_explained": one of "yes_clearly" | "sort_of" | "not_really" | null\n'
-        '  "ai_comfort": one of "very_comfortable" | "i_feel_fine" | '
-        '"a_bit_unsure" | "worried" | null\n'
-        '  "still_worried": one of "no" | "small_thing" | "quite_a_bit" | null\n'
+        '  "responses_helpful": one of "very_helpful" | "somewhat" | "not_really" | null\n'
+        '  "comfort_using": one of "very_comfortable" | "mostly_fine" | '
+        '"a_bit_unsure" | "uncomfortable" | null\n'
+        '  "would_use_again": one of "yes_definitely" | "maybe" | "probably_not" | null\n'
         '  "open_text": any free-text the user added or null'
     ),
 )
