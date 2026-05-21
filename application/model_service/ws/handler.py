@@ -10,6 +10,7 @@ import numpy as np
 from fastapi import WebSocket, WebSocketDisconnect
 
 import config
+from core import debug_flags
 from core.app_state import HRIAppState
 from core.conductor import StateContext
 from core.emotion.base import EMOTIONS, EmotionModel
@@ -57,7 +58,11 @@ def _harness_status(hri: HRIAppState) -> dict[str, Any]:
         "stt_loaded": hri.stt is not None,
         "emotion_model_loaded": hri.emotion_model is not None,
         "llm_loaded": hri.llm is not None,
-        "test_emotions": config.TEST_EMOTIONS,
+        "emotion_debug": {
+            "cycle_test_labels": debug_flags.emotion.cycle_test_labels,
+            "force_label": debug_flags.emotion.force_label,
+            "log_predictions": debug_flags.emotion.log_predictions,
+        },
         "stt_engine": config.STT_ENGINE,
         "stt_model": config.STT_MODEL,
     }
@@ -71,24 +76,39 @@ def pick_emotion(
 ) -> tuple[str, float]:
     """Invoke the emotion model or fall back to debug/neutral values.
 
-    Priority:
-      1. Real model  — face detected + model loaded + TEST_EMOTIONS=false
-      2. Timed cycle  — DEBUG: TEST_EMOTIONS=true; steps through emotions on a fixed timer
-      3. Neutral     — no face and TEST_EMOTIONS=false
+    Priority (see core/debug_flags.py for the mutable runtime state):
+      1. ``force_label``      — pin a specific emotion (bypasses everything)
+      2. ``cycle_test_labels`` — step through EMOTIONS on a timer (bypasses model)
+      3. Real model           — face detected + model loaded
+      4. Neutral fallback     — no face / no model
 
     emotion_model.predict() is the only model invocation point in the codebase.
     Lives here (not in ws/video.py) because it owns the model call — video.py
     only prepares the face crop.
     """
-    if config.TEST_EMOTIONS:
+    flags = debug_flags.emotion
+
+    if flags.force_label is not None:
+        if flags.force_label not in EMOTIONS:
+            logger.warning(
+                "debug_flags.emotion.force_label=%r is not in EMOTIONS; ignoring",
+                flags.force_label,
+            )
+        else:
+            return flags.force_label, 1.0
+
+    if flags.cycle_test_labels:
         started_at = session.emotion_cycle_started_at if session is not None else time.time()
         elapsed = max(0.0, time.time() - started_at)
-        interval = max(1, config.TEST_EMOTION_INTERVAL_SECONDS)
+        interval = max(1, flags.cycle_interval_seconds)
         emotion_index = int(elapsed // interval) % len(EMOTIONS)
         return EMOTIONS[emotion_index], 0.75
 
     if detected and face_crop is not None and emotion_model is not None:
-        return emotion_model.predict(face_crop)
+        emotion, confidence = emotion_model.predict(face_crop)
+        if flags.log_predictions:
+            logger.info("emotion_predict: %s @ %.3f", emotion, confidence)
+        return emotion, confidence
 
     return "neutral", 0.5
 
@@ -182,7 +202,8 @@ def _make_handlers(
         set_session(session)
         emit_debug(
             f"Session started: {profile_id} "
-            f"(test_emotions={config.TEST_EMOTIONS}, "
+            f"(cycle_test_labels={debug_flags.emotion.cycle_test_labels}, "
+            f"force_label={debug_flags.emotion.force_label!r}, "
             f"face_detector_loaded={hri.face_detector is not None})"
         )
         await _send(websocket, {**_harness_status(hri), "profile_id": profile_id})
