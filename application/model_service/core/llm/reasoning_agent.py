@@ -84,110 +84,23 @@ BASE_PERSONA = (
     "Never explain *why* you missed it. Never reference any number."
 )
 
-# TODO: tune mode prompts after user testing.
-MODE_PROMPTS: dict[Mode, str] = {
-    "qa": (
-        "You are guiding the user through a brief anxiety-reduction conversation. "
-        "Stay focused on listening and helping the user feel heard. "
-        "Do not give clinical advice."
-    ),
-    "feedback": (
-        "The user is on the feedback check-in page and is periodically self-reporting how they feel. "
-        "Stay mostly silent and brief. Only speak up when recent self-reports or emotional context suggest the user would benefit from acknowledgement. "
-        "When you do speak, keep it to one or two short sentences."
-    ),
-    "consent": "",
-    "done": "",
-}
-
-# TODO: tune stage prompts after user testing. These only apply when mode == "qa".
-STAGE_PROMPTS: dict[Stage, str] = {
-    "open": (
-        "You are in the OPENING stage. "
-        "Greet the user warmly in one or two sentences and invite them to share what is on their mind. "
-        "Do not problem-solve. Do not ask multiple questions."
-    ),
-    "explore": (
-        "You are in the EXPLORE stage. Actively listen. "
-        "Reflect what the user has said in your own words, then ask one curious follow-up. "
-        "Do not give advice."
-    ),
-    "ground": (
-        "You are in the GROUND stage. "
-        "Offer one short, concrete grounding or regulation exercise appropriate to the user's current emotional state "
-        "(for example: a brief breathing pattern, a 5-4-3-2-1 sensory exercise, or a body-awareness check). "
-        "Lead the exercise — do not just suggest it. Keep it to a few short turns."
-    ),
-    "close": (
-        "You are in the CLOSE stage. "
-        "Briefly summarise one or two things the user shared, affirm them, and end gently. "
-        "Do not open new threads."
-    ),
-}
-
-
-# Temporarily disabled: we don't want the LLM proposing mode/stage transitions
-# yet. When False, the LLM is asked to reply naturally (no JSON envelope) and
-# parse_reasoning_output's raw-text fallback returns reply with next_mode /
-# next_stage carried over from the caller. Flip back to True once the reasoner
-# is wired to drive check-ins through the proper channel.
-INCLUDE_OUTPUT_INSTRUCTIONS = False
-
-# Appended to every system prompt so the LLM emits the structured transition
-# response the rest of the stack expects. The parser is forgiving — see
-# parse_reasoning_output — but the prompt is written as if the schema is strict.
-OUTPUT_INSTRUCTIONS = (
-    "Respond with a single JSON object and nothing else. No markdown fences. "
-    "The object must have exactly these keys:\n"
-    '  "reply": a string — your spoken reply to the user, natural conversational text.\n'
-    '  "next_mode": one of "qa", "feedback", or "done".\n'
-    '  "next_stage": when next_mode is "qa", one of "open", "explore", "ground", "close"; otherwise null.\n'
-    "\n"
-    "You decide where the conversation goes next:\n"
-    "- Stay in qa while supportive conversation is still useful.\n"
-    "- Advance through qa stages: open → explore → ground → close.\n"
-    '- Move to "feedback" when a brief self-report check-in would help (for example, a natural pause, or a disconnect between what the user says and how they sound).\n'
-    '- Move to "done" when the conversation has reached a meaningful close.\n'
-    "- Returning to qa from feedback is fine if the user wants to keep talking.\n"
-    "\n"
-    "Do not announce these transitions to the user. They are internal."
-)
-
-
 def _system_prompt(
-    mode: Mode,
-    stage: Stage | None,
     intention: str | None = None,
     advance_instruction: str | None = None,
 ) -> str:
-    """Compose the system prompt.
+    """Compose the system prompt: BASE_PERSONA + (intention) + (advance_instruction).
 
-    When `intention` is provided (the conductor-driven path), the result is
-    BASE_PERSONA + intention + optional advance_instruction. The intention
-    is the only state-specific conversational text; advance_instruction is
-    the tool-emission directive that lets the conductor pick up an
-    [[advance]] marker if the LLM senses a natural pause.
-
-    When `intention` is None (legacy path, while callers are still being
-    migrated), fall back to the MODE_PROMPTS / STAGE_PROMPTS composition.
-    Iteration 7 deletes the legacy path along with the mode/stage dicts.
+    The intention is the conductor's state-specific stance for the LLM.
+    advance_instruction is the optional tool-emission directive that lets
+    the conductor pick up an [[advance]] marker if the LLM senses a
+    natural pause. The LLM sees no state-machine vocabulary, no mode/stage
+    enum, no transition JSON.
     """
     parts = [BASE_PERSONA]
-    if intention is not None:
-        if intention.strip():
-            parts.append(intention)
-    else:
-        mode_part = MODE_PROMPTS.get(mode, "")
-        if mode_part:
-            parts.append(mode_part)
-        if stage is not None and mode == "qa":
-            stage_part = STAGE_PROMPTS.get(stage, "")
-            if stage_part:
-                parts.append(stage_part)
+    if intention and intention.strip():
+        parts.append(intention)
     if advance_instruction:
         parts.append(advance_instruction)
-    if INCLUDE_OUTPUT_INSTRUCTIONS:
-        parts.append(OUTPUT_INSTRUCTIONS)
     return "\n\n".join(parts)
 
 
@@ -461,9 +374,7 @@ class LLMReasoningAgent:
         touching the chat route or provider adapters.
         """
         return PromptContext(
-            system_prompt=_system_prompt(
-                inputs.mode, inputs.stage, inputs.intention, inputs.advance_instruction
-            ),
+            system_prompt=_system_prompt(inputs.intention, inputs.advance_instruction),
             history_messages=_history_window(inputs.history, self._history_window),
             emotional_message=_emotional_message(inputs.emotional_context),
             transcript_message=_build_transcript_message(

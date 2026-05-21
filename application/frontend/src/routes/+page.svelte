@@ -3,7 +3,11 @@
   import { env as publicEnv } from "$env/dynamic/public";
   import { PUBLIC_HARNESS_WS_URL } from "$env/static/public";
   import { api, type ChatDebug, type ChatView, type Message, type Profile } from "$lib/api";
-  import { conversationState, setMode, setStage } from "$lib/conversation/store.svelte";
+  // conversationState is still imported because it carries unrelated fields
+  // (qaTurnCount, feedbackEvents, etc.) some other modules read. The
+  // top-level `mode` / `stage` are no longer used here — the conductor
+  // drives the surface via backendView. setMode / setStage retired.
+  import { conversationState } from "$lib/conversation/store.svelte";
   import {
     checkInState,
     openCheckIn,
@@ -42,11 +46,6 @@
 
   const HARNESS_WS_URL = PUBLIC_HARNESS_WS_URL || "ws://127.0.0.1:8000/ws";
   const DEBUG_ENV_ENABLED = publicEnv.PUBLIC_DEBUG_DASHBOARD === "true";
-  // Temporary kill-switch for reasoner-driven mode transitions. The LLM still
-  // emits next_mode / next_stage (visible in the debug snapshot), but we don't
-  // apply them. Check-ins are debug-key only until the reasoner can drive them
-  // through the proper channel.
-  const APPLY_REASONER_MODE_TRANSITIONS = false;
 
   let messages = $state<Message[]>([]);
   let emotion = $state<Emotion>("neutral");
@@ -325,10 +324,10 @@
     messages = [...messages, userMsg];
 
     try {
-      const { response, view, next_mode, next_stage, debug } = await api.sendChat(
+      const { response, view, debug } = await api.sendChat(
         text,
-        conversationState.mode,
-        conversationState.stage,
+        undefined,
+        undefined,
         { formComplete: opts?.formComplete },
       );
       backendOnline = true;
@@ -342,12 +341,6 @@
       };
       messages = [...messages, agentMsg];
       speak(response);
-      // Legacy fields — the conductor drives state now via `view`; mode/stage
-      // transitions stay disabled (kill-switch retained until iteration 7).
-      if (APPLY_REASONER_MODE_TRANSITIONS) {
-        if (next_mode !== conversationState.mode) setMode(next_mode);
-        if (next_stage !== conversationState.stage) setStage(next_stage);
-      }
     } catch {
       backendOnline = false;
       const errMsg: Message = {
