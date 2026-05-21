@@ -39,6 +39,7 @@ type ChatDebug = {
 
 type ChatView = {
   surface: "chat" | "checkin" | "done";
+  spec?: unknown;                        // Pydantic CheckInSpec from model service
   intention?: string | null;
   state_name?: string | null;
 };
@@ -61,11 +62,13 @@ router.post("/", async (req, res, next) => {
       return next(err);
     }
 
-    const { text, mode: rawMode, stage: rawStage } = req.body as {
+    const { text, mode: rawMode, stage: rawStage, form_complete: rawFormComplete } = req.body as {
       text?: string;
       mode?: string;
       stage?: string | null;
+      form_complete?: boolean;
     };
+    const formComplete = rawFormComplete === true;
     if (!text || typeof text !== "string") {
       const err: AppError = Object.assign(new Error("text is required"), { statusCode: 400 });
       return next(err);
@@ -97,6 +100,7 @@ router.post("/", async (req, res, next) => {
           history: harnessHistory,
           mode,
           stage,
+          form_complete: formComplete,
         }),
       });
 

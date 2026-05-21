@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from core.app_state import HRIAppState
 from core.conductor import StateContext
+from core.conductor.check_in_spec import CheckInSpec
 from core.llm.reasoning_agent import Mode, ReasoningResult, Stage
 from ws.session import get_session, HarnessSession
 
@@ -30,6 +31,11 @@ class ChatRequest(BaseModel):
     profile_id: str
     message: str
     history: list[ChatMessage] = []
+    # Set by the frontend when the user has just answered the last question
+    # of an active check-in form. Drives the conductor's qa_form → next-state
+    # transition. Iteration 3 will replace this with a typed event on the
+    # WebSocket so chip clicks stop routing through /chat at all.
+    form_complete: bool = False
     # Legacy fields; ignored by the conductor path. Removed in iteration 7.
     mode: Mode = "qa"
     stage: Stage | None = None
@@ -39,8 +45,9 @@ class ChatView(BaseModel):
     """What the frontend should render. Derived from the conductor's current state."""
 
     surface: Literal["chat", "checkin", "done"]
+    spec: CheckInSpec | None = None
     # Internal debug-only fields. Never used by the LLM; surfaced for the
-    # debug dashboard. Iteration 2 adds `spec` for check-in states.
+    # debug dashboard.
     intention: str | None = None
     state_name: str | None = None
 
@@ -85,19 +92,20 @@ _Surface = Literal["chat", "checkin", "done"]
 
 def _step_conductor(
     session: HarnessSession | None,
-) -> tuple[str | None, str | None, _Surface, bool]:
+    form_completed: bool,
+) -> tuple[str | None, str | None, _Surface, CheckInSpec | None, bool]:
     """Advance the per-session conductor by one turn.
 
-    Returns (intention, state_name, surface, transitioned). When there is
-    no session yet (chat hit before WS session_start), surface defaults to
+    Returns (intention, state_name, surface, spec, transitioned). When there
+    is no session yet (chat hit before WS session_start), surface defaults to
     "chat" so the frontend still renders the existing hero.
     """
     if session is None:
-        return None, None, "chat", False
+        return None, None, "chat", None, False
 
     ctx = StateContext(
         turn_in_state=session.turn_in_state,
-        form_completed=False,        # i2 plumbs this in
+        form_completed=form_completed,
         advance_emission=False,      # i4 plumbs this in
     )
     decision = session.conductor.observe(ctx)
@@ -105,7 +113,13 @@ def _step_conductor(
         session.turn_in_state = 0
     else:
         session.turn_in_state += 1
-    return decision.intention, decision.state.name, decision.surface, decision.transitioned
+    return (
+        decision.intention,
+        decision.state.name,
+        decision.surface,
+        decision.state.spec,
+        decision.transitioned,
+    )
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -123,7 +137,9 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
 
     # Step 0: walk the session conductor forward by one turn. Produces the
     # intention the reasoner will use and the view the frontend will render.
-    intention, state_name, surface, _transitioned = _step_conductor(session)
+    intention, state_name, surface, spec, _transitioned = _step_conductor(
+        session, form_completed=body.form_complete,
+    )
 
     if hri.emotion_agent and hri.llm_agent:
         # Step 1: collect the contextual state for this profile and turn.
@@ -173,7 +189,12 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
 
     return ChatResponse(
         response=result.reply,
-        view=ChatView(surface=surface, intention=intention, state_name=state_name),
+        view=ChatView(
+            surface=surface,
+            spec=spec if surface == "checkin" else None,
+            intention=intention,
+            state_name=state_name,
+        ),
         next_mode=result.next_mode,
         next_stage=result.next_stage,
         debug=debug,
