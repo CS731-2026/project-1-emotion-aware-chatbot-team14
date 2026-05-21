@@ -2,37 +2,35 @@
   import { fade, fly, scale } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import ChatInput from "./ChatInput.svelte";
-  import type { OverlaySpec } from "$lib/conversation/sampleCheckIns";
+  import type { OverlaySpec, OverlayStep } from "$lib/conversation/sampleCheckIns";
 
   let {
     spec,
-    onSelect,
+    currentStep,
+    onAnswer,
     onCancelMic,
-    onTextSubmit,
     isListening,
     onMicToggle,
-    disabled = false,
   }: {
     spec: OverlaySpec;
-    onSelect: (value: string) => void;
+    currentStep: number;
+    onAnswer: (stepId: string, value: string) => void;
     onCancelMic?: () => void;
-    onTextSubmit: (text: string) => void;
     isListening: boolean;
     onMicToggle: () => void;
-    disabled?: boolean;
   } = $props();
 
+  const step = $derived<OverlayStep>(spec.steps[currentStep] ?? spec.steps[0]);
+  const totalSteps = $derived(spec.steps.length);
+  const showCounter = $derived(totalSteps > 1);
   const showChatInput = $derived(
     spec.captureMode === "conversational" && (spec.allowFreeText ?? true)
   );
 
-  function handleChoice(value: string) {
-    // For conversational overlays we cancel any in-flight mic capture so a
-    // half-spoken utterance doesn't double-send alongside the chip.
-    if (spec.captureMode === "conversational") {
-      onCancelMic?.();
-    }
-    onSelect(value);
+  function recordAnswer(value: string) {
+    // Cancel any half-spoken utterance so we don't double-send alongside the chip.
+    if (spec.captureMode === "conversational") onCancelMic?.();
+    onAnswer(step.id, value);
   }
 </script>
 
@@ -42,38 +40,37 @@
   out:scale={{ start: 1, duration: 220, easing: cubicOut }}
 >
   <p class="kicker" in:fade={{ duration: 240, delay: 360 }}>{spec.kicker}</p>
-  <h2 class="prompt" in:fade={{ duration: 240, delay: 420 }}>{spec.prompt}</h2>
-  {#if spec.subtext}
-    <p class="subtext" in:fade={{ duration: 240, delay: 460 }}>{spec.subtext}</p>
-  {/if}
 
-  <div class="choices">
-    {#each spec.choices as choice, i (choice.value)}
-      <button
-        class="choice"
-        data-tone={choice.tone ?? "neutral"}
-        {disabled}
-        onclick={() => handleChoice(choice.value)}
-        in:fly={{ y: 12, duration: 240, delay: 500 + i * 40, easing: cubicOut }}
-        type="button"
-      >
-        {choice.label}
-      </button>
-    {/each}
-  </div>
+  {#key step.id}
+    <h2 class="prompt" in:fade={{ duration: 240, delay: 60 }}>{step.prompt}</h2>
+    {#if step.subtext}
+      <p class="subtext" in:fade={{ duration: 240, delay: 100 }}>{step.subtext}</p>
+    {/if}
+
+    <div class="choices">
+      {#each step.choices as choice, i (choice.value)}
+        <button
+          class="choice"
+          data-tone={choice.tone ?? "neutral"}
+          onclick={() => recordAnswer(choice.value)}
+          in:fly={{ y: 12, duration: 240, delay: 140 + i * 40, easing: cubicOut }}
+          type="button"
+        >
+          {choice.label}
+        </button>
+      {/each}
+    </div>
+  {/key}
 
   {#if showChatInput}
-    <div
-      class="composer"
-      in:fade={{ duration: 240, delay: 500 + spec.choices.length * 40 + 40 }}
-    >
-      <ChatInput onSend={onTextSubmit} {isListening} {onMicToggle} {disabled} />
+    <div class="composer" in:fade={{ duration: 240, delay: 500 }}>
+      <ChatInput onSend={recordAnswer} {isListening} {onMicToggle} />
     </div>
   {/if}
 
-  {#if spec.step}
-    <p class="step" in:fade={{ duration: 240, delay: 700 }}>
-      Step {spec.step.current} of {spec.step.total}
+  {#if showCounter}
+    <p class="step" in:fade={{ duration: 240, delay: 600 }}>
+      Step {currentStep + 1} of {totalSteps}
     </p>
   {/if}
 </div>
@@ -127,16 +124,12 @@
     font-size: 0.95rem;
     transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
   }
-  .choice:hover:not(:disabled) {
+  .choice:hover {
     background: rgba(255, 255, 255, 0.1);
     border-color: rgba(255, 255, 255, 0.28);
   }
-  .choice:active:not(:disabled) {
+  .choice:active {
     transform: scale(0.97);
-  }
-  .choice:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
   }
   .choice[data-tone="positive"] {
     border-color: rgba(74, 222, 128, 0.45);

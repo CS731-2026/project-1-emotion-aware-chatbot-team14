@@ -24,14 +24,20 @@ export type QuestionSpec = {
   cannedReactionOn?: CannedReaction;
 };
 
-export type OverlaySpec = {
-  elevation: "overlay";
-  kicker: string;
+// One step inside an overlay check-in. A single-step overlay (e.g. consent
+// branch picker) is just an OverlaySpec with steps.length === 1.
+export type OverlayStep = {
+  id: string;
   prompt: string;
   subtext?: string;
   choices: Choice[];
+};
+
+export type OverlaySpec = {
+  elevation: "overlay";
+  kicker: string;
+  steps: OverlayStep[];
   captureMode: "conversational" | "static";
-  step?: { current: number; total: number };
   allowFreeText?: boolean;
 };
 
@@ -51,26 +57,62 @@ export type CheckInSpec = OverlaySpec | PageSpec;
 export const SAMPLE_OVERLAY_CONVERSATIONAL: OverlaySpec = {
   elevation: "overlay",
   kicker: "A quick check-in",
-  prompt: "How would you say your visit went today?",
-  choices: [
-    { label: "It went well", value: "It went well", tone: "positive" },
-    { label: "It was okay", value: "It was okay" },
-    { label: "It was rough", value: "It was rough", tone: "concerning" },
-  ],
   captureMode: "conversational",
-  step: { current: 1, total: 4 },
   allowFreeText: true,
+  steps: [
+    {
+      id: "visit_overall",
+      prompt: "How would you say your visit went today?",
+      choices: [
+        { label: "It went well", value: "It went well", tone: "positive" },
+        { label: "It was okay", value: "It was okay" },
+        { label: "It was rough", value: "It was rough", tone: "concerning" },
+      ],
+    },
+    {
+      id: "ai_explained",
+      prompt: "Did the doctor explain what the AI was used for in a way you understood?",
+      choices: [
+        { label: "Yes, clearly", value: "Yes, clearly", tone: "positive" },
+        { label: "Sort of", value: "Sort of" },
+        { label: "Not really", value: "Not really", tone: "concerning" },
+      ],
+    },
+    {
+      id: "ai_comfort",
+      prompt: "How did you feel about a computer being involved in your care?",
+      choices: [
+        { label: "Comfortable", value: "Comfortable", tone: "positive" },
+        { label: "Neutral", value: "Neutral" },
+        { label: "Uncomfortable", value: "Uncomfortable", tone: "concerning" },
+      ],
+    },
+    {
+      id: "still_worried",
+      prompt: "Is there anything you're still worried about?",
+      choices: [
+        { label: "No, I'm good", value: "No, I'm good", tone: "positive" },
+        { label: "A small thing", value: "A small thing" },
+        { label: "Yes, quite a bit", value: "Yes, quite a bit", tone: "concerning" },
+      ],
+    },
+  ],
 };
 
 export const SAMPLE_OVERLAY_STATIC: OverlaySpec = {
   elevation: "overlay",
   kicker: "Before we begin",
-  prompt: "What brings you here today?",
-  choices: [
-    { label: "I want to ask a question", value: "ask" },
-    { label: "I want to give feedback", value: "feedback" },
-  ],
   captureMode: "static",
+  steps: [
+    {
+      id: "intent",
+      prompt: "What brings you here today?",
+      choices: [
+        { label: "I want to ask a question", value: "ask" },
+        { label: "I want to give feedback", value: "feedback" },
+      ],
+    },
+  ],
 };
 
 export const SAMPLE_PAGE_SEQUENTIAL: PageSpec = {
