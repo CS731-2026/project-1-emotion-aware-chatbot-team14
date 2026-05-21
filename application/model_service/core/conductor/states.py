@@ -145,10 +145,25 @@ QA_FORM = State(
 )
 
 
-POST_QA_YARN = State(
-    name="post_qa_yarn",
-    kind="yarn",
-    intention_prompt=(
+class PostQaYarn(State):
+    """The check-in follow-up yarn — three-phase prompt.
+
+    Phases (keyed off `ctx.turn_in_state` inside the state):
+      - 0 … 1  warm acknowledgement only (base intention_prompt)
+      - 2      branching guidance: probe a bad experience, OR pivot to a
+               soft ask for feedback
+      - 3 +    escalate — insist on feedback, warmly but explicitly. If
+               the bad-experience probe is still live, frame the
+               feedback as the way to make sure their experience is
+               heard.
+
+    Subclassed so the phase logic lives next to its phrasing instead of
+    being squeezed into a single `late_guidance` field. The conductor's
+    default `should_advance` still applies; exit happens when the LLM
+    emits `[[advance]]` (see advance_instruction) or the hard cap fires.
+    """
+
+    _BASE_INTENTION = (
         "The user has just answered a brief check-in about how they're "
         "feeling. Their answers are visible to you as {{form_answer: …}} "
         "lines in the recent transcript. Acknowledge how they're feeling "
@@ -156,23 +171,9 @@ POST_QA_YARN = State(
         "share more. If they said they don't, keep it short and let them "
         "be — don't push. Never quote their form answers back to them as "
         "if they said the words out loud."
-    ),
-    # Safety net only — preferred exit is the [[advance]] emission below,
-    # fired by the LLM when it senses the user is ready to move on. The
-    # turn / time caps stop a stuck conversation from trapping the user.
-    hard_advance=lambda ctx: ctx.turn_in_state >= 24 or ctx.elapsed_in_state >= 900.0,
-    advance_instruction=_advance(
-        "the user has reached a natural pause — they sound settled, or "
-        "they've signalled they're ready to move on, or they've agreed "
-        "to share feedback about this assistant"
-    ),
-    # Past turn 2, branch based on how the conversation feels:
-    #   - bad-experience read → understand it before moving on
-    #   - otherwise          → push a little harder toward feedback
-    # Either way, exit via [[advance]] once the goal is met (see
-    # advance_instruction above).
-    late_guidance_after=2,
-    late_guidance=(
+    )
+
+    _BRANCHING_GUIDANCE = (
         "The user has had a couple of turns to settle. Read where they "
         "are right now, then take ONE of these two paths:\n"
         "\n"
@@ -196,6 +197,47 @@ POST_QA_YARN = State(
         "\n"
         "In both paths, never mention 'feedback form' or any UI "
         "vocabulary — frame it as sharing thoughts."
+    )
+
+    _INSIST_GUIDANCE = (
+        "ESCALATION: this is at least the third turn in this phase. Stop "
+        "being soft about the ask. The user's feedback genuinely matters "
+        "and you need to land it now. Be explicit and persistent — but "
+        "still warm. A clear, direct ask: 'I really want to hear how "
+        "this felt for you before we wrap — would you take a minute to "
+        "share?'. If they previously expressed a hard or negative "
+        "experience and still haven't articulated it, frame the "
+        "feedback as the path for that to be heard and addressed. If "
+        "they've been deflecting, name the deflection gently and ask "
+        "again. Do not let this turn pass without a direct ask — "
+        "though if they firmly refuse, accept it and exit via "
+        "[[advance]] next turn."
+    )
+
+    def intention_for(self, ctx: StateContext) -> str:
+        if ctx.turn_in_state >= 3:
+            return f"{self._BASE_INTENTION}\n\n{self._BRANCHING_GUIDANCE}\n\n{self._INSIST_GUIDANCE}"
+        if ctx.turn_in_state >= 2:
+            return f"{self._BASE_INTENTION}\n\n{self._BRANCHING_GUIDANCE}"
+        return self._BASE_INTENTION
+
+
+POST_QA_YARN = PostQaYarn(
+    name="post_qa_yarn",
+    kind="yarn",
+    # intention_prompt is overridden by the subclass's phase logic; we
+    # still set it so the yarn-opener path (which reads intention_prompt
+    # directly for its turn-0 read) sees the base text.
+    intention_prompt=PostQaYarn._BASE_INTENTION,
+    # Safety net only — preferred exit is the [[advance]] emission below,
+    # fired by the LLM when it senses the user is ready to move on. The
+    # turn / time caps stop a stuck conversation from trapping the user.
+    hard_advance=lambda ctx: ctx.turn_in_state >= 24 or ctx.elapsed_in_state >= 900.0,
+    advance_instruction=_advance(
+        "the user has reached a natural pause — they sound settled, or "
+        "they've signalled they're ready to move on, or they've agreed "
+        "to share feedback about this assistant, or they've firmly "
+        "declined feedback after the insistent ask"
     ),
     facts_schema_name="post_qa_yarn",
     facts_extraction_prompt=(
