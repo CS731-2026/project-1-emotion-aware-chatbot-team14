@@ -36,6 +36,16 @@ class HarnessSession:
     # segment summaries, silences). Merged with transcript_buffer at
     # LLM-prompt-assembly time via core.transcript_render.compose_stream.
     system_events: list[SystemEvent] = field(default_factory=list)
+    # When the current state began, in session-clock seconds. Used to slice
+    # the transcript / events down to "this state's conversation" for the
+    # end-of-state fact extraction.
+    state_started_at: float = 0.0
+    # Sequential id incremented on each transition; used as the public
+    # identifier for a segment in segment_summary events (so the LLM never
+    # sees the internal state name).
+    segment_id_counter: int = 0
+    # Facts extracted at each state's end, keyed by internal state.name.
+    state_facts: dict[str, dict] = field(default_factory=dict)
     frame_count: int = 0
     audio_chunk_count: int = 0
     emotion_cycle_started_at: float = 0.0
@@ -62,11 +72,13 @@ def get_session(profile_id: str) -> HarnessSession | None:
 
 def create_session(profile_id: str) -> HarnessSession:
     """Create and register a new HarnessSession, replacing any existing one."""
+    now = time.time()
     session = HarnessSession(
         profile_id=profile_id,
         emotion_buffer=EmotionBuffer(),
         transcript_buffer=[],
-        emotion_cycle_started_at=time.time(),
+        state_started_at=now,
+        emotion_cycle_started_at=now,
     )
     _sessions[profile_id] = session
     return session

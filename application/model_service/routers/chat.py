@@ -6,10 +6,15 @@ import random
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
+import time
+
 from core.app_state import HRIAppState
 from core.conductor import StateContext
 from core.conductor.check_in_spec import CheckInSpec
+from core.conductor.extraction import extract_facts
+from core.events import SystemEvent
 from core.llm.reasoning_agent import Mode, ReasoningResult, Stage
+from core.transcript_render import compose_stream
 from ws.session import get_session, HarnessSession
 
 logger = logging.getLogger(__name__)
@@ -90,17 +95,66 @@ def _fallback_debug_snapshot(body: ChatRequest, latest_emotion: str, intention: 
 _Surface = Literal["chat", "checkin", "done"]
 
 
+def _run_extraction_on_transition(
+    session: HarnessSession,
+    prev_state_name: str,
+    hri: HRIAppState,
+) -> None:
+    """Extract facts from the just-ended state and inject a segment_summary.
+
+    Builds the slice from `session.system_events` + `transcript_buffer`
+    filtered by t >= session.state_started_at, runs the LLM extraction,
+    stores facts in session.state_facts[prev_state_name], and appends a
+    SystemEvent of kind="segment_summary" so the next state's LLM call
+    sees a {{segment_summary: {id, facts}}} marker at the boundary.
+
+    Failure-tolerant: extract_facts returns {_raw, _error} on a parse
+    fail. We still record + emit so the transition completes.
+    """
+    prev_state = next(
+        (s for s in session.conductor._states  # noqa: SLF001 — module-private OK
+         if s.name == prev_state_name),
+        None,
+    )
+    now = time.time()
+    cutoff = session.state_started_at
+    slice_events = [e for e in session.system_events if e.t >= cutoff]
+    slice_segments = [s for s in session.transcript_buffer if float(s.timestamp) >= cutoff]
+    segment_slice = compose_stream(
+        slice_segments,
+        slice_events,
+        confidence_remap=lambda c: c,  # raw conf — extraction doesn't care
+    )
+    facts: dict = {}
+    if prev_state is not None and hri.llm_agent is not None:
+        facts = extract_facts(hri.llm_agent, prev_state, segment_slice)
+    session.state_facts[prev_state_name] = facts
+    session.segment_id_counter += 1
+    session.system_events.append(SystemEvent(
+        kind="segment_summary",
+        t=now,
+        payload={"id": session.segment_id_counter, "facts": facts},
+    ))
+    session.state_started_at = now
+
+
 def _step_conductor(
     session: HarnessSession | None,
     *,
     form_completed: bool,
     advance_emission: bool,
+    hri: HRIAppState | None = None,
 ) -> tuple[str | None, str | None, _Surface, CheckInSpec | None, bool]:
     """Advance the per-session conductor by one turn.
 
     Returns (intention, state_name, surface, spec, transitioned). When there
-    is no session yet (chat hit before WS session_start), surface defaults to
-    "chat" so the frontend still renders the existing hero.
+    is no session yet (chat hit before WS session_start), surface defaults
+    to "chat" so the frontend still renders the existing hero.
+
+    When the conductor transitions, runs end-of-state fact extraction on
+    the just-left state and emits a segment_summary event into the
+    session's events buffer. `hri` is required for extraction; pass None
+    only when the caller knows no transition can happen.
     """
     if session is None:
         return None, None, "chat", None, False
@@ -113,6 +167,8 @@ def _step_conductor(
     decision = session.conductor.observe(ctx)
     if decision.transitioned:
         session.turn_in_state = 0
+        if decision.prev_state_name and hri is not None:
+            _run_extraction_on_transition(session, decision.prev_state_name, hri)
     else:
         session.turn_in_state += 1
     return (
@@ -140,7 +196,7 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
     # Step 0a: walk the conductor with whatever pre-LLM signals we have.
     # The post-LLM advance_emission re-step happens after the reasoner runs.
     intention, state_name, surface, spec, _transitioned = _step_conductor(
-        session, form_completed=body.form_complete, advance_emission=False,
+        session, form_completed=body.form_complete, advance_emission=False, hri=hri,
     )
     advance_instruction = (
         session.conductor.current.advance_instruction if session else None
@@ -197,7 +253,7 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
     advance_emitted = any(e.name == "advance" for e in result.emissions)
     if advance_emitted:
         intention, state_name, surface, spec, _transitioned2 = _step_conductor(
-            session, form_completed=False, advance_emission=True,
+            session, form_completed=False, advance_emission=True, hri=hri,
         )
 
     # Soft turn cap: count this user message plus prior user turns in history.

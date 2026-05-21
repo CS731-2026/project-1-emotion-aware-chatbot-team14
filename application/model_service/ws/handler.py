@@ -244,6 +244,16 @@ def _make_handlers(
             decision = session.conductor.observe(ctx)
             if decision.transitioned:
                 session.turn_in_state = 0
+                # Run end-of-state fact extraction off-thread so we don't
+                # block the WS event loop while the LLM thinks.
+                if decision.prev_state_name:
+                    from routers.chat import _run_extraction_on_transition
+                    await asyncio.to_thread(
+                        _run_extraction_on_transition,
+                        session,
+                        decision.prev_state_name,
+                        hri,
+                    )
                 await _send(websocket, {
                     "type": "view_update",
                     "view": {
