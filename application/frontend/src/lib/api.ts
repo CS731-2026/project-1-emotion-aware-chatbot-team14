@@ -55,22 +55,15 @@ export const api = {
   selectProfile: (id: string) =>
     fetch(`${BASE}/api/v1/profiles/${id}/select`, { method: "POST", credentials: "include" }).then((r) => r.json()),
   getHistory: () => fetch(`${BASE}/api/v1/history`, { credentials: "include" }).then((r) => r.json()) as Promise<Message[]>,
-  sendChat: (
-    text: string,
-    mode?: Mode,
-    stage?: Stage | null,
-    opts?: { formComplete?: boolean },
-  ) =>
+  sendChat: (text: string) =>
     fetch(`${BASE}/api/v1/chat`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, mode, stage, form_complete: opts?.formComplete === true }),
+      body: JSON.stringify({ text }),
     }).then((r) => r.json()) as Promise<{
       response: string;
       view: ChatView;
-      next_mode: Mode;
-      next_stage: Stage | null;
       debug: ChatDebug | null;
     }>,
 };
