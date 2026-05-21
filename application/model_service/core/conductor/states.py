@@ -166,20 +166,20 @@ POST_QA_YARN = State(
         "they've signalled they're ready to move on, or they've agreed "
         "to share feedback about this assistant"
     ),
-    # After a few warm-up turns, start gently steering toward the
+    # After a couple of warm-up turns, start gently steering toward the
     # feedback hand-off. Soft language only — never pressure the user.
     # The LLM exits via [[advance]] when the user agrees (see the
     # advance_instruction above).
-    late_guidance_after=3,
+    late_guidance_after=2,
     late_guidance=(
-        "By now the user has had a few turns to settle. Begin to gently "
-        "steer the conversation toward sharing brief feedback about this "
-        "assistant — only when it feels natural and the user seems "
-        "ready. Phrase it as a soft invitation ('if you're up for it, I'd "
-        "love to hear how this felt'), not a demand. If they decline or "
-        "deflect, let it go and follow their lead. Do not mention "
-        "'feedback form' or any UI vocabulary — just frame it as "
-        "sharing their thoughts."
+        "By now the user has had a couple of turns to settle. Begin to "
+        "gently steer the conversation toward sharing brief feedback "
+        "about this assistant — only when it feels natural and the user "
+        "seems ready. Phrase it as a soft invitation ('if you're up for "
+        "it, I'd love to hear how this felt'), not a demand. If they "
+        "decline or deflect, let it go and follow their lead. Do not "
+        "mention 'feedback form' or any UI vocabulary — just frame it "
+        "as sharing their thoughts."
     ),
     facts_schema_name="post_qa_yarn",
     facts_extraction_prompt=(
@@ -217,14 +217,24 @@ POST_FEEDBACK_YARN = State(
     name="post_feedback_yarn",
     kind="yarn",
     intention_prompt=(
-        "The user has just submitted feedback about their visit. Thank "
-        "them briefly and warmly. Invite any final thoughts but do not "
-        "probe — if they're done, let them be."
+        "The user has just submitted feedback about this assistant. "
+        "Thank them briefly and warmly. Invite any final thoughts but "
+        "do not probe — if they're done, let them be."
     ),
     hard_advance=lambda ctx: ctx.turn_in_state >= 4,
     advance_instruction=_advance(
         "the user has added their final thoughts or signalled they're "
         "ready to wrap up"
+    ),
+    # One turn of warm acknowledgement; on the second turn, start
+    # easing toward a close so the conversation doesn't drag.
+    late_guidance_after=1,
+    late_guidance=(
+        "The user has had one turn to add any final thoughts. If they "
+        "haven't volunteered anything substantial, gently move toward a "
+        "warm close — acknowledge they've shared, thank them, and leave "
+        "an opening to say goodbye. Don't extract more if they seem "
+        "done. Do not mention any UI or system vocabulary."
     ),
     facts_schema_name="post_feedback_yarn",
     facts_extraction_prompt=(
