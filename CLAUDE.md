@@ -19,7 +19,7 @@ make kill         # free ports 3000/3001/5173/8000
 make crop-faces INPUT=<dir> OUTPUT=<dir>   # batch face-crop a dataset
 ```
 
-For parallel branches with isolated ports, see `WORKTREES.md`.
+For parallel branches with isolated ports, see "Working in parallel branches" in `README.md`.
 
 ## Top-level folders
 
