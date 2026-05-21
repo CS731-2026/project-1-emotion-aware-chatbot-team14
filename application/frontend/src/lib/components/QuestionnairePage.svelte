@@ -33,10 +33,30 @@
 
   // Per-question local state. Resets when a different spec object arrives.
   let answers = $state<Record<string, AnswerState>>({});
+  // Tracks which question prompts have already been spoken so the same
+  // utterance isn't fired again on every reactive rerender. Resets when a
+  // new spec arrives.
+  let spokenQuestionIds = $state<Set<string>>(new Set());
   $effect(() => {
     spec;
     answers = {};
+    spokenQuestionIds = new Set();
   });
+
+  function speakPrompt(text: string) {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    // Cancel anything that was mid-utterance — we always want the newest
+    // question to win.
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    const enVoice = window.speechSynthesis.getVoices()
+      .find((v) => v.lang.toLowerCase().startsWith("en"));
+    if (enVoice) utterance.voice = enVoice;
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    window.speechSynthesis.speak(utterance);
+  }
 
   const visibleQuestions = $derived.by(() => {
     if (spec.reveal === "all-at-once") return spec.questions;
@@ -52,6 +72,18 @@
   const progress = $derived(
     spec.questions.filter((q) => answers[q.id]?.selected).length / spec.questions.length
   );
+
+  // Speak each newly-revealed prompt once. Sequential reveal naturally drives
+  // this: as the user answers a question the next one appears and we read it.
+  $effect(() => {
+    for (const q of visibleQuestions) {
+      if (!spokenQuestionIds.has(q.id)) {
+        speakPrompt(q.prompt);
+        spokenQuestionIds = new Set([...spokenQuestionIds, q.id]);
+        break;  // one new prompt per tick — don't stack utterances
+      }
+    }
+  });
 
   function selectChoice(question: QuestionSpec, value: string) {
     onCancelMic?.();
