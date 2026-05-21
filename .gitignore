@@ -1,5 +1,5 @@
 /models
 .env
-.env.ports
 node_modules
 sandbox/student_taurajgreig/vendor/
+.DS_Store
