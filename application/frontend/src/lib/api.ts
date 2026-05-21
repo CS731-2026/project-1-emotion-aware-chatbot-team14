@@ -15,12 +15,24 @@ export type ChatDebug = {
   current_message: string;
   mode?: Mode;
   stage?: Stage | null;
+  intention?: string | null;
   system_prompt: string | null;
   history_window: number;
   history_messages: Array<{ role: string; content: string }>;
   emotional_context: string;
   transcript_lines: string[];
   prompt_messages: Array<{ role: string; content: string }>;
+};
+
+/**
+ * What the frontend should render. Returned by /chat as `view`. Backend
+ * (the session conductor) is the source of truth — the frontend is a
+ * dumb mirror.
+ */
+export type ChatView = {
+  surface: "chat" | "checkin" | "done";
+  intention?: string | null;       // debug-only — never shown to the user
+  state_name?: string | null;       // debug-only — internal state id
 };
 
 export const api = {
@@ -45,6 +57,7 @@ export const api = {
       body: JSON.stringify({ text, mode, stage }),
     }).then((r) => r.json()) as Promise<{
       response: string;
+      view: ChatView;
       next_mode: Mode;
       next_stage: Stage | null;
       debug: ChatDebug | null;
