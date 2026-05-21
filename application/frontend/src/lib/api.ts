@@ -6,16 +6,10 @@ const BASE = PUBLIC_BACKEND_URL || "http://localhost:3001";
 export type Profile = { id: string; name: string; createdAt: string };
 export type Message = { id: string; role: "user" | "agent"; content: string; timestamp: string };
 
-// Must stay in sync with model_service/core/llm/reasoning_agent.py.
-export type Mode = "qa" | "feedback" | "consent" | "done";
-export type Stage = "open" | "explore" | "ground" | "close";
-
 export type ChatDebug = {
   provider: string | null;
   model: string | null;
   current_message: string;
-  mode?: Mode;
-  stage?: Stage | null;
   intention?: string | null;
   system_prompt: string | null;
   history_window: number;

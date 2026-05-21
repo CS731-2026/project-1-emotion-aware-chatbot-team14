@@ -19,7 +19,6 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Literal
 
 from core.events import SystemEvent
 from core.tool_emissions import ToolEmission, extract_emissions
@@ -29,13 +28,9 @@ from .base import LLMProvider, Message
 
 logger = logging.getLogger(__name__)
 
-# Which page / overall conversational mode the user is currently in.
-Mode = Literal["qa", "feedback", "consent", "done"]
 
-# Within `qa` mode, which scripted stage of the anxiety-reduction arc.
-Stage = Literal["open", "explore", "ground", "close"]
-
-# Shared persona used across every mode. Mode / stage prompts layer on top.
+# Shared persona used by every state. The conductor's intention_prompt
+# layers on top per turn.
 BASE_PERSONA = (
     "You are the live empathy system the user is speaking with inside this application. "
     "You can hear the user's speech and the application can also observe the user's face through the webcam. "
@@ -109,18 +104,13 @@ class ReasoningResult:
     """Structured output of one reasoning turn.
 
     `reply` is the user-facing text with any inline tool-emission markers
-    (e.g. `[[advance]]`) stripped. `emissions` contains the parsed list of
+    (e.g. `[[advance]]`) stripped. `emissions` contains the parsed
     ToolEmission objects the LLM produced — empty when the model didn't
     emit anything. The conductor reads emissions[*].name to decide
     transitions.
-
-    Legacy next_mode / next_stage fields remain for the still-attached
-    JSON-envelope path; deleted in iteration 7.
     """
 
     reply: str
-    next_mode: Mode
-    next_stage: Stage | None
     emissions: list[ToolEmission] = field(default_factory=list)
 
 
@@ -136,11 +126,8 @@ class ReasoningInputs:
     emotional_context: str
     history: list[Message]
     transcript_segments: list
-    mode: Mode = "qa"
-    stage: Stage | None = None
-    # When provided, replaces MODE_PROMPTS/STAGE_PROMPTS composition. Supplied
-    # by the conductor each turn via the chat router. Iteration 7 makes this
-    # the only path.
+    # Supplied by the conductor each turn via the chat router. The
+    # conductor's per-state intention_prompt.
     intention: str | None = None
     # Typed system events (form answers, emotion windows, segment summaries,
     # etc.) merged with transcript_segments into the LLM-facing stream.
@@ -305,8 +292,6 @@ class LLMReasoningAgent:
         emotional_context: str,
         history: list[Message],
         transcript_segments: list | None = None,
-        mode: Mode = "qa",
-        stage: Stage | None = None,
         intention: str | None = None,
         system_events: list[SystemEvent] | None = None,
         advance_instruction: str | None = None,
@@ -317,8 +302,6 @@ class LLMReasoningAgent:
             emotional_context=emotional_context,
             history=history,
             transcript_segments=transcript_segments or [],
-            mode=mode,
-            stage=stage,
             intention=intention,
             system_events=system_events,
             advance_instruction=advance_instruction,
@@ -368,15 +351,13 @@ class LLMReasoningAgent:
         emotional_context: str,
         history: list[Message],
         transcript_segments: list | None = None,
-        mode: Mode = "qa",
-        stage: Stage | None = None,
         intention: str | None = None,
         system_events: list[SystemEvent] | None = None,
         advance_instruction: str | None = None,
     ) -> dict:
         """Return a structured snapshot of the current reasoning pipeline."""
         inputs = self.collect_inputs(
-            message, emotional_context, history, transcript_segments, mode, stage, intention,
+            message, emotional_context, history, transcript_segments, intention,
             system_events, advance_instruction,
         )
         context = self.derive_prompt_context(inputs)
@@ -386,8 +367,6 @@ class LLMReasoningAgent:
             "provider": self._llm.provider_name,
             "model": self._llm.model_name,
             "current_message": inputs.current_message,
-            "mode": inputs.mode,
-            "stage": inputs.stage,
             "intention": inputs.intention,
             "system_prompt": context.system_prompt,
             "history_window": self._history_window,
@@ -403,8 +382,6 @@ class LLMReasoningAgent:
         emotional_context: str,
         history: list[Message],
         transcript_segments: list[TranscriptSegment] | None = None,
-        mode: Mode = "qa",
-        stage: Stage | None = None,
         intention: str | None = None,
         system_events: list[SystemEvent] | None = None,
         advance_instruction: str | None = None,
@@ -417,16 +394,11 @@ class LLMReasoningAgent:
         emit JSON, so there's no envelope to parse.
         """
         inputs = self.collect_inputs(
-            message, emotional_context, history, transcript_segments, mode, stage, intention,
+            message, emotional_context, history, transcript_segments, intention,
             system_events, advance_instruction,
         )
         context = self.derive_prompt_context(inputs)
         prompt_messages = self.assemble_messages(inputs, context)
         raw_response = self._llm.chat(prompt_messages)
         cleaned, emissions = extract_emissions(raw_response)
-        return ReasoningResult(
-            reply=cleaned.strip(),
-            next_mode=mode,         # echo caller; field is dead, kept for response compat
-            next_stage=stage,
-            emissions=emissions,
-        )
+        return ReasoningResult(reply=cleaned.strip(), emissions=emissions)

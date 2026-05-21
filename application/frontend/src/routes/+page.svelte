@@ -314,7 +314,7 @@
     window.speechSynthesis.speak(utterance);
   }
 
-  async function sendMessage(text: string, opts?: { formComplete?: boolean }) {
+  async function sendMessage(text: string) {
     if (chatBusy) return;
     chatBusy = true;
 
@@ -327,12 +327,7 @@
     messages = [...messages, userMsg];
 
     try {
-      const { response, view, debug } = await api.sendChat(
-        text,
-        undefined,
-        undefined,
-        { formComplete: opts?.formComplete },
-      );
+      const { response, view, debug } = await api.sendChat(text);
       backendOnline = true;
       latestReasoningDebug = debug;
       backendView = view;

@@ -13,7 +13,7 @@ from core.conductor import StateContext
 from core.conductor.check_in_spec import CheckInSpec
 from core.conductor.extraction import extract_facts
 from core.events import SystemEvent
-from core.llm.reasoning_agent import Mode, ReasoningResult, Stage
+from core.llm.reasoning_agent import ReasoningResult
 from core.transcript_render import compose_stream
 from ws.session import get_session, HarnessSession
 
@@ -32,14 +32,6 @@ class ChatRequest(BaseModel):
     profile_id: str
     message: str
     history: list[ChatMessage] = []
-    # Set by the frontend when the user has just answered the last question
-    # of an active check-in form. Drives the conductor's qa_form → next-state
-    # transition. Iteration 3 will replace this with a typed event on the
-    # WebSocket so chip clicks stop routing through /chat at all.
-    form_complete: bool = False
-    # Legacy fields; ignored by the conductor path. Removed in iteration 7.
-    mode: Mode = "qa"
-    stage: Stage | None = None
 
 
 class ChatView(BaseModel):
@@ -56,11 +48,6 @@ class ChatView(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     view: ChatView
-    # Legacy next_mode / next_stage fields stay on the response while the
-    # frontend is migrating; the frontend now reads `view` instead. Removed
-    # in iteration 7.
-    next_mode: Mode = "qa"
-    next_stage: Stage | None = None
     debug: dict | None = None
 
 
@@ -76,8 +63,6 @@ def _fallback_debug_snapshot(body: ChatRequest, latest_emotion: str, intention: 
         "provider": None,
         "model": None,
         "current_message": body.message,
-        "mode": body.mode,
-        "stage": body.stage,
         "intention": intention,
         "system_prompt": None,
         "history_window": 0,
@@ -195,9 +180,10 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
     emotion_observations = session.emotion_buffer.history() if session else []
 
     # Step 0a: walk the conductor with whatever pre-LLM signals we have.
-    # The post-LLM advance_emission re-step happens after the reasoner runs.
+    # form_complete now arrives over the WebSocket, never via /chat, so the
+    # pre-LLM observe sees no form completion signal here.
     intention, state_name, surface, spec, _transitioned = await _step_conductor(
-        session, form_completed=body.form_complete, advance_emission=False, hri=hri,
+        session, form_completed=False, advance_emission=False, hri=hri,
     )
     advance_instruction = (
         session.conductor.current.advance_instruction if session else None
@@ -211,7 +197,7 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
     is_form_surface = session is not None and session.conductor.current.kind == "form"
 
     if is_form_surface:
-        result = ReasoningResult(reply="", next_mode=body.mode, next_stage=body.stage)
+        result = ReasoningResult(reply="")
         debug = _fallback_debug_snapshot(body, "(silent: form state)", intention)
     elif hri.emotion_agent and hri.llm_agent:
         # Step 1: collect the contextual state for this profile and turn.
@@ -228,8 +214,6 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
             emotional_context,
             history,
             transcript_segments,
-            mode=body.mode,
-            stage=body.stage,
             intention=intention,
             system_events=system_events,
             advance_instruction=advance_instruction,
@@ -245,8 +229,6 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
             emotional_context,
             history,
             transcript_segments,
-            body.mode,
-            body.stage,
             intention,
             system_events,
             advance_instruction,
@@ -254,7 +236,7 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
     else:
         latest_emotion = emotion_observations[-1].emotion if emotion_observations else "unknown"
         reply = f"{build_noise_reply()} Latest emotion: {latest_emotion}."
-        result = ReasoningResult(reply=reply, next_mode=body.mode, next_stage=body.stage)
+        result = ReasoningResult(reply=reply)
         debug = _fallback_debug_snapshot(body, latest_emotion, intention)
 
     # Step 5: pick up any inline tool emissions from the reply (e.g.
@@ -286,7 +268,5 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
             intention=intention,
             state_name=state_name,
         ),
-        next_mode=result.next_mode,
-        next_stage=result.next_stage,
         debug=debug,
     )
