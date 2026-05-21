@@ -19,7 +19,12 @@
     onMicToggle,
   }: {
     spec: PageSpec;
-    onAnswer: (questionId: string, value: string) => void;
+    /**
+     * Fired whenever the user picks a chip. `isLastAnswer` is true when
+     * this answer brings every question in the spec to a selected state —
+     * the parent uses it to signal form_complete to the conductor.
+     */
+    onAnswer: (questionId: string, value: string, isLastAnswer: boolean) => void;
     onTextSubmit: (text: string) => void;
     onCancelMic?: () => void;
     isListening: boolean;
@@ -56,8 +61,10 @@
       if (canned.alert) reactions.push({ kind: "alert", text: canned.alert });
       if (canned.assistant) reactions.push({ kind: "assistant", text: canned.assistant });
     }
-    answers = { ...answers, [question.id]: { selected: value, reactions } };
-    onAnswer(question.id, value);
+    const updatedAnswers = { ...answers, [question.id]: { selected: value, reactions } };
+    answers = updatedAnswers;
+    const allAnswered = spec.questions.every((q) => updatedAnswers[q.id]?.selected);
+    onAnswer(question.id, value, allAnswered);
   }
 </script>
 

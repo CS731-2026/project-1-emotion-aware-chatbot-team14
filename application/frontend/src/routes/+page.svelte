@@ -138,8 +138,16 @@
   // Page-elevation per-question hook. For now identical to the overlay path
   // (just send), but takes the questionId so once the reasoner is wired this
   // can carry per-question metadata.
-  function handlePageAnswer(_questionId: string, value: string) {
+  // Debug-fixture path (Shift+3/4 checkInState overlay). Ignores isLast — the
+  // debug overlay is dismissed via Esc, not by form completion.
+  function handlePageAnswer(_questionId: string, value: string, _isLast?: boolean) {
     void sendMessage(value);
+  }
+
+  // Conductor-driven check-in path. On the final answer, signal
+  // form_complete so the conductor's qa_form → next-state transition fires.
+  function handleConductorPageAnswer(_questionId: string, value: string, isLast: boolean) {
+    void sendMessage(value, { formComplete: isLast });
   }
   const assistantPhase = $derived(deriveAssistantPhase({
     backendOnline,
@@ -290,7 +298,7 @@
     window.speechSynthesis.speak(utterance);
   }
 
-  async function sendMessage(text: string) {
+  async function sendMessage(text: string, opts?: { formComplete?: boolean }) {
     if (chatBusy) return;
     chatBusy = true;
 
@@ -307,6 +315,7 @@
         text,
         conversationState.mode,
         conversationState.stage,
+        { formComplete: opts?.formComplete },
       );
       backendOnline = true;
       latestReasoningDebug = debug;
@@ -690,6 +699,17 @@
             Speak to send a voice prompt automatically, or type if you want a quieter fallback.
           </p>
         </div>
+      </section>
+    {:else if backendView.surface === "checkin" && backendView.spec}
+      <section class="checkin-mount">
+        <QuestionnairePage
+          spec={backendView.spec}
+          onAnswer={handleConductorPageAnswer}
+          onTextSubmit={sendMessage}
+          onCancelMic={cancelMicIfRecording}
+          {isListening}
+          onMicToggle={toggleMic}
+        />
       </section>
     {:else if backendView.surface === "done"}
       <section class="mode-stub">
