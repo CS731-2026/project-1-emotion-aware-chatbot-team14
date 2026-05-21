@@ -6,7 +6,7 @@ import apiRoutes from "./routes";
 import env from "./config/env";
 
 const app = express();
-const FRONTEND_ORIGIN = "http://localhost:5173";
+const FRONTEND_ORIGIN = env.FRONTEND_ORIGIN;
 
 app.use((req: Request, res: Response, next: NextFunction) => {
   res.header("Access-Control-Allow-Origin", FRONTEND_ORIGIN);

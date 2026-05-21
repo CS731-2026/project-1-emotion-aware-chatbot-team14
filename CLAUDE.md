@@ -16,6 +16,17 @@ Browser → SvelteKit (5173) → Express backend (3001) → FastAPI model servic
 make dev          # start all three services (kills ports first)
 make install      # npm install + pip install (first time only)
 make kill         # free ports 3000/3001/5173/8000
+make ports        # show this checkout's port assignments
+```
+
+## Parallel branches / multiple agents
+
+This repo supports running multiple branches in parallel via git worktrees with isolated ports. See `WORKTREES.md` for details. Quick reference:
+
+```bash
+scripts/worktree-add.sh <branch>     # creates ../hri-worktrees/<branch>/
+scripts/worktree-list.sh             # show all worktrees + their ports
+scripts/worktree-remove.sh <branch>  # tear down
 ```
 
 ## Top-level folders
