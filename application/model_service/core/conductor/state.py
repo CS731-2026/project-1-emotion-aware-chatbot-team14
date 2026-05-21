@@ -32,6 +32,7 @@ class StateContext:
     turn_in_state: int                  # turns since this state began
     form_completed: bool = False        # set by the events stream when a form_complete event lands
     advance_emission: bool = False      # set when the reply carried [[advance]]
+    elapsed_in_state: float = 0.0       # seconds since this state began
 
 
 # A hard-advance rule: pure function of StateContext → should we leave the

@@ -146,6 +146,7 @@ async def _step_conductor(
         turn_in_state=session.turn_in_state,
         form_completed=form_completed,
         advance_emission=advance_emission,
+        elapsed_in_state=max(0.0, time.time() - session.state_started_at),
     )
     decision = session.conductor.observe(ctx)        # cheap, on the loop
     if decision.transitioned:

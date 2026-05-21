@@ -263,6 +263,7 @@ def _make_handlers(
                 turn_in_state=session.turn_in_state,
                 form_completed=True,
                 advance_emission=False,
+                elapsed_in_state=max(0.0, time.time() - session.state_started_at),
             )
             decision = session.conductor.observe(ctx)
             if decision.transitioned:
