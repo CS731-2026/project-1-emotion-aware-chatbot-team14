@@ -112,10 +112,13 @@ def _run_extraction_on_transition(
     cutoff = session.state_started_at
     slice_events = [e for e in session.system_events if e.t >= cutoff]
     slice_segments = [s for s in session.transcript_buffer if float(s.timestamp) >= cutoff]
+    # Strip the (conf NN%) tag from speech lines — fact extraction doesn't
+    # benefit from per-line confidence, and rendering it with a different
+    # remap than the main conversation would just create inconsistency.
     segment_slice = compose_stream(
         slice_segments,
         slice_events,
-        confidence_remap=lambda c: c,  # raw conf — extraction doesn't care
+        confidence_remap=lambda _c: None,
     )
     facts: dict = {}
     if prev_state is not None and hri.llm_agent is not None:
