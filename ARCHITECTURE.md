@@ -235,15 +235,11 @@ frontend: ChatHistory.svelte renders the new messages
 
 ## Integration Points — What to Build Next
 
-### 1. Real Emotion Model (`⚠ highest priority`)
+### 1. Adding a new emotion model variant
 
-**Where:** `application/model_service/ws/handler.py`, function `pick_emotion()`.
+The pipeline already runs a real model (`EmpathBotV1`) by default via the registry. To add another variant — e.g. a different architecture, an ensemble, or a teammate's hand-trained checkpoint:
 
-**Current state:** returns a random emotion when `TEST_EMOTIONS=true` (default), or `"neutral"` otherwise. `face_crop` is prepared by `ws/video.py` but `emotion_model.predict()` is only called when a real model is loaded.
-
-**What to do:**
-
-Step 1 — Implement `EmotionModel` in a new file:
+**Step 1 — Implement `EmotionModel` in a new file:**
 ```
 application/model_service/core/emotion/<your_model_name>.py
 ```
@@ -251,28 +247,39 @@ Must implement the ABC from `core/emotion/base.py`:
 ```python
 def predict(self, face_bgr: np.ndarray) -> tuple[str, float]:
     # face_bgr: uint8 BGR crop of the detected face, any size
-    # returns: (emotion_label, confidence) where label ∈ EmotionModel.EMOTIONS
-    #   EMOTIONS = ['angry','disgust','fear','happy','sad','surprise','neutral']
+    # returns: (emotion_label, confidence) where label ∈ EMOTIONS
+    #   EMOTIONS = ['neutral', 'trust_relief', 'sadness',
+    #               'fear_anxiety', 'confusion', 'distrust']
 ```
 
-Step 2 — Register it in the factory:
+The model **is the source of truth** for label semantics. If your checkpoint stores `class_names`, assert it matches `EMOTIONS` at load time and fail loud on mismatch — see `core/emotion/empathbot.py` for the pattern.
+
+**Step 2 — Register it in the factory:**
 ```python
 # core/emotion/factory.py
 if variant == "your_model_name":
     from .your_model_name import YourEmotionModel
-    return YourEmotionModel()
+    return YourEmotionModel(checkpoint_path=checkpoint_path, device=config.EMOTION_DEVICE)
 ```
 
-Step 3 — Set the env vars:
-```
-# application/model_service/.env
-EMOTION_VARIANT=your_model_name
-TEST_EMOTIONS=false
+**Step 3 — Add a registry entry:**
+```yaml
+# application/model_service/models.yaml
+models:
+  your_model_id:
+    path:    models/your_model/your_checkpoint.pth
+    variant: your_model_name
 ```
 
-`pick_emotion()` in `ws/handler.py` already calls `emotion_model.predict(face_crop)` when the model is loaded — no other changes needed. The face crop arrives as BGR uint8 from the face detector; resize inside `predict()` to match your model's expected input.
+**Step 4 — Select it in `.env`:**
+```
+EMOTION_MODEL_ID=your_model_id
+```
+
+`pick_emotion()` already calls `emotion_model.predict(face_crop)` whenever a model is loaded — no other changes needed. The face crop arrives as BGR uint8 from the face detector; resize and normalise inside `predict()` to match the model's expected input.
 
 ---
+
 
 ### 2. LLM Reasoning Expansion
 
