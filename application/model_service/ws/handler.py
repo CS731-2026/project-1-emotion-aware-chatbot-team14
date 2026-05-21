@@ -228,6 +228,11 @@ def _make_handlers(
             return True
 
         payload = msg.get("payload") if isinstance(msg.get("payload"), dict) else {}
+        # Defence-in-depth: form_complete carries no payload data the LLM
+        # should see. Any state name / form_id in there would leak into
+        # the merged transcript's {{form_complete: …}} marker.
+        if kind == "form_complete":
+            payload = {}
         t = float(msg.get("t", time.time()))
         event = SystemEvent(kind=kind, t=t, payload=payload)  # type: ignore[arg-type]
         session.system_events.append(event)

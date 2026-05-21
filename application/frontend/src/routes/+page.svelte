@@ -159,7 +159,10 @@
   function handleConductorPageAnswer(questionId: string, value: string, isLast: boolean) {
     sendSystemEvent("form_answer", { question_id: questionId, value });
     if (isLast) {
-      sendSystemEvent("form_complete", { form_id: backendView.state_name ?? "unknown" });
+      // Empty payload — the backend conductor knows which form is current;
+      // exposing the state name to the LLM via the rendered event would
+      // violate "the LLM never sees state-machine vocabulary".
+      sendSystemEvent("form_complete", {});
     }
   }
   const assistantPhase = $derived(deriveAssistantPhase({
@@ -554,10 +557,17 @@
     if (pendingTranscript && !chatBusy) {
       const nextTranscript = pendingTranscript;
       pendingTranscript = null;
-      // Route speech through the check-in funnel when active so the current
-      // overlay step advances; otherwise fall back to a plain chat turn.
+      // Route speech depending on what surface is mounted:
+      //   - debug Shift+overlay active → funnel into its step advancement
+      //   - conductor-driven form surface → swallow. Forms take input via
+      //     chips, not free speech. The audio is still captured for emotion
+      //     analysis but doesn't fire a /chat turn (which would be silent
+      //     anyway — the backend skips LLM during form states).
+      //   - otherwise (yarn / chat) → normal chat turn
       if (isOverlayActive) {
         handleCheckInAnswer(nextTranscript);
+      } else if (backendView.surface === "checkin") {
+        return;
       } else {
         void sendMessage(nextTranscript);
       }
