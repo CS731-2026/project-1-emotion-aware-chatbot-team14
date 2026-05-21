@@ -23,6 +23,15 @@ export type ChatDebug = {
   emotional_context: string;
   transcript_lines: string[];
   prompt_messages: Array<{ role: string; content: string }>;
+  /** Conductor view — current state + facts. Populated when a session is active. */
+  session_state?: {
+    state_name: string | null;
+    surface: "chat" | "checkin" | "done";
+    turn_in_state: number;
+    segment_id: number;
+    emissions: Array<{ name: string; payload: Record<string, unknown> }>;
+    state_facts: Record<string, Record<string, unknown>>;
+  };
 };
 
 /**

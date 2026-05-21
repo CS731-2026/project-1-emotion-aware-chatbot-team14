@@ -262,6 +262,18 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
         logger.info("turn cap reached (%d) — forcing next_mode='done'", user_turns)
         result = ReasoningResult(reply=result.reply, next_mode="done", next_stage=None)
 
+    # Attach session-state details to the debug payload so the dashboard
+    # panel can render the conductor's view at a glance.
+    if debug is not None and session is not None:
+        debug["session_state"] = {
+            "state_name": state_name,
+            "surface": surface,
+            "turn_in_state": session.turn_in_state,
+            "segment_id": session.segment_id_counter,
+            "emissions": [{"name": e.name, "payload": e.payload} for e in result.emissions],
+            "state_facts": session.state_facts,
+        }
+
     return ChatResponse(
         response=result.reply,
         view=ChatView(
