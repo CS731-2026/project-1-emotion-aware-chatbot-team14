@@ -17,7 +17,7 @@ import logging
 from pathlib import Path
 from typing import Callable
 
-from . import phases
+from .. import phases
 from .config import Config, load_experiment
 from .context import Context
 

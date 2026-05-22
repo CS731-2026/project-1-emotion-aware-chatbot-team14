@@ -23,9 +23,9 @@ import random
 from pathlib import Path
 
 from . import dataset_ingest as ingest
-from . import keys as K
-from .context import Context
 from .dataset_spec import DatasetSpec
+from .framework import keys as K
+from .framework.context import Context
 from .trained_model import TrainedModel
 
 logger = logging.getLogger(__name__)
