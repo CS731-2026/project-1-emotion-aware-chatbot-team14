@@ -22,6 +22,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from types import ModuleType
 from typing import IO, Any
 
 import yaml
@@ -36,19 +37,32 @@ _OUTPUT_RUN_ROOT = Path("output/run")
 
 @dataclass
 class Context:
-    config:  Config
-    store:   Store
-    run_dir: Path
-    _metrics_fh: IO[str] = field(repr=False)
+    config:           Config
+    store:            Store
+    run_dir:          Path
+    dataset_module:   ModuleType
+    model_module:     ModuleType
+    _metrics_fh:      IO[str] = field(repr=False)
 
     # ---- construction ---------------------------------------------------
 
     @classmethod
-    def create(cls, config: Config) -> "Context":
+    def create(
+        cls,
+        config: Config,
+        *,
+        dataset_module: ModuleType,
+        model_module:   ModuleType,
+    ) -> "Context":
         """Build the run dir under output/run/<slug>__<ts>/ and open the
         metrics jsonl handle. If the slug+timestamp dir already exists
-        (unlikely but possible — two runs in the same second), append
-        _v2 / _v3 / … so the prior run dir isn't clobbered."""
+        (two runs in the same second), append _v2/_v3/… so prior runs
+        aren't clobbered.
+
+        dataset_module + model_module are the Python modules registered
+        in pipeline/train.py. They're held here (not in the store) so
+        every phase reads them as ctx attributes — no string lookup.
+        """
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
         base = _OUTPUT_RUN_ROOT / f"{config.slug()}__{ts}"
         run_dir = base
@@ -61,17 +75,23 @@ class Context:
 
         # Snapshot the resolved config — first thing in the dir.
         (run_dir / "config.yaml").write_text(yaml.safe_dump({
-            "dataset":     config.dataset,
-            "model":       config.model,
-            "config":      config.config,
-            "seed":        config.seed,
-            "phases":      config.phases,
-            "dataset_cfg": config.dataset_cfg,
-            "train_cfg":   config.train_cfg,
+            "dataset":    config.dataset,
+            "model":      config.model,
+            "config":     config.config,
+            "seed":       config.seed,
+            "phases":     config.phases,
+            "train_cfg":  config.train_cfg,
         }, sort_keys=False))
 
         metrics_fh = (run_dir / "metrics.jsonl").open("a")
-        return cls(config=config, store=Store(), run_dir=run_dir, _metrics_fh=metrics_fh)
+        return cls(
+            config=config,
+            store=Store(),
+            run_dir=run_dir,
+            dataset_module=dataset_module,
+            model_module=model_module,
+            _metrics_fh=metrics_fh,
+        )
 
     def close(self) -> None:
         """Flush + close the metrics handle. The driver calls this."""

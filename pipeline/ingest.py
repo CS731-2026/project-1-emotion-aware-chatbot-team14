@@ -207,3 +207,92 @@ def write_split_csvs(splits: dict[str, pd.DataFrame], cache_dir: Path) -> dict[s
         df.to_csv(dest, index=False)
         out[name] = dest
     return out
+
+
+# ---- high-level helpers used by every dataset module ----------------------
+
+
+def try_load_cached(cache_dir: Path, source_dir: Path):
+    """Return a cached DatasetSpec if one exists and the source hasn't
+    changed; otherwise None. Lets a dataset module short-circuit the
+    download+remap+split pipeline on warm re-runs.
+
+    Imported lazily inside dataset modules — `from pipeline import ingest`
+    then `ingest.try_load_cached(...)`.
+    """
+    from .framework.specs import DatasetSpec
+    manifest = cache_dir / "manifest.json"
+    if not (manifest.exists() and source_dir.exists()):
+        return None
+    prior = DatasetSpec.from_manifest(manifest)
+    if prior.source_md5 == md5_of_dir(source_dir):
+        logger.info("dataset cache hit at %s", cache_dir)
+        return prior
+    logger.info("dataset source md5 changed — re-prepping")
+    return None
+
+
+def finalize_dataset(
+    *,
+    name: str,
+    cache_dir: Path,
+    source_dir: Path,
+    class_names: list[str],
+    label_remap: dict[str, str] | None = None,
+    train_dir: str = "train",
+    test_dir:  str = "test",
+    val_fraction: float = 0.10,
+    val_seed: int = 42,
+    class_weights: str = "auto",  # "auto" | "uniform"
+):
+    """Walk source/<train|test>/<class>/*.png, remap, split, write CSVs,
+    return the DatasetSpec and persist its manifest. The single shared
+    "everything after the fetch" pipeline — each dataset module just
+    fetches its source and calls this.
+
+    `label_remap=None` is identity (every class_name maps to itself).
+    Pass an explicit remap when the source labels differ from
+    class_names (e.g. FER2013 7-class → EmpathBot 6-class).
+    """
+    import json
+    from .framework.specs import DatasetSpec
+
+    train_raw = scan_imagefolder(source_dir / train_dir)
+    test_raw  = scan_imagefolder(source_dir / test_dir)
+
+    remap = label_remap or {n: n for n in class_names}
+    train_remapped = apply_remap(train_raw, remap, class_names)
+    test_remapped  = apply_remap(test_raw,  remap, class_names)
+
+    train_df, val_df = carve_val(train_remapped, val_fraction=val_fraction, seed=val_seed)
+
+    weights: list[float] | None
+    if class_weights == "auto":
+        weights = compute_class_weights(train_df["label"], num_classes=len(class_names))
+    elif class_weights == "uniform":
+        weights = None
+    else:
+        raise ValueError(
+            f"class_weights={class_weights!r} not understood; expected 'auto' or 'uniform'"
+        )
+
+    splits = write_split_csvs(
+        {"train": train_df, "val": val_df, "test": test_remapped},
+        cache_dir,
+    )
+
+    spec = DatasetSpec(
+        name=name,
+        cache_dir=cache_dir,
+        splits=splits,
+        num_classes=len(class_names),
+        class_names=class_names,
+        class_weights=weights,
+        source_md5=md5_of_dir(source_dir),
+    )
+    (cache_dir / "manifest.json").write_text(json.dumps(spec.to_manifest(), indent=2))
+    logger.info(
+        "dataset %s ready — train=%d val=%d test=%d",
+        name, len(train_df), len(val_df), len(test_remapped),
+    )
+    return spec

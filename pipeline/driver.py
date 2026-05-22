@@ -1,24 +1,22 @@
 """Pipeline driver.
 
-Loads an experiment yaml into a Config, builds a Context, then walks
-the phases listed in cfg.phases in order. Each phase is looked up in
-the PHASES registry — adding a new phase = a new function in
-phases.py + a new entry in this dict.
+Composition file — orchestrates phases and the dataset×model×config
+sweep. Reads module references registered in pipeline/train.py (the
+entry point) and walks the cross-product, one run per cell.
 
-A phase that raises propagates the exception (we want the run to fail
-loudly mid-pipeline); the caller decides whether to keep going across
-a sweep of experiments. Context's metrics handle is closed in a
-finally so the file isn't left open even on failure.
+The PHASES dict is the registry of phase functions. Adding a new
+phase = one function in phases.py + one entry here.
 """
 
 from __future__ import annotations
 
 import logging
-from pathlib import Path
-from typing import Callable
+from itertools import product
+from types import ModuleType
+from typing import Callable, Sequence
 
 from . import phases
-from .framework import Config, Context, load_experiment
+from .framework import Config, Context
 
 logger = logging.getLogger(__name__)
 
@@ -29,14 +27,36 @@ PHASES: dict[str, PhaseFn] = {
     "setup":           phases.setup,
     "prepare_dataset": phases.prepare_dataset,
     "train":           phases.train,
-    # evaluate lands in a later commit; for now train does inline val/test eval
+    # evaluate lands later; for now train does inline val/test eval
 }
 
 
-def run_experiment(cfg: Config) -> Context:
-    """Walk cfg.phases against the registry. Returns the populated
-    Context so callers can inspect ctx.store / ctx.run_dir after."""
-    ctx = Context.create(cfg)
+def run_one(
+    dataset_module: ModuleType,
+    model_module:   ModuleType,
+    config_module:  ModuleType,
+    *,
+    seed: int = 42,
+    phases_to_run: list[str] | None = None,
+) -> Context:
+    """Run one (dataset, model, config) combination end-to-end.
+
+    The three modules are everything we need — names come from each
+    module's NAME attribute; the train hyperparam dict comes from
+    config_module.CONFIG; the dataset module's prepare() is called by
+    the prepare_dataset phase; the model module's build()/PREPROCESS
+    are called by the train phase.
+    """
+    phases_to_run = phases_to_run or ["setup", "prepare_dataset", "train"]
+    cfg = Config(
+        dataset    = dataset_module.NAME,
+        model      = _model_name(model_module),
+        config     = config_module.NAME,
+        seed       = seed,
+        train_cfg  = dict(config_module.CONFIG),
+        phases     = list(phases_to_run),
+    )
+    ctx = Context.create(cfg, dataset_module=dataset_module, model_module=model_module)
     try:
         for name in cfg.phases:
             phase_fn = PHASES.get(name)
@@ -52,6 +72,42 @@ def run_experiment(cfg: Config) -> Context:
     return ctx
 
 
-def run_experiment_file(path: str | Path) -> Context:
-    """Convenience wrapper — load yaml + run_experiment in one call."""
-    return run_experiment(load_experiment(path))
+def sweep(
+    *,
+    datasets: Sequence[ModuleType],
+    models:   Sequence[ModuleType],
+    configs:  Sequence[ModuleType],
+    seed:     int = 42,
+    fail_fast: bool = False,
+) -> list[Context]:
+    """Cross-product over (datasets, models, configs). One run per cell,
+    each with its own run dir.
+
+    A cell that raises is logged and the sweep continues by default —
+    the leaderboard reflects partial results. `fail_fast=True` flips
+    to "any failure stops the sweep" (CI-style).
+    """
+    cells = list(product(datasets, models, configs))
+    logger.info(
+        "sweep: %d run(s) — %d × %d × %d (dataset × model × config)",
+        len(cells), len(datasets), len(models), len(configs),
+    )
+    contexts: list[Context] = []
+    for i, (ds, m, c) in enumerate(cells, 1):
+        logger.info("─" * 60)
+        logger.info("sweep [%d/%d]: %s × %s × %s",
+                    i, len(cells), ds.NAME, _model_name(m), c.NAME)
+        try:
+            contexts.append(run_one(ds, m, c, seed=seed))
+        except Exception:
+            logger.exception("sweep cell failed: %s × %s × %s",
+                             ds.NAME, _model_name(m), c.NAME)
+            if fail_fast:
+                raise
+    return contexts
+
+
+def _model_name(module: ModuleType) -> str:
+    """Models don't carry a NAME constant — derive it from the module
+    path. `models.tiny_cnn` → `tiny_cnn`."""
+    return module.__name__.rsplit(".", 1)[-1]
