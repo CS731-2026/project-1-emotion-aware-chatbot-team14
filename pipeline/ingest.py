@@ -33,6 +33,54 @@ _IMG_EXTS = {".png", ".jpg", ".jpeg"}
 DROP_SENTINEL = "__drop__"
 
 
+def generate_synthetic(
+    dest: Path,
+    *,
+    class_names: list[str],
+    samples_per_class: dict[str, int] | int,
+    seed: int = 42,
+    image_size: int = 32,
+) -> Path:
+    """Build a fake imagefolder dataset at `dest` so the pipeline can
+    smoke-test without network or real data.
+
+    Each class gets `samples_per_class[name]` (or a flat int) images,
+    drawn from a class-specific mean + noise so a model can actually
+    learn something meaningful — the smoke run validates "training
+    drives loss down" not just "the wiring works".
+
+    Idempotent: if `dest` already has subdirs, returns immediately —
+    the per-dataset md5 cache in prepare_dataset still picks up changes
+    in image content if a teammate edits a generated file by hand.
+    """
+    import numpy as np
+    from PIL import Image
+
+    dest.mkdir(parents=True, exist_ok=True)
+    if any(p.is_dir() for p in dest.iterdir()):
+        logger.info("synthetic: cache present at %s; skipping generation", dest)
+        return dest
+
+    rng = np.random.default_rng(seed)
+    # Per-class mean color so the classification problem is learnable.
+    class_means = rng.integers(40, 215, size=(len(class_names), 3), endpoint=True)
+
+    if isinstance(samples_per_class, int):
+        samples_per_class = {n: samples_per_class for n in class_names}
+
+    logger.info("synthetic: generating %s in %s",
+                {n: samples_per_class[n] for n in class_names}, dest)
+    for class_idx, name in enumerate(class_names):
+        class_dir = dest / name
+        class_dir.mkdir()
+        mean = class_means[class_idx].astype(np.float32)
+        for i in range(samples_per_class[name]):
+            noise = rng.normal(0, 35, size=(image_size, image_size, 3))
+            img = np.clip(mean + noise, 0, 255).astype(np.uint8)
+            Image.fromarray(img).save(class_dir / f"{i:04d}.png")
+    return dest
+
+
 def download_kaggle(dataset_id: str, dest: Path) -> Path:
     """Download a Kaggle dataset archive into `dest` and extract it in place.
 

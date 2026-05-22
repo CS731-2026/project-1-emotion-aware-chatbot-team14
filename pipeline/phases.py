@@ -93,18 +93,38 @@ def prepare_dataset(ctx: Context) -> None:
             return
         logger.info("prepare_dataset: source changed (md5 mismatch), re-prepping")
 
-    # Fresh prep — download, walk, remap, split, write.
+    # Fresh prep — fetch source by type, then walk, remap, split, write.
     source = dcfg["source"]
-    if source["type"] != "kaggle":
-        raise NotImplementedError(
-            f"dataset source type {source['type']!r} not supported yet — "
-            "currently only 'kaggle' has an ingest path"
+    if source["type"] == "kaggle":
+        ingest.download_kaggle(source["dataset_id"], source_dir)
+        layout = source["archive_layout"]
+        train_raw = ingest.scan_imagefolder(source_dir / layout["train_dir"])
+        test_raw  = ingest.scan_imagefolder(source_dir / layout["test_dir"])
+    elif source["type"] == "synthetic":
+        # Generate train + test imagefolders under source/. Class names
+        # match the dataset yaml's class_names so the remap is a pass-through
+        # (identity). Useful for sweep smoke tests without network.
+        ingest.generate_synthetic(
+            source_dir / "train",
+            class_names=list(dcfg["class_names"]),
+            samples_per_class=source.get("train_samples_per_class", 40),
+            seed=int(source.get("seed", 42)),
+            image_size=int(source.get("image_size", 32)),
         )
-    ingest.download_kaggle(source["dataset_id"], source_dir)
-
-    layout = source["archive_layout"]
-    train_raw = ingest.scan_imagefolder(source_dir / layout["train_dir"])
-    test_raw  = ingest.scan_imagefolder(source_dir / layout["test_dir"])
+        ingest.generate_synthetic(
+            source_dir / "test",
+            class_names=list(dcfg["class_names"]),
+            samples_per_class=source.get("test_samples_per_class", 12),
+            seed=int(source.get("seed", 42)) + 1,
+            image_size=int(source.get("image_size", 32)),
+        )
+        train_raw = ingest.scan_imagefolder(source_dir / "train")
+        test_raw  = ingest.scan_imagefolder(source_dir / "test")
+    else:
+        raise NotImplementedError(
+            f"dataset source type {source['type']!r} not supported. "
+            "Currently supported: 'kaggle', 'synthetic'."
+        )
 
     class_names = list(dcfg["class_names"])
     train_remapped = ingest.apply_remap(train_raw, dcfg["label_remap"], class_names)
