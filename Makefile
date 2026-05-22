@@ -1,6 +1,7 @@
 SHELL := /bin/bash
 
-.PHONY: dev dev-services dev-harness dev-backend dev-frontend install open kill crop-faces test-face-cropper
+.PHONY: dev dev-services dev-harness dev-backend dev-frontend install open kill crop-faces test-face-cropper \
+        train train-list train-clean
 
 dev: kill
 	$(MAKE) -j3 --keep-going dev-harness dev-backend dev-frontend
@@ -48,3 +49,25 @@ crop-faces:
 
 test-face-cropper:
 	python face_cropper/test_face_cropper.py $(IMAGE)
+
+# ──────────────────────────────────────────────────────────────────────────
+# Training pipeline (v2). See TRAINING.md for the full layout.
+#
+# `make train`         run every (dataset, model, config) triple in
+#                      pipeline/train.py's RUNS list
+# `make train-list`    print the runs that would execute, no training
+# `make train-clean`   wipe output/ — cached datasets + run dirs + checkpoints
+#
+# To skip a run, comment out its line in pipeline/train.py RUNS.
+# ──────────────────────────────────────────────────────────────────────────
+train:
+	python -m pipeline.train
+
+train-list:
+	@python -c "from pipeline.train import RUNS; \
+print(f'{len(RUNS)} run(s) declared in pipeline/train.py:'); \
+[print(f'  {d.NAME:24} x {m.__name__.rsplit(\".\",1)[-1]:14} x {c.NAME}') for (d,m,c) in RUNS]"
+
+train-clean:
+	rm -rf output/
+	@echo "wiped output/ (cached datasets + run dirs + checkpoints)"

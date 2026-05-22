@@ -61,9 +61,15 @@ def generate_synthetic(
         logger.info("synthetic: cache present at %s; skipping generation", dest)
         return dest
 
-    rng = np.random.default_rng(seed)
-    # Per-class mean color so the classification problem is learnable.
-    class_means = rng.integers(40, 215, size=(len(class_names), 3), endpoint=True)
+    # Per-class mean color comes from a FIXED seed so train and test
+    # share the same color → class mapping. The caller's `seed` only
+    # drives per-sample noise; otherwise the model trained on train
+    # can't generalize to test (class colors would differ between
+    # splits using different seeds).
+    class_means_rng = np.random.default_rng(0)
+    class_means = class_means_rng.integers(40, 215, size=(len(class_names), 3), endpoint=True)
+
+    noise_rng = np.random.default_rng(seed)
 
     if isinstance(samples_per_class, int):
         samples_per_class = {n: samples_per_class for n in class_names}
@@ -75,7 +81,7 @@ def generate_synthetic(
         class_dir.mkdir()
         mean = class_means[class_idx].astype(np.float32)
         for i in range(samples_per_class[name]):
-            noise = rng.normal(0, 35, size=(image_size, image_size, 3))
+            noise = noise_rng.normal(0, 35, size=(image_size, image_size, 3))
             img = np.clip(mean + noise, 0, 255).astype(np.uint8)
             Image.fromarray(img).save(class_dir / f"{i:04d}.png")
     return dest
