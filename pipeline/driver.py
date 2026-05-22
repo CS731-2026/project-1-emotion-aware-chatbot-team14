@@ -27,8 +27,9 @@ PhaseFn = Callable[[Context], None]
 
 # Phase registry. Adding a new phase = one import + one dict entry.
 PHASES: dict[str, PhaseFn] = {
-    "setup": phases.setup,
-    # prepare_dataset, train, evaluate land in subsequent commits
+    "setup":           phases.setup,
+    "prepare_dataset": phases.prepare_dataset,
+    # train, evaluate land in subsequent commits
 }
 
 
