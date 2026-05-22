@@ -11,12 +11,17 @@ phase = one function in phases.py + one entry here.
 from __future__ import annotations
 
 import logging
-from itertools import product
 from types import ModuleType
 from typing import Callable, Sequence
 
 from . import phases
 from .framework import Config, Context
+
+
+# A single training run — one (dataset_module, model_module, config_module)
+# triple. The entry point (pipeline/train.py) declares a list of these;
+# the sweep iterates them in order.
+Run = tuple[ModuleType, ModuleType, ModuleType]
 
 logger = logging.getLogger(__name__)
 
@@ -73,30 +78,28 @@ def run_one(
 
 
 def sweep(
+    runs:       Sequence[Run],
     *,
-    datasets: Sequence[ModuleType],
-    models:   Sequence[ModuleType],
-    configs:  Sequence[ModuleType],
-    seed:     int = 42,
-    fail_fast: bool = False,
+    seed:       int = 42,
+    fail_fast:  bool = False,
 ) -> list[Context]:
-    """Cross-product over (datasets, models, configs). One run per cell,
-    each with its own run dir.
+    """Run each (dataset, model, config) triple in `runs`, in order. One
+    triple = one run, one run dir.
 
-    A cell that raises is logged and the sweep continues by default —
+    Explicit triples (rather than a cross-product of three lists) because
+    not every model belongs with every dataset / config — the entry
+    point should declare the specific pairings worth training.
+
+    A run that raises is logged and the sweep continues by default —
     the leaderboard reflects partial results. `fail_fast=True` flips
     to "any failure stops the sweep" (CI-style).
     """
-    cells = list(product(datasets, models, configs))
-    logger.info(
-        "sweep: %d run(s) — %d × %d × %d (dataset × model × config)",
-        len(cells), len(datasets), len(models), len(configs),
-    )
+    logger.info("sweep: %d run(s) queued", len(runs))
     contexts: list[Context] = []
-    for i, (ds, m, c) in enumerate(cells, 1):
+    for i, (ds, m, c) in enumerate(runs, 1):
         logger.info("─" * 60)
         logger.info("sweep [%d/%d]: %s × %s × %s",
-                    i, len(cells), ds.NAME, _model_name(m), c.NAME)
+                    i, len(runs), ds.NAME, _model_name(m), c.NAME)
         try:
             contexts.append(run_one(ds, m, c, seed=seed))
         except Exception:

@@ -1,11 +1,14 @@
-"""Entry point. Imports + registers what's in the sweep, runs it.
+"""Entry point. Declares the runs to execute, then runs them.
 
     python -m pipeline.train
 
-The three lists below are the single answer to "what runs?". Adding a
-model / dataset / config to the sweep is one new file in the right
-folder + one line in the corresponding list here. Staging a WIP file
-without including it: drop the file, don't add the line.
+The RUNS list below is the single answer to "what runs?". Each entry is
+one (dataset, model, config) triple. Not every model belongs with every
+dataset / config — declare the specific pairings worth training.
+
+Adding a run = one new file in datasets/ or models/ or configs/ (if
+needed) + one line in RUNS. Removing a run = delete or comment out
+its line.
 """
 
 from __future__ import annotations
@@ -20,27 +23,36 @@ import configs.thorough as thorough_cfg
 import datasets.fer2013 as fer2013
 import datasets.synthetic_imbalanced as synthetic_imbalanced
 import datasets.synthetic_smoke as synthetic_smoke
-
 from models import mlp, resnet18, tiny_cnn
 
 from pipeline.driver import sweep
 
 
-# ---- registration: edit here to change what runs --------------------------
+# ---- what to run ---------------------------------------------------------
+# (dataset, model, config) triples. One line = one training run.
 
-MODELS   = [mlp, tiny_cnn, resnet18]
-DATASETS = [synthetic_smoke, synthetic_imbalanced, fer2013]
-CONFIGS  = [fast_cfg, baseline_cfg, thorough_cfg]
+RUNS = [
+    # Smoke tests — fast, network-free, prove the pipeline wires up.
+    (synthetic_smoke,       mlp,        fast_cfg),
+    (synthetic_smoke,       tiny_cnn,   fast_cfg),
+
+    # Imbalanced data — exercise class_weights: auto without Kaggle.
+    (synthetic_imbalanced,  tiny_cnn,   baseline_cfg),
+
+    # Real training on real data. Comment out if Kaggle creds aren't set up.
+    (fer2013,               tiny_cnn,   baseline_cfg),
+    (fer2013,               resnet18,   thorough_cfg),
+]
 
 # --------------------------------------------------------------------------
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Sweep dataset × model × config.")
+    parser = argparse.ArgumentParser(description="Run the declared RUNS list.")
     parser.add_argument("--verbose", "-v", action="store_true", help="DEBUG-level logs")
     parser.add_argument(
         "--fail-fast", action="store_true",
-        help="stop on first failure (default: log + continue across cells)",
+        help="stop on first failure (default: log + continue across runs)",
     )
     args = parser.parse_args()
 
@@ -49,12 +61,7 @@ def main() -> int:
         format="%(message)s",
     )
 
-    contexts = sweep(
-        datasets=DATASETS,
-        models=MODELS,
-        configs=CONFIGS,
-        fail_fast=args.fail_fast,
-    )
+    contexts = sweep(RUNS, fail_fast=args.fail_fast)
     print(f"\nsweep complete: {len(contexts)} run(s)")
     for c in contexts:
         print(f"  {c.run_dir}")
