@@ -22,11 +22,10 @@ import logging
 import random
 from pathlib import Path
 
-from . import dataset_ingest as ingest
-from .dataset_spec import DatasetSpec
+from . import ingest
 from .framework import keys as K
 from .framework.context import Context
-from .trained_model import TrainedModel
+from .specs import DatasetSpec, TrainedModel
 
 logger = logging.getLogger(__name__)
 
