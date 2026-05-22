@@ -19,6 +19,7 @@ type ChatDebug = {
   provider: string | null;
   model: string | null;
   current_message: string;
+  intention?: string | null;
   system_prompt: string | null;
   history_window: number;
   history_messages: Array<{ role: string; content: string }>;
@@ -26,6 +27,17 @@ type ChatDebug = {
   transcript_lines: string[];
   prompt_messages: Array<{ role: string; content: string }>;
 };
+
+type ChatView = {
+  surface: "chat" | "checkin" | "done";
+  spec?: unknown;                        // Pydantic CheckInSpec from model service
+  intention?: string | null;
+  state_name?: string | null;
+};
+
+// Default view used when the model service is unreachable — keep the
+// frontend on the chat surface so the user can still see the fallback reply.
+const FALLBACK_VIEW: ChatView = { surface: "chat" };
 
 /**
  * POST /api/v1/chat
@@ -53,18 +65,28 @@ router.post("/", async (req, res, next) => {
 
     let response = buildFallbackResponse(text);
     let debug: ChatDebug | null = null;
+    let view: ChatView = FALLBACK_VIEW;
 
     try {
       const harnessRes = await fetch(`${env.MODEL_SERVICE_URL}/api/v1/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile_id: profileId, message: text, history: harnessHistory }),
+        body: JSON.stringify({
+          profile_id: profileId,
+          message: text,
+          history: harnessHistory,
+        }),
       });
 
       if (harnessRes.ok) {
-        const data = (await harnessRes.json()) as { response?: string; debug?: ChatDebug };
+        const data = (await harnessRes.json()) as {
+          response?: string;
+          view?: ChatView;
+          debug?: ChatDebug;
+        };
         if (data.response) response = data.response;
         if (data.debug) debug = data.debug;
+        if (data.view) view = data.view;
       }
     } catch {
       // Keep the backend usable locally even when the model service is down.
@@ -76,7 +98,7 @@ router.post("/", async (req, res, next) => {
     appendMessage(profileId, userMsg);
     appendMessage(profileId, agentMsg);
 
-    res.json({ response, debug });
+    res.json({ response, view, debug });
   } catch (err) {
     next(err);
   }
