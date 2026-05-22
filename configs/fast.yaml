@@ -1,0 +1,19 @@
+# Fast — 1 epoch, no augmentation, small batch. The sweep smoke-test
+# config: when you change something in the pipeline and want to know
+# "does the whole loop still run end-to-end for every model/dataset"
+# without burning hours on real training.
+epochs:       1
+batch_size:   32
+num_workers:  2
+
+augment:
+  name: none
+
+loss:
+  name: ce
+
+optimizer:
+  name: adamw
+  args:
+    lr:            1.0e-3
+    weight_decay:  0.0

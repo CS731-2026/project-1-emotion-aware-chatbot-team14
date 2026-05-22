@@ -1,0 +1,25 @@
+# Thorough — more epochs, strong augmentation, label smoothing,
+# weight decay. The "actually train a useful model" config; expect
+# minutes to tens of minutes per run depending on model size.
+epochs:       30
+batch_size:   64
+num_workers:  4
+
+augment:
+  name: strong
+  args:
+    rotation:    10
+    brightness:  0.20
+    contrast:    0.20
+    saturation:  0.12
+
+loss:
+  name: ce_label_smooth
+  args:
+    label_smoothing: 0.1
+
+optimizer:
+  name: adamw
+  args:
+    lr:            5.0e-4
+    weight_decay:  1.0e-4
