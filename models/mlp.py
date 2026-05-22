@@ -11,6 +11,17 @@ from __future__ import annotations
 import torch.nn as nn
 import torchvision.transforms as T
 
+from pipeline.framework.context import Context
+from pipeline.framework.specs import DatasetSpec, TrainedModel
+from pipeline.training.standard import train_classifier
+
+
+PREPROCESS = T.Compose([
+    T.Resize((32, 32)),
+    T.ToTensor(),
+    T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+])
+
 
 def build(num_classes: int) -> nn.Module:
     return nn.Sequential(
@@ -27,8 +38,7 @@ def build(num_classes: int) -> nn.Module:
     )
 
 
-PREPROCESS = T.Compose([
-    T.Resize((32, 32)),
-    T.ToTensor(),
-    T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-])
+def train(ctx: Context, dataset: DatasetSpec) -> TrainedModel:
+    return train_classifier(ctx, dataset,
+                            model=build(dataset.num_classes),
+                            preprocess=PREPROCESS)

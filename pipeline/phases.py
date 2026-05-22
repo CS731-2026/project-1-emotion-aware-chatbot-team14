@@ -73,117 +73,20 @@ def prepare_dataset(ctx: Context) -> None:
 
 
 def train(ctx: Context) -> None:
-    """Build the model on the prepared dataset, train + evaluate, save
-    checkpoint, hand a TrainedModel back through the store.
+    """Delegate to the registered model module's train() function.
 
-    Per-epoch val + final test eval are inline here for now — a future
-    dedicated evaluate phase can split out cleanly using the saved
-    checkpoint and the history this phase writes.
+    The model module owns its training loop — vanilla classifiers
+    typically call pipeline.training.standard.train_classifier; custom
+    architectures (multi-stage, paper-specific losses, GANs, etc.)
+    write their own loop directly here. The phase is just glue:
+    invoke train(), assert the return type, put the TrainedModel
+    in the store.
     """
-    import torch
-    import torchvision.transforms as T
-
-    from .training.augmentations import get_augment
-    from .training.data import make_loader
-    from .training.losses import get_loss
-    from .training.loop import auto_device, evaluate as run_eval, train_one_epoch
-    from .training.optimizers import get_optimizer
-
     ds = ctx.store.get(K.DATASET, DatasetSpec)
-    model_module = ctx.model_module
-
-    tcfg = ctx.config.train_cfg
-    epochs      = int(tcfg.get("epochs", 5))
-    batch_size  = int(tcfg.get("batch_size", 32))
-    num_workers = int(tcfg.get("num_workers", 0))
-
-    device = auto_device()
-    logger.info("train: device=%s epochs=%d batch=%d", device, epochs, batch_size)
-
-    # Transforms: augmentation only in front of train; bare PREPROCESS for val/test
-    aug_cfg = tcfg.get("augment", {"name": "none"})
-    train_tf = T.Compose(
-        list(get_augment(aug_cfg.get("name", "none"), aug_cfg.get("args")).transforms)
-        + list(model_module.PREPROCESS.transforms)
-    )
-    eval_tf = model_module.PREPROCESS
-
-    train_loader = make_loader(ds.splits["train"], train_tf,
-                               batch_size=batch_size, shuffle=True, num_workers=num_workers)
-    val_loader   = make_loader(ds.splits["val"],   eval_tf,
-                               batch_size=batch_size, shuffle=False, num_workers=num_workers)
-    test_loader  = make_loader(ds.splits["test"],  eval_tf,
-                               batch_size=batch_size, shuffle=False, num_workers=num_workers)
-
-    model = model_module.build(ds.num_classes).to(device)
-
-    loss_cfg = tcfg.get("loss", {"name": "ce"})
-    loss_fn  = get_loss(loss_cfg.get("name", "ce"),
-                        class_weights=ds.class_weights,
-                        args=loss_cfg.get("args"))
-    # Weighted CE keeps the class-weight tensor as a buffer that must
-    # live on the same device as the logits.
-    loss_fn = loss_fn.to(device)
-
-    opt_cfg = tcfg.get("optimizer", {"name": "adamw", "args": {"lr": 1e-3}})
-    optimizer = get_optimizer(opt_cfg.get("name", "adamw"),
-                              model.parameters(),
-                              args=opt_cfg.get("args"))
-
-    history: list[dict] = []
-    best_val_acc = -1.0
-    best_epoch = -1
-
-    for epoch in range(epochs):
-        train_metrics = train_one_epoch(
-            model, train_loader, loss_fn, optimizer, device, epoch, ctx,
+    trained = ctx.model_module.train(ctx, ds)
+    if not isinstance(trained, TrainedModel):
+        raise TypeError(
+            f"{ctx.model_module.__name__}.train(ctx, dataset) returned "
+            f"{type(trained).__name__}, expected TrainedModel"
         )
-        val_metrics = run_eval(model, val_loader, loss_fn, device)
-
-        ctx.save_scalar("train/epoch_loss", train_metrics["loss"], step=epoch)
-        ctx.save_scalar("val/loss",         val_metrics["loss"],   step=epoch)
-        ctx.save_scalar("val/acc",          val_metrics["acc"],    step=epoch)
-
-        history.append({
-            "epoch": epoch,
-            **{f"train_{k}": v for k, v in train_metrics.items()},
-            **{f"val_{k}":   v for k, v in val_metrics.items()},
-        })
-        logger.info("epoch %d/%d: train_loss=%.4f val_loss=%.4f val_acc=%.4f",
-                    epoch + 1, epochs,
-                    train_metrics["loss"], val_metrics["loss"], val_metrics["acc"])
-
-        if val_metrics["acc"] > best_val_acc:
-            best_val_acc = val_metrics["acc"]
-            best_epoch = epoch
-            ctx.save_checkpoint("best", model.state_dict())
-
-    last_ckpt = ctx.save_checkpoint("last", model.state_dict())
-    best_ckpt = ctx.run_dir / "checkpoints" / "best.pth"
-    if not best_ckpt.exists():
-        best_ckpt = last_ckpt
-
-    # Final test eval on the best checkpoint.
-    model.load_state_dict(torch.load(best_ckpt, map_location=device))
-    test_metrics = run_eval(model, test_loader, loss_fn, device)
-    ctx.save_scalar("test/loss", test_metrics["loss"])
-    ctx.save_scalar("test/acc",  test_metrics["acc"])
-    ctx.save_json("history", history)
-    ctx.save_json("final", {
-        "best_epoch":  best_epoch,
-        "best_val":    {"acc": best_val_acc},
-        "final_val":   history[-1] if history else {},
-        "test":        test_metrics,
-    })
-
-    trained = TrainedModel(
-        model_name=ctx.config.model,
-        num_classes=ds.num_classes,
-        checkpoint_path=best_ckpt,
-        history=history,
-        final_val=history[-1] if history else {},
-        final_test=test_metrics,
-    )
     ctx.store.put(K.TRAINED_MODEL, trained)
-    logger.info("train: complete. best_val_acc=%.4f@epoch%d test_acc=%.4f",
-                best_val_acc, best_epoch, test_metrics["acc"])
