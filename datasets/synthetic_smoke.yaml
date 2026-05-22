@@ -1,0 +1,29 @@
+# Synthetic smoke dataset — small, balanced, network-free. Used to
+# prove the pipeline wires up end-to-end in seconds. Class labels are
+# the EmpathBot 6-class schema so a model trained on this swaps
+# cleanly with one trained on fer2013 (same num_classes / class_names).
+name: synthetic_smoke
+
+source:
+  type:                     synthetic
+  seed:                     42
+  image_size:               32           # tiny — keeps CPU runs fast
+  train_samples_per_class:  60
+  test_samples_per_class:   20
+
+class_names: [neutral, trust_relief, sadness, fear_anxiety, confusion, distrust]
+
+# No remap needed — synthetic generator writes one subdir per class_name.
+label_remap:
+  neutral:      neutral
+  trust_relief: trust_relief
+  sadness:      sadness
+  fear_anxiety: fear_anxiety
+  confusion:    confusion
+  distrust:     distrust
+
+splits:
+  val_fraction: 0.10
+  seed:         42
+
+class_weights: auto
