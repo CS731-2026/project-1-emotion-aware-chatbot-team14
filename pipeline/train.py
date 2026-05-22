@@ -23,23 +23,47 @@ import configs.thorough as thorough_cfg
 
 from pipeline.datasets import fer2013, synthetic_imbalanced, synthetic_smoke
 from pipeline.driver import sweep
-from pipeline.models import mlp, resnet18, tiny_cnn
+from pipeline.models import (
+    ada_df,
+    empathbot_final,
+    empathbot_v1,
+    mlp,
+    resnet18,
+    tiny_cnn,
+    # posterplus,  # stub — needs POSTER_V2 vendored via git-weave first
+)
 
 
 # ---- what to run ---------------------------------------------------------
 # (dataset, model, config) triples. One line = one training run.
 
 RUNS = [
-    # Smoke tests — fast, network-free, prove the pipeline wires up.
-    (synthetic_smoke,       mlp,        fast_cfg),
-    (synthetic_smoke,       tiny_cnn,   fast_cfg),
+    # ─── Smoke tests ─────────────────────────────────────────────────────
+    # Fast, network-free (synthetic data), prove the pipeline + each
+    # architecture wires up end-to-end. Heavy models (EfficientNet-B2 +
+    # pretrained weights) still run in seconds at fast config (1 epoch).
+    (synthetic_smoke,       mlp,              fast_cfg),
+    (synthetic_smoke,       tiny_cnn,         fast_cfg),
+    (synthetic_smoke,       resnet18,         fast_cfg),
+    (synthetic_smoke,       ada_df,           fast_cfg),
+    (synthetic_smoke,       empathbot_v1,     fast_cfg),
+    (synthetic_smoke,       empathbot_final,  fast_cfg),
 
-    # Imbalanced data — exercise class_weights: auto without Kaggle.
-    (synthetic_imbalanced,  tiny_cnn,   baseline_cfg),
+    # ─── Class-imbalance exercise ────────────────────────────────────────
+    # Validates class_weights: auto without needing Kaggle.
+    (synthetic_imbalanced,  tiny_cnn,         baseline_cfg),
 
-    # Real training on real data. Comment out if Kaggle creds aren't set up.
-    (fer2013,               tiny_cnn,   baseline_cfg),
-    (fer2013,               resnet18,   thorough_cfg),
+    # ─── Real training on real data (requires Kaggle creds) ──────────────
+    # Comment out individual lines (or the whole block) if Kaggle isn't
+    # set up locally — the smoke + imbalance runs above still cover the
+    # pipeline plumbing.
+    (fer2013,               tiny_cnn,         baseline_cfg),
+    (fer2013,               resnet18,         thorough_cfg),
+    (fer2013,               ada_df,           thorough_cfg),
+    (fer2013,               empathbot_v1,     thorough_cfg),
+    (fer2013,               empathbot_final,  thorough_cfg),
+
+    # posterplus skipped until POSTER_V2 is vendored via git-weave.
 ]
 
 # --------------------------------------------------------------------------
