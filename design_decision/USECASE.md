@@ -1,4 +1,4 @@
-# EmpathyCheck — Project Context
+# EmpathyBot — Project Context
 
 > Upload this file at the start of any Claude conversation to provide full project context.
 > Then ask for code, a presentation, a report, UI designs, or any other deliverable.
@@ -6,7 +6,7 @@
 ---
 
 ## Product name
-**EmpathyCheck** — AI-powered patient feedback for GP practices
+**EmpathyBot** — AI-powered patient feedback for GP practices
 
 ## One-line pitch
 A post-appointment feedback tool that detects emotional mismatches between what patients say and how they feel, then uses an LLM to reassure, explain, and invite genuine concern — especially around AI use in healthcare.

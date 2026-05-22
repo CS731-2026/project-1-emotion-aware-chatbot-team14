@@ -37,6 +37,8 @@
   import { BrowserVadController } from "$lib/harness/browserVad";
   import {
     EMOTION_COLOURS,
+    EMOTION_EMOJI,
+    EMOTION_LABEL,
     FRAME_INTERVAL_MS,
     SPEECH_THRESHOLD,
     formatTimings,
@@ -83,6 +85,10 @@
   let websocketEvents = $state<string[]>([]);
   let transcriptEntries = $state<TranscriptEntry[]>([]);
   let latestConfidence = $state<number | null>(null);
+  let sessionDominant = $state<Emotion | null>(null);
+  let welcomeAccepted = $state(false);
+  let mismatchDetected = $state(false);
+  let emotionCounts = $state<Record<string, number>>({});
   type RejectedTranscript = {
     id: string;
     timestamp: string;
@@ -502,6 +508,9 @@
           `${msg.byte_length} base64 chars`;
       } else if (msg.type === "emotion_update") {
         if (isEmotion(msg.emotion)) emotion = msg.emotion;
+        if (isEmotion(msg.session_dominant)) sessionDominant = msg.session_dominant;
+        emotionCounts = { ...emotionCounts, [msg.emotion]: (emotionCounts[msg.emotion] ?? 0) + 1 };
+        if (typeof msg.mismatch_detected === "boolean") mismatchDetected = msg.mismatch_detected;
       } else if (msg.type === "face_detection") {
         faceDetected = Boolean(msg.detected);
         lastDetection = msg.detected
@@ -786,6 +795,14 @@
   <header class="topbar">
     <div class="title-block">
       <p class="eyebrow">Emotion-aware empathy bot</p>
+      <div class="topbar-actions">
+        {#if DEBUG_ENV_ENABLED}
+          <button class="topbar-action-btn" type="button" onclick={toggleDebugDashboard}>
+            {showDebugDashboard ? "Hide debug" : "Debug"}
+          </button>
+        {/if}
+        <a class="topbar-action-btn" href="/dashboard">GP Dashboard</a>
+      </div>
       <h1>{profile?.name ?? "Empathy Bot"}</h1>
       <p class="status-line">{statusText}</p>
     </div>
@@ -813,7 +830,7 @@
       <section class="hero-shell">
         <div class="hero-copy">
           <p class="hero-kicker">{phaseLabel(assistantPhase)}</p>
-          <h2>A calmer, voice-first conversation.</h2>
+          <h2>{profile ? `Welcome, thank you for seeing us today, ${profile.name}.` : `Welcome to EmpathyBot.`}</h2>
           <p class="helper-text">{bootMessage}</p>
           <div
             class="recording-subtitle"
@@ -845,7 +862,17 @@
           </div>
         </div>
 
-        <SpeakingCircle phase={assistantPhase} pulse={speechPulse} compact={isOverlayActive} />
+        <SpeakingCircle phase={assistantPhase} pulse={speechPulse} compact={isOverlayActive} mismatch={mismatchDetected} />
+
+        {#if sessionDominant}
+          <div class="emotion-dominant-shell">
+            <p class="transcript-label">Detected emotion</p>
+            <p class="emotion-dominant-text">
+              <span class="emotion-emoji" aria-hidden="true">{EMOTION_EMOJI[sessionDominant]}</span>
+              <strong>{EMOTION_LABEL[sessionDominant]}</strong>
+            </p>
+          </div>
+        {/if}
 
         <div class="transcript-shell">
           <p class="transcript-label">
@@ -887,6 +914,33 @@
           </p>
         </div>
       </section>
+    {:else if backendView.surface === "checkin" && !welcomeAccepted}
+      <section class="welcome-screen">
+        <div class="welcome-icon-wrap"><span class="welcome-icon">🏥</span></div>
+        <p class="welcome-practice">RIVERSIDE MEDICAL PRACTICE</p>
+        <h2 class="welcome-heading">Welcome back, and thank you for seeing your GP today</h2>
+        <p class="welcome-sub">Before you go, your GP would love to hear how your appointment went — especially how you felt about the technology used today.</p>
+        <div class="welcome-features">
+          <div class="welcome-feature">
+            <span class="wf-icon">🕐</span>
+            <div><p class="wf-title">Takes about 3 minutes</p><p class="wf-body">Just a few simple questions — no right or wrong answers.</p></div>
+          </div>
+          <div class="welcome-feature">
+            <span class="wf-icon">🛡️</span>
+            <div><p class="wf-title">Completely anonymous</p><p class="wf-body">Your name is never attached to your answers unless you choose.</p></div>
+          </div>
+          <div class="welcome-feature">
+            <span class="wf-icon">🤖</span>
+            <div><p class="wf-title">Questions about AI? Ask away</p><p class="wf-body">At the end, you can ask anything about how technology was used today.</p></div>
+          </div>
+        </div>
+        <div class="welcome-consent">
+          <span style="font-size:1rem">ℹ️</span>
+          <p>By continuing, you agree your anonymous feedback helps improve care at this practice. You can stop at any time.</p>
+        </div>
+        <button class="welcome-cta" onclick={() => (welcomeAccepted = true)}>I'm ready to share feedback →</button>
+        <button class="welcome-skip" onclick={() => sendSystemEvent("form_complete", {})}>No thanks, skip feedback</button>
+      </section>
     {:else if backendView.surface === "checkin" && backendView.spec}
       <section class="checkin-mount">
         <QuestionnairePage
@@ -927,12 +981,6 @@
   {/if}
   {/if}
 
-  {#if DEBUG_ENV_ENABLED}
-    <button class="debug-toggle" type="button" onclick={toggleDebugDashboard}>
-      {showDebugDashboard ? "Hide debug" : "Show debug"}
-    </button>
-  {/if}
-
   {#if showDebugDashboard}
     <DebugDashboard
       {profile}
@@ -942,6 +990,7 @@
       {latestFaceCrop}
       {latestFrameSummary}
       {emotion}
+      {emotionCounts}
       {rejectedTranscripts}
       reasoningDebug={latestReasoningDebug}
     />
@@ -1197,6 +1246,36 @@
     animation: level-bounce 0.85s ease-in-out 0.24s infinite;
   }
 
+  .emotion-dominant-shell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.75rem 1.4rem;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+  }
+
+  .emotion-dominant-text {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    color: rgba(255, 255, 255, 0.97);
+  }
+
+  .emotion-emoji {
+    font-size: 1.6rem;
+    line-height: 1;
+  }
+
+  .emotion-dominant-text strong {
+    font-size: 1.25rem;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+  }
+
   .transcript-shell,
   .response-shell {
     width: min(700px, 100%);
@@ -1290,24 +1369,28 @@
     }
   }
 
-  .debug-toggle {
-    position: fixed;
-    top: 1rem;
-    left: 1rem;
-    z-index: 60;
-    background: rgba(15, 18, 28, 0.78);
-    border: 1px solid rgba(255, 255, 255, 0.14);
+  .topbar-actions {
+    display: flex;
+    gap: 0.4rem;
+    margin: 0.3rem 0 0.2rem;
+  }
+
+  .topbar-action-btn {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.09);
+    border: 1px solid rgba(255, 255, 255, 0.16);
     color: rgba(255, 255, 255, 0.82);
     border-radius: 999px;
-    padding: 0.4rem 0.85rem;
-    font-size: 0.78rem;
+    padding: 0.3rem 0.75rem;
+    font-size: 0.75rem;
     cursor: pointer;
-    backdrop-filter: blur(20px);
+    text-decoration: none;
     transition: background 120ms ease, border-color 120ms ease;
   }
-  .debug-toggle:hover {
-    background: rgba(15, 18, 28, 0.92);
-    border-color: rgba(255, 255, 255, 0.28);
+  .topbar-action-btn:hover {
+    background: rgba(255, 255, 255, 0.16);
+    border-color: rgba(255, 255, 255, 0.3);
   }
 
   /* Check-in overlay (elevation 1): floats over the hero, which recedes. */
@@ -1397,4 +1480,55 @@
       padding: 0.9rem 1rem;
     }
   }
+
+  /* ── Emotion stats strip ─────────────────────────────────────────── */
+  .emotion-stats-strip {
+    width: min(700px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.9rem 1.1rem;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .emotion-bars { display: flex; flex-direction: column; gap: 0.45rem; }
+  .emotion-bar-row { display: flex; align-items: center; gap: 0.6rem; }
+  .emotion-bar-label { font-size: 0.78rem; color: rgba(255,255,255,0.75); width: 9rem; flex-shrink: 0; }
+  .emotion-bar-track { flex: 1; height: 6px; background: rgba(255,255,255,0.1); border-radius: 999px; overflow: hidden; }
+  .emotion-bar-fill { height: 100%; background: rgba(255,255,255,0.55); border-radius: 999px; transition: width 400ms ease; }
+  .emotion-bar-pct { font-size: 0.72rem; color: rgba(255,255,255,0.45); width: 2.5rem; text-align: right; flex-shrink: 0; }
+
+  /* ── Welcome screen ──────────────────────────────────────────────── */
+  .welcome-screen {
+    width: min(520px, 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 2rem 1.5rem 1.5rem;
+    text-align: center;
+    border-radius: 28px;
+    background: rgba(255,255,255,0.97);
+    color: #1a1a2e;
+    box-shadow: 0 8px 48px rgba(0,0,0,0.22);
+    overflow-y: auto;
+    max-height: calc(100vh - 10rem);
+  }
+  .welcome-icon-wrap { width: 64px; height: 64px; background: #EEEDFE; border-radius: 18px; display: flex; align-items: center; justify-content: center; }
+  .welcome-icon { font-size: 2rem; }
+  .welcome-practice { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: #534AB7; margin: 0; }
+  .welcome-heading { font-size: clamp(1.2rem, 4vw, 1.6rem); font-weight: 800; line-height: 1.2; color: #111; margin: 0; }
+  .welcome-sub { font-size: 0.92rem; color: #444; line-height: 1.55; margin: 0; max-width: 34rem; }
+  .welcome-features { display: flex; flex-direction: column; gap: 0.6rem; width: 100%; text-align: left; }
+  .welcome-feature { display: flex; align-items: flex-start; gap: 0.85rem; padding: 0.8rem 1rem; border-radius: 14px; background: #f5f5f7; }
+  .wf-icon { font-size: 1.3rem; flex-shrink: 0; margin-top: 0.1rem; }
+  .wf-title { font-size: 0.88rem; font-weight: 700; color: #111; margin: 0 0 0.2rem; }
+  .wf-body { font-size: 0.8rem; color: #555; margin: 0; line-height: 1.4; }
+  .welcome-consent { display: flex; align-items: flex-start; gap: 0.6rem; background: #EEEDFE; border-radius: 12px; padding: 0.75rem 1rem; text-align: left; width: 100%; box-sizing: border-box; }
+  .welcome-consent p { font-size: 0.8rem; color: #3C3489; margin: 0; line-height: 1.5; }
+  .welcome-cta { width: 100%; padding: 1rem; border-radius: 14px; background: #1a1a2e; color: #fff; font-size: 1rem; font-weight: 700; border: none; cursor: pointer; transition: background 140ms ease; }
+  .welcome-cta:hover { background: #2d2d50; }
+  .welcome-skip { background: none; border: none; color: #888; font-size: 0.88rem; cursor: pointer; padding: 0.25rem; }
+  .welcome-skip:hover { color: #444; }
 </style>
