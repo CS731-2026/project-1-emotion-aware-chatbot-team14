@@ -1,4 +1,12 @@
-/models
+# Trained-weight binaries + HF cache live under models/. Source code
+# there (architecture definitions for the training pipeline) is tracked.
+/models/**/*.pth
+/models/**/*.pt
+/models/**/*.bin
+/models/**/*.safetensors
+/models/**/*.ipynb
+/models/.locks/
+/models/models--*/
 .env
 node_modules
 sandbox/student_taurajgreig/vendor/
