@@ -29,7 +29,8 @@ PhaseFn = Callable[[Context], None]
 PHASES: dict[str, PhaseFn] = {
     "setup":           phases.setup,
     "prepare_dataset": phases.prepare_dataset,
-    # train, evaluate land in subsequent commits
+    "train":           phases.train,
+    # evaluate lands in a later commit; for now train does inline val/test eval
 }
 
 
