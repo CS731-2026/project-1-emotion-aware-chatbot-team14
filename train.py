@@ -18,7 +18,7 @@ import argparse
 import logging
 import sys
 
-from pipeline.framework import run_experiment_file
+from pipeline.driver import run_experiment_file
 
 
 def main() -> int:

@@ -25,7 +25,7 @@ from pathlib import Path
 from . import ingest
 from .framework import keys as K
 from .framework.context import Context
-from .specs import DatasetSpec, TrainedModel
+from .framework.specs import DatasetSpec, TrainedModel
 
 logger = logging.getLogger(__name__)
 

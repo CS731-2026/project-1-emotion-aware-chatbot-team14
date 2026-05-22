@@ -17,9 +17,8 @@ import logging
 from pathlib import Path
 from typing import Callable
 
-from .. import phases
-from .config import Config, load_experiment
-from .context import Context
+from . import phases
+from .framework import Config, Context, load_experiment
 
 logger = logging.getLogger(__name__)
 
