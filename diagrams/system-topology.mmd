@@ -1,0 +1,59 @@
+flowchart LR
+    subgraph BROWSER["Browser"]
+        UI["+page.svelte<br/><i>chat UI</i>"]
+        CAM["webcam capture<br/><i>+page.svelte</i>"]
+        MIC["browserVad.ts<br/><i>mic + VAD</i>"]
+    end
+
+    subgraph FE["Frontend &mdash; SvelteKit :5173"]
+        APIts["api.ts<br/><i>fetch wrappers</i>"]
+        SSR["+page.server.ts<br/><i>SSR load</i>"]
+    end
+
+    subgraph BE["Backend &mdash; Express :3001"]
+        BCHAT["chat.router.ts"]
+        BPROF["profiles / history /<br/>session routers"]
+        STORE[("profileStore<br/>data/profiles/")]
+    end
+
+    subgraph MS["Model Service &mdash; FastAPI :8000"]
+        WSH["ws/handler.py<br/><i>dispatcher</i>"]
+        VID["ws/video.py"]
+        AUD["ws/audio.py"]
+        FACE["core/face_detector.py<br/><i>YOLOv8</i>"]
+        EMO["core/emotion/*<br/><i>EmpathBotV1</i>"]
+        STT["core/stt/*<br/><i>whisper</i>"]
+        EBUF[("EmotionBuffer<br/>window=10")]
+        TBUF[("transcript_buffer<br/>last 20")]
+        MCHAT["routers/chat.py"]
+        ER["EmotionalReasoningAgent"]
+        LR["LLMReasoningAgent"]
+    end
+
+    LLM["LLM API<br/><i>OpenAI / Gemini / Ollama</i>"]
+
+    UI ==>|"POST /chat"| APIts
+    APIts ==> BCHAT
+    BCHAT ==> MCHAT
+    BCHAT <-->|history I/O| STORE
+    SSR -.->|"GET /session, /profiles, /history"| BPROF
+    BPROF <--> STORE
+
+    CAM -.->|"WS video_frame<br/>every 200 ms"| WSH
+    WSH --> VID --> FACE --> EMO --> EBUF
+
+    MIC -.->|"WS audio_chunk<br/>on speech"| WSH
+    WSH --> AUD --> STT --> TBUF
+
+    MCHAT --> ER
+    EBUF --> ER
+    TBUF --> ER
+    ER --> LR
+    LR --> LLM
+
+    classDef buffer fill:#fff4d6,stroke:#a67c00,color:#5a4500
+    classDef ml fill:#dde7ff,stroke:#3050a0,color:#142060
+    classDef external fill:#ffe1e1,stroke:#a04040,color:#5a1010
+    class EBUF,TBUF,STORE buffer
+    class FACE,EMO,STT,ER,LR ml
+    class LLM external
