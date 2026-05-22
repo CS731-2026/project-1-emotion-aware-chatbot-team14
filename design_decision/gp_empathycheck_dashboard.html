@@ -1,0 +1,255 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-sans); }
+.db { padding: 0; }
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 0.5px solid var(--color-border-tertiary); background: var(--color-background-primary); }
+.topbar-left { display: flex; align-items: center; gap: 10px; }
+.logo-dot { width: 8px; height: 8px; border-radius: 50%; background: #534AB7; }
+.logo-text { font-size: 15px; font-weight: 500; color: var(--color-text-primary); }
+.practice-pill { font-size: 12px; color: #3C3489; background: #EEEDFE; padding: 3px 10px; border-radius: 999px; }
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+.avatar { width: 32px; height: 32px; border-radius: 50%; background: #EEEDFE; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 500; color: #3C3489; }
+.nav { display: flex; gap: 2px; padding: 12px 20px 0; border-bottom: 0.5px solid var(--color-border-tertiary); background: var(--color-background-primary); }
+.nav-item { font-size: 13px; padding: 6px 14px 10px; color: var(--color-text-secondary); cursor: default; border-bottom: 2px solid transparent; }
+.nav-item.active { color: #534AB7; border-bottom: 2px solid #534AB7; font-weight: 500; }
+.main { padding: 20px; background: var(--color-background-tertiary); }
+.metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+.metric { background: var(--color-background-primary); border-radius: var(--border-radius-md); padding: 14px 16px; border: 0.5px solid var(--color-border-tertiary); }
+.metric-label { font-size: 11px; color: var(--color-text-tertiary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+.metric-val { font-size: 24px; font-weight: 500; color: var(--color-text-primary); }
+.metric-sub { font-size: 11px; margin-top: 4px; }
+.up { color: #0F6E56; }
+.down { color: #993C1D; }
+.row2 { display: grid; grid-template-columns: minmax(0,1.6fr) minmax(0,1fr); gap: 14px; margin-bottom: 14px; }
+.row3 { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 14px; margin-bottom: 14px; }
+.card { background: var(--color-background-primary); border-radius: var(--border-radius-lg); border: 0.5px solid var(--color-border-tertiary); padding: 16px; }
+.card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.card-title { font-size: 14px; font-weight: 500; color: var(--color-text-primary); }
+.card-action { font-size: 12px; color: #534AB7; cursor: default; }
+.bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.bar-label { font-size: 12px; color: var(--color-text-secondary); width: 110px; flex-shrink: 0; }
+.bar-track { flex: 1; height: 8px; background: var(--color-background-secondary); border-radius: 999px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 999px; }
+.bar-pct { font-size: 12px; color: var(--color-text-primary); width: 32px; text-align: right; font-weight: 500; }
+.mismatch-list { display: flex; flex-direction: column; gap: 8px; }
+.mismatch-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px; background: var(--color-background-secondary); border-radius: var(--border-radius-md); }
+.mismatch-icon { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.mismatch-icon.warn { background: #FAEEDA; }
+.mismatch-icon.warn i { color: #BA7517; font-size: 14px; }
+.mismatch-icon.ok { background: #E1F5EE; }
+.mismatch-icon.ok i { color: #0F6E56; font-size: 14px; }
+.mismatch-text { flex: 1; }
+.mismatch-q { font-size: 12px; color: var(--color-text-primary); font-weight: 500; }
+.mismatch-detail { font-size: 11px; color: var(--color-text-secondary); margin-top: 2px; }
+.mismatch-time { font-size: 11px; color: var(--color-text-tertiary); flex-shrink: 0; margin-top: 2px; }
+.link-card { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: var(--color-background-secondary); border-radius: var(--border-radius-md); margin-bottom: 8px; }
+.link-url { font-size: 12px; color: var(--color-text-secondary); font-family: var(--font-mono); }
+.link-actions { display: flex; gap: 6px; }
+.link-btn { font-size: 11px; padding: 3px 8px; border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md); background: var(--color-background-primary); color: var(--color-text-secondary); cursor: default; display: flex; align-items: center; gap: 4px; }
+.generate-btn { display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 8px 14px; background: #534AB7; color: #EEEDFE; border: none; border-radius: var(--border-radius-md); cursor: default; font-weight: 500; }
+.question-item { padding: 8px 0; border-bottom: 0.5px solid var(--color-border-tertiary); }
+.question-item:last-child { border-bottom: none; }
+.q-text-small { font-size: 12px; color: var(--color-text-secondary); margin-bottom: 4px; }
+.q-answer { font-size: 13px; color: var(--color-text-primary); }
+.tag-sm { display: inline-flex; font-size: 10px; padding: 2px 6px; border-radius: 999px; margin-left: 6px; }
+.tag-amber { background: #FAEEDA; color: #633806; }
+.tag-teal { background: #E1F5EE; color: #0F6E56; }
+.tag-purple { background: #EEEDFE; color: #3C3489; }
+.donut-wrap { display: flex; align-items: center; gap: 16px; }
+.legend { display: flex; flex-direction: column; gap: 6px; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--color-text-secondary); }
+.legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.trend-bars { display: flex; align-items: flex-end; gap: 6px; height: 80px; }
+.trend-bar-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; }
+.trend-bar { width: 100%; border-radius: 3px 3px 0 0; }
+.trend-label { font-size: 10px; color: var(--color-text-tertiary); }
+.section-divider { font-size: 11px; font-weight: 500; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; }
+</style>
+
+<div class="db">
+  <h2 class="sr-only">EmpathyCheck GP dashboard showing feedback metrics, emotion mismatch alerts, link management, and patient question trends</h2>
+
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="logo-dot"></div>
+      <span class="logo-text">EmpathyCheck</span>
+      <span class="practice-pill">Riverside Medical Practice</span>
+    </div>
+    <div class="topbar-right">
+      <button style="font-size:13px; padding: 6px 14px; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-secondary); background: var(--color-background-primary); color: var(--color-text-primary); cursor: default; display:flex; align-items:center; gap:6px;">
+        <i class="ti ti-calendar" style="font-size:14px;" aria-hidden="true"></i> May 2026
+      </button>
+      <div class="avatar">DK</div>
+    </div>
+  </div>
+
+  <div class="nav">
+    <div class="nav-item active">Overview</div>
+    <div class="nav-item">Responses</div>
+    <div class="nav-item">Mismatch alerts</div>
+    <div class="nav-item">Feedback links</div>
+    <div class="nav-item">Settings</div>
+  </div>
+
+  <div class="main">
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-label">Responses this month</div>
+        <div class="metric-val">148</div>
+        <div class="metric-sub up"><i class="ti ti-trending-up" style="font-size:11px;" aria-hidden="true"></i> +12 vs last month</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Emotion mismatches</div>
+        <div class="metric-val">31</div>
+        <div class="metric-sub" style="color:#BA7517;">21% of responses</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Questions asked</div>
+        <div class="metric-val">87</div>
+        <div class="metric-sub up"><i class="ti ti-trending-up" style="font-size:11px;" aria-hidden="true"></i> 59% ask rate</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Avg comfort score</div>
+        <div class="metric-val">7.4<span style="font-size:14px; color: var(--color-text-tertiary);">/10</span></div>
+        <div class="metric-sub up"><i class="ti ti-trending-up" style="font-size:11px;" aria-hidden="true"></i> +0.6 this month</div>
+      </div>
+    </div>
+
+    <div class="row2">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title"><i class="ti ti-alert-triangle" style="font-size:14px; color:#BA7517; margin-right:4px;" aria-hidden="true"></i>Recent mismatch alerts</span>
+          <span class="card-action">View all</span>
+        </div>
+        <div class="mismatch-list">
+          <div class="mismatch-item">
+            <div class="mismatch-icon warn"><i class="ti ti-mood-sad" aria-hidden="true"></i></div>
+            <div class="mismatch-text">
+              <div class="mismatch-q">AI use during appointment<span class="tag-sm tag-amber">mismatch</span></div>
+              <div class="mismatch-detail">Said "I feel fine" — emotion signal: anxious (score 0.28). LLM explanation triggered.</div>
+            </div>
+            <div class="mismatch-time">2 hrs ago</div>
+          </div>
+          <div class="mismatch-item">
+            <div class="mismatch-icon warn"><i class="ti ti-mood-sad" aria-hidden="true"></i></div>
+            <div class="mismatch-text">
+              <div class="mismatch-q">Data privacy concern<span class="tag-sm tag-amber">mismatch</span></div>
+              <div class="mismatch-detail">Said "Very comfortable" — dwell time 14s, re-selected twice. Score: 0.31.</div>
+            </div>
+            <div class="mismatch-time">5 hrs ago</div>
+          </div>
+          <div class="mismatch-item">
+            <div class="mismatch-icon ok"><i class="ti ti-mood-happy" aria-hidden="true"></i></div>
+            <div class="mismatch-text">
+              <div class="mismatch-q">Doctor listened to me<span class="tag-sm tag-teal">matched</span></div>
+              <div class="mismatch-detail">Said "Yes, completely" — emotion signal confirmed positive (score 0.84).</div>
+            </div>
+            <div class="mismatch-time">Yesterday</div>
+          </div>
+          <div class="mismatch-item">
+            <div class="mismatch-icon warn"><i class="ti ti-mood-sad" aria-hidden="true"></i></div>
+            <div class="mismatch-text">
+              <div class="mismatch-q">AI making decisions for me<span class="tag-sm tag-amber">mismatch</span></div>
+              <div class="mismatch-detail">Said "Mostly fine" — hesitation detected, follow-up question submitted.</div>
+            </div>
+            <div class="mismatch-time">Yesterday</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Comfort with AI — breakdown</span>
+        </div>
+        <div style="margin-bottom: 16px;">
+          <div class="bar-row">
+            <span class="bar-label">Very comfortable</span>
+            <div class="bar-track"><div class="bar-fill" style="width:38%; background:#5DCAA5;"></div></div>
+            <span class="bar-pct">38%</span>
+          </div>
+          <div class="bar-row">
+            <span class="bar-label">Mostly fine</span>
+            <div class="bar-track"><div class="bar-fill" style="width:29%; background:#9FE1CB;"></div></div>
+            <span class="bar-pct">29%</span>
+          </div>
+          <div class="bar-row">
+            <span class="bar-label">A bit unsure</span>
+            <div class="bar-track"><div class="bar-fill" style="width:21%; background:#FAC775;"></div></div>
+            <span class="bar-pct">21%</span>
+          </div>
+          <div class="bar-row">
+            <span class="bar-label">Worried</span>
+            <div class="bar-track"><div class="bar-fill" style="width:12%; background:#F0997B;"></div></div>
+            <span class="bar-pct">12%</span>
+          </div>
+        </div>
+        <div style="border-top: 0.5px solid var(--color-border-tertiary); padding-top: 12px;">
+          <div class="section-divider" style="margin-bottom:8px;">Weekly response trend</div>
+          <div class="trend-bars">
+            <div class="trend-bar-wrap"><div class="trend-bar" style="height:40px; background:#CECBF6;"></div><span class="trend-label">W1</span></div>
+            <div class="trend-bar-wrap"><div class="trend-bar" style="height:52px; background:#AFA9EC;"></div><span class="trend-label">W2</span></div>
+            <div class="trend-bar-wrap"><div class="trend-bar" style="height:48px; background:#AFA9EC;"></div><span class="trend-label">W3</span></div>
+            <div class="trend-bar-wrap"><div class="trend-bar" style="height:68px; background:#534AB7;"></div><span class="trend-label">W4</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row3">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title"><i class="ti ti-link" style="font-size:14px; margin-right:4px;" aria-hidden="true"></i>Feedback links</span>
+          <button class="generate-btn"><i class="ti ti-plus" style="font-size:14px;" aria-hidden="true"></i> New link</button>
+        </div>
+        <div class="link-card">
+          <div>
+            <div style="font-size:11px; color: var(--color-text-tertiary); margin-bottom:2px;">Email link — Dr. Khan's patients</div>
+            <div class="link-url">empathy.check/r/dk-may26</div>
+          </div>
+          <div class="link-actions">
+            <div class="link-btn"><i class="ti ti-copy" style="font-size:12px;" aria-hidden="true"></i> Copy</div>
+            <div class="link-btn"><i class="ti ti-chart-bar" style="font-size:12px;" aria-hidden="true"></i> 64</div>
+          </div>
+        </div>
+        <div class="link-card">
+          <div>
+            <div style="font-size:11px; color: var(--color-text-tertiary); margin-bottom:2px;">Kiosk — waiting room device</div>
+            <div class="link-url">empathy.check/r/kiosk-rv</div>
+          </div>
+          <div class="link-actions">
+            <div class="link-btn"><i class="ti ti-copy" style="font-size:12px;" aria-hidden="true"></i> Copy</div>
+            <div class="link-btn"><i class="ti ti-chart-bar" style="font-size:12px;" aria-hidden="true"></i> 84</div>
+          </div>
+        </div>
+        <div style="margin-top:10px; font-size:12px; color: var(--color-text-tertiary);">
+          <i class="ti ti-device-desktop" style="font-size:12px;" aria-hidden="true"></i> Kiosk auto-resets after each session
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title"><i class="ti ti-message-question" style="font-size:14px; margin-right:4px;" aria-hidden="true"></i>Top patient questions</span>
+          <span class="card-action">Export</span>
+        </div>
+        <div class="question-item">
+          <div class="q-text-small">Asked 34 times</div>
+          <div class="q-answer">"Will my doctor see this feedback?"<span class="tag-sm tag-purple">privacy</span></div>
+        </div>
+        <div class="question-item">
+          <div class="q-text-small">Asked 27 times</div>
+          <div class="q-answer">"What did the AI actually do?"<span class="tag-sm tag-amber">AI role</span></div>
+        </div>
+        <div class="question-item">
+          <div class="q-text-small">Asked 18 times</div>
+          <div class="q-answer">"Is my data kept safe?"<span class="tag-sm tag-purple">privacy</span></div>
+        </div>
+        <div class="question-item">
+          <div class="q-text-small">Asked 8 times</div>
+          <div class="q-answer">"Can I opt out of AI next time?"<span class="tag-sm tag-teal">preference</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>

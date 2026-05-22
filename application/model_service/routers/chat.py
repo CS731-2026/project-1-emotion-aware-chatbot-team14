@@ -98,8 +98,12 @@ def generate_yarn_opener(
         return None
     transcript_segments = session.transcript_buffer[-20:]
     system_events = session.system_events[-20:]
+    dominant = (
+        max(session.emotion_counter, key=session.emotion_counter.get)
+        if session.emotion_counter else None
+    )
     emotional_context = hri.emotion_agent.analyse(
-        session.emotion_buffer.history(), transcript_segments,
+        session.emotion_buffer.history(), transcript_segments, dominant,
     )
     current = session.conductor.current
     try:
@@ -277,7 +281,13 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
         system_events = session.system_events[-20:] if session else []
 
         # Step 2: summarise the emotional signal into a compact reasoning input.
-        emotional_context = hri.emotion_agent.analyse(emotion_observations, transcript_segments)
+        session_dominant = (
+            max(session.emotion_counter, key=session.emotion_counter.get)
+            if session and session.emotion_counter else None
+        )
+        emotional_context = hri.emotion_agent.analyse(
+            emotion_observations, transcript_segments, session_dominant
+        )
 
         # Step 3: expose the current reasoning snapshot for the debug UI.
         debug = hri.llm_agent.debug_snapshot(

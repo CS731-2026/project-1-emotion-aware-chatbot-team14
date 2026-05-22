@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { ChatDebug, Profile } from "$lib/api";
-  import type { Emotion } from "$lib/harness/types";
+  import { EMOTION_EMOJI, EMOTION_LABEL, type Emotion } from "$lib/harness/types";
 
   type RejectedTranscript = {
     id: string;
@@ -21,6 +21,7 @@
     emotion,
     reasoningDebug,
     rejectedTranscripts = [],
+    emotionCounts = {},
   }: {
     profile: Profile | null;
     faceDetected: boolean;
@@ -31,6 +32,7 @@
     emotion: Emotion;
     reasoningDebug: ChatDebug | null;
     rejectedTranscripts?: RejectedTranscript[];
+    emotionCounts?: Record<string, number>;
   } = $props();
 </script>
 
@@ -65,6 +67,26 @@
 
       <pre class="debug-pre">{latestFrameSummary}</pre>
     </article>
+
+    {#if emotionCounts && Object.keys(emotionCounts).length > 0}
+      {@const total = Object.values(emotionCounts).reduce((s, n) => s + n, 0)}
+      <article class="debug-panel">
+        <p class="panel-label">Session emotion breakdown</p>
+        <div class="emotion-stat-bars">
+          {#each Object.entries(emotionCounts).sort((a, b) => b[1] - a[1]) as [em, count]}
+            {@const pct = Math.round((count / total) * 100)}
+            {@const emoji = EMOTION_EMOJI[em as Emotion] ?? "❓"}
+            {@const lbl = EMOTION_LABEL[em as Emotion] ?? em}
+            <div class="es-row">
+              <span class="es-label">{emoji} {lbl}</span>
+              <div class="es-track"><div class="es-fill" style="width:{pct}%"></div></div>
+              <span class="es-pct">{pct}%</span>
+            </div>
+          {/each}
+        </div>
+        <p class="panel-meta">{total} frames analysed</p>
+      </article>
+    {/if}
 
     <article class="debug-panel">
       <p class="panel-label">Filtered transcripts</p>
@@ -319,6 +341,13 @@
     font-size: 0.78rem;
     font-style: italic;
   }
+
+  .emotion-stat-bars { display: flex; flex-direction: column; gap: 0.4rem; }
+  .es-row { display: flex; align-items: center; gap: 0.55rem; }
+  .es-label { font-size: 0.76rem; color: rgba(255,255,255,0.75); width: 8.5rem; flex-shrink: 0; }
+  .es-track { flex: 1; height: 5px; background: rgba(255,255,255,0.1); border-radius: 999px; overflow: hidden; }
+  .es-fill { height: 100%; background: rgba(255,215,100,0.65); border-radius: 999px; transition: width 350ms ease; }
+  .es-pct { font-size: 0.7rem; color: rgba(255,255,255,0.45); width: 2.2rem; text-align: right; flex-shrink: 0; }
 
   @media (max-width: 720px) {
     .debug-shell {

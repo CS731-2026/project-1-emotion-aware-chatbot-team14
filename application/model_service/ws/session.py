@@ -46,6 +46,9 @@ class HarnessSession:
     segment_id_counter: int = 0
     # Facts extracted at each state's end, keyed by internal state.name.
     state_facts: dict[str, dict] = field(default_factory=dict)
+    # Full-session tally of every emotion label emitted (keyed by label).
+    # Used to derive the session-dominant emotion for the LLM and the HUD.
+    emotion_counter: dict = field(default_factory=dict)
     frame_count: int = 0
     audio_chunk_count: int = 0
     emotion_cycle_started_at: float = 0.0

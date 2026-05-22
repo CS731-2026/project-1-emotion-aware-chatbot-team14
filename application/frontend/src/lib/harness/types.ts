@@ -34,6 +34,15 @@ export const EMOTION_LABEL: Record<Emotion, string> = {
   distrust:     "Wary",
 };
 
+export const EMOTION_EMOJI: Record<Emotion, string> = {
+  neutral:      "😐",
+  trust_relief: "😊",
+  sadness:      "😢",
+  fear_anxiety: "😰",
+  confusion:    "😕",
+  distrust:     "😒",
+};
+
 export function isEmotion(value: unknown): value is Emotion {
   return typeof value === "string" && value in EMOTION_COLOURS;
 }

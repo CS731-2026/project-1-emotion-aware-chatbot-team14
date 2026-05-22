@@ -23,87 +23,104 @@ from .state import State, StateContext, TickResult
 
 
 # ---------- form specs ----------
+#
+# Questions sourced from design_decision/gp_feedback_questions.html.
+# Scales (1–10, 1–5) are collapsed into three labelled tiers — the
+# QuestionSpec chip model does not support numeric sliders.
 
 _QA_FORM_SPEC = PageSpec(
-    title="Before we begin — a quick check-in",
-    subtitle="Take your time. There's no right or wrong answer.",
+    title="About your appointment today",
+    subtitle="This won't take long — tap the answer that feels right.",
     emotionAware=True,
     reveal="sequential",
     questions=[
         QuestionSpec(
-            id="mood_baseline",
-            prompt="How are you feeling right now?",
+            id="doctor_explained",
+            prompt="Did your doctor explain clearly what was wrong with you today?",
             choices=[
-                Choice(label="Calm", value="calm", tone="positive"),
-                Choice(label="A little anxious", value="a_little_anxious"),
-                Choice(label="Quite anxious", value="quite_anxious", tone="concerning"),
+                Choice(label="Yes, very clearly", value="yes_clearly", tone="positive"),
+                Choice(label="Mostly, yes", value="mostly"),
+                Choice(label="It was a bit confusing", value="confusing", tone="concerning"),
+                Choice(label="No, I'm still unsure", value="still_unsure", tone="concerning"),
             ],
         ),
         QuestionSpec(
-            id="focus_area",
-            prompt="What's on your mind, if anything?",
+            id="treatment_confidence",
+            prompt="How confident do you feel about following the treatment or advice given today?",
             choices=[
-                Choice(label="The visit itself", value="the_visit"),
-                Choice(label="Use of AI in my care", value="ai_in_care"),
-                Choice(label="My health overall", value="health"),
-                Choice(label="Something else", value="other"),
+                Choice(label="Very confident", value="very_confident", tone="positive"),
+                Choice(label="Fairly confident", value="fairly_confident"),
+                Choice(label="Not very confident", value="not_confident", tone="concerning"),
+                Choice(label="I'm not sure what to do", value="unsure_what_to_do", tone="concerning"),
             ],
-            allowFreeText=True,
         ),
         QuestionSpec(
-            id="open_to_talk",
-            prompt="Would you like to talk it through?",
+            id="symptom_instructions",
+            prompt="Were you told what to do if your symptoms get worse or don't improve?",
             choices=[
-                Choice(label="Yes, please", value="yes", tone="positive"),
-                Choice(label="Maybe a little", value="maybe"),
-                Choice(label="Not right now", value="not_now"),
+                Choice(label="Yes", value="yes", tone="positive"),
+                Choice(label="Partly", value="partly"),
+                Choice(label="No", value="no", tone="concerning"),
             ],
         ),
     ],
 )
 
 _FEEDBACK_FORM_SPEC = PageSpec(
-    title="A few quick questions about this chat",
-    subtitle="Your answers help us understand how this assistant felt to talk to.",
+    title="About technology and your experience",
+    subtitle="Your answers are anonymous and help improve care for everyone.",
     emotionAware=True,
     reveal="sequential",
     questions=[
         QuestionSpec(
-            id="felt_heard",
-            prompt="Did you feel this assistant listened to you?",
+            id="ai_noticed",
+            prompt="Did you notice a computer or AI tool being used during your appointment?",
+            choices=[
+                Choice(label="Yes, I noticed", value="yes_noticed"),
+                Choice(label="I think so", value="think_so"),
+                Choice(label="Not sure", value="not_sure"),
+                Choice(label="No", value="no"),
+            ],
+        ),
+        QuestionSpec(
+            id="ai_feeling",
+            prompt="How did it make you feel knowing that a computer may have helped with your appointment?",
+            choices=[
+                Choice(label="Reassured — more accurate", value="reassured", tone="positive"),
+                Choice(label="Fine, no strong feelings", value="fine"),
+                Choice(label="A little unsure", value="a_little_unsure", tone="concerning"),
+                Choice(label="Worried or uncomfortable", value="worried", tone="concerning"),
+            ],
+        ),
+        QuestionSpec(
+            id="privacy_felt_safe",
+            prompt="Did you feel your personal health information was kept safe and private today?",
             choices=[
                 Choice(label="Yes, completely", value="yes_completely", tone="positive"),
                 Choice(label="Mostly", value="mostly"),
-                Choice(label="Not really", value="not_really"),
-                Choice(label="No", value="no", tone="concerning"),
+                Choice(label="I'm not sure", value="not_sure", tone="concerning"),
+                Choice(label="I have concerns", value="have_concerns", tone="concerning"),
             ],
         ),
         QuestionSpec(
-            id="responses_helpful",
-            prompt="Were the assistant's replies helpful to you?",
+            id="overall_rating",
+            prompt="Overall, how would you rate today's appointment?",
             choices=[
-                Choice(label="Very helpful", value="very_helpful", tone="positive"),
-                Choice(label="Somewhat helpful", value="somewhat"),
-                Choice(label="Not really", value="not_really", tone="concerning"),
+                Choice(label="Excellent", value="excellent", tone="positive"),
+                Choice(label="Good", value="good", tone="positive"),
+                Choice(label="Fair", value="fair"),
+                Choice(label="Poor", value="poor", tone="concerning"),
             ],
         ),
         QuestionSpec(
-            id="comfort_using",
-            prompt="How comfortable did you feel using this assistant?",
+            id="what_would_help",
+            prompt="Is there anything that would have made today's visit better for you?",
             choices=[
-                Choice(label="Very comfortable", value="very_comfortable", tone="positive"),
-                Choice(label="Mostly fine", value="mostly_fine"),
-                Choice(label="A bit unsure", value="a_bit_unsure"),
-                Choice(label="Uncomfortable", value="uncomfortable", tone="concerning"),
-            ],
-        ),
-        QuestionSpec(
-            id="would_use_again",
-            prompt="Would you use this kind of assistant again?",
-            choices=[
-                Choice(label="Yes, definitely", value="yes_definitely", tone="positive"),
-                Choice(label="Maybe", value="maybe"),
-                Choice(label="Probably not", value="probably_not", tone="concerning"),
+                Choice(label="More time with the doctor", value="more_time"),
+                Choice(label="A clearer explanation", value="clearer_explanation"),
+                Choice(label="More information about the technology", value="more_tech_info"),
+                Choice(label="More privacy", value="more_privacy"),
+                Choice(label="Nothing — it was fine", value="nothing_fine", tone="positive"),
             ],
             allowFreeText=True,
         ),
@@ -136,10 +153,11 @@ QA_FORM = State(
     facts_schema_name="qa_baseline",
     facts_extraction_prompt=(
         "Read the conversation slice and return a JSON object summarising "
-        "the user's baseline check-in. Required fields:\n"
-        '  "mood": one of "calm" | "a_little_anxious" | "quite_anxious" | null\n'
-        '  "focus_area": short phrase or null\n'
-        '  "wants_to_talk": one of "yes" | "maybe" | "not_now" | null\n'
+        "the patient's answers about their GP appointment. Required fields:\n"
+        '  "doctor_explained": one of "yes_clearly" | "mostly" | "confusing" | "still_unsure" | null\n'
+        '  "treatment_confidence": one of "very_confident" | "fairly_confident" | "not_confident" | "unsure_what_to_do" | null\n'
+        '  "symptom_instructions": one of "yes" | "partly" | "no" | null\n'
+        '  "has_concern": boolean — true if any answer signals confusion or lack of confidence\n'
         '  "notes": one-sentence free-form summary or null'
     ),
 )
@@ -164,54 +182,47 @@ class PostQaYarn(State):
     """
 
     _BASE_INTENTION = (
-        "The user has just answered a brief check-in about how they're "
-        "feeling. Their answers are visible to you as {{form_answer: …}} "
-        "lines in the recent transcript. Acknowledge how they're feeling "
-        "warmly. If they said they want to talk, invite them gently to "
-        "share more. If they said they don't, keep it short and let them "
-        "be — don't push. Never quote their form answers back to them as "
-        "if they said the words out loud."
+        "The patient has just answered a few questions about their GP "
+        "appointment today. Their answers are visible to you as "
+        "{{form_answer: …}} lines in the recent transcript. "
+        "Respond in plain, warm, everyday English — no medical or "
+        "technical jargon. Keep your reply under three sentences. "
+        "If their answers suggest confusion, worry, or lack of confidence "
+        "about the visit or about AI being used, open with empathy and "
+        "validate that before anything else. "
+        "If they seemed fine with the appointment, acknowledge that warmly "
+        "and let them know their feedback is appreciated. "
+        "Never quote their form answers back to them word for word."
     )
 
     _BRANCHING_GUIDANCE = (
-        "The user has had a couple of turns to settle. Read where they "
-        "are right now, then take ONE of these two paths:\n"
+        "The patient has had a turn or two to settle. Read where they are "
+        "now, then take ONE of these two paths:\n"
         "\n"
-        "  (A) If they sound like they had a hard or negative experience "
-        "— anxious, frustrated, dismissive, sad, distrustful, or the "
-        "emotional signal in your context points that way — your "
-        "priority is to understand what specifically felt bad. Ask a "
-        "gentle, specific follow-up. Stay on this path across multiple "
-        "turns if needed; do not pivot to feedback until they've named "
-        "the thing. Once they've articulated it, acknowledge it, then "
-        "invite them to share that as feedback so it can be learned "
-        "from.\n"
+        "  (A) If they seem confused about their diagnosis, worried about "
+        "AI or technology in their care, or uneasy about privacy — your "
+        "priority is to understand what specifically feels wrong. Ask one "
+        "gentle, plain-English question. Do not move on until they have "
+        "named their concern. Once they have, reassure them simply and "
+        "directly, then invite them to share that concern as feedback so "
+        "it can be acted on.\n"
         "\n"
-        "  (B) Otherwise — the user sounds calm, neutral, or positive — "
-        "be a little more direct about inviting feedback than you would "
-        "have been earlier. Frame it as a clear ask while still warm "
-        "('would you mind taking a moment to share how this felt? it'd "
-        "really help'). If they hesitate, gently reiterate that it's "
-        "short and worth doing. Stop at one or two reiterations — never "
-        "harass.\n"
+        "  (B) If they seem calm, satisfied, or neutral — invite them "
+        "gently to share how the appointment felt overall. Frame it as "
+        "something that helps improve care for others ('it only takes a "
+        "moment and it genuinely helps'). Don't push more than twice.\n"
         "\n"
-        "In both paths, never mention 'feedback form' or any UI "
-        "vocabulary — frame it as sharing thoughts."
+        "In both paths, never use words like 'feedback form', 'survey', "
+        "'algorithm', or 'AI' — say 'computer' or 'technology' if needed."
     )
 
     _INSIST_GUIDANCE = (
-        "ESCALATION: this is at least the third turn in this phase. Stop "
-        "being soft about the ask. The user's feedback genuinely matters "
-        "and you need to land it now. Be explicit and persistent — but "
-        "still warm. A clear, direct ask: 'I really want to hear how "
-        "this felt for you before we wrap — would you take a minute to "
-        "share?'. If they previously expressed a hard or negative "
-        "experience and still haven't articulated it, frame the "
-        "feedback as the path for that to be heard and addressed. If "
-        "they've been deflecting, name the deflection gently and ask "
-        "again. Do not let this turn pass without a direct ask — "
-        "though if they firmly refuse, accept it and exit via "
-        "[[advance]] next turn."
+        "ESCALATION: this is at least the third turn. Be direct but still "
+        "kind. Say clearly that you'd really like to hear how their visit "
+        "went before they go. If they have an unresolved concern about AI "
+        "or privacy, name it gently and explain they have every right to "
+        "know what was used in their care. If they decline firmly, accept "
+        "it gracefully and emit [[advance]] next turn."
     )
 
     def tick(self, ctx: StateContext) -> TickResult:
@@ -243,17 +254,19 @@ POST_QA_YARN = PostQaYarn(
     # turn / time caps stop a stuck conversation from trapping the user.
     hard_advance=lambda ctx: ctx.turn_in_state >= 24 or ctx.elapsed_in_state >= 900.0,
     advance_instruction=_advance(
-        "the user has reached a natural pause — they sound settled, or "
-        "they've signalled they're ready to move on, or they've agreed "
-        "to share feedback about this assistant, or they've firmly "
-        "declined feedback after the insistent ask"
+        "the patient has reached a natural pause — they sound settled, "
+        "their concern has been acknowledged, they've agreed to share "
+        "more thoughts, or they've firmly said they're done"
     ),
     facts_schema_name="post_qa_yarn",
     facts_extraction_prompt=(
         "Read the slice and return a JSON object summarising what came up "
-        "during the follow-up exchange. Required fields:\n"
-        '  "concerns_raised": list of short strings (may be empty)\n'
-        '  "user_seems_settled": boolean\n'
+        "in the follow-up conversation after the appointment questions. Required fields:\n"
+        '  "concerns_raised": list of short strings describing any worries '
+        'the patient mentioned (may be empty)\n'
+        '  "ai_concern": boolean — true if the patient expressed worry about AI or technology\n'
+        '  "privacy_concern": boolean — true if the patient raised a data or privacy worry\n'
+        '  "patient_seems_settled": boolean\n'
         '  "notes": one-sentence summary or null'
     ),
 )
@@ -267,15 +280,15 @@ FEEDBACK_FORM = State(
     hard_advance=lambda ctx: ctx.form_completed,
     facts_schema_name="feedback",
     facts_extraction_prompt=(
-        "Read the slice and return a JSON object capturing the user's "
-        "structured feedback about this assistant. Required fields:\n"
-        '  "felt_heard": one of "yes_completely" | "mostly" | '
-        '"not_really" | "no" | null\n'
-        '  "responses_helpful": one of "very_helpful" | "somewhat" | "not_really" | null\n'
-        '  "comfort_using": one of "very_comfortable" | "mostly_fine" | '
-        '"a_bit_unsure" | "uncomfortable" | null\n'
-        '  "would_use_again": one of "yes_definitely" | "maybe" | "probably_not" | null\n'
-        '  "open_text": any free-text the user added or null'
+        "Read the slice and return a JSON object capturing the patient's "
+        "structured feedback about their GP appointment and AI use. Required fields:\n"
+        '  "ai_noticed": one of "yes_noticed" | "think_so" | "not_sure" | "no" | null\n'
+        '  "ai_feeling": one of "reassured" | "fine" | "a_little_unsure" | "worried" | null\n'
+        '  "privacy_felt_safe": one of "yes_completely" | "mostly" | "not_sure" | "have_concerns" | null\n'
+        '  "overall_rating": one of "excellent" | "good" | "fair" | "poor" | null\n'
+        '  "what_would_help": string or null\n'
+        '  "open_text": any free-text the patient added or null\n'
+        '  "has_concern": boolean — true if any answer signals worry about AI, privacy, or a poor rating'
     ),
 )
 
@@ -284,30 +297,33 @@ POST_FEEDBACK_YARN = State(
     name="post_feedback_yarn",
     kind="yarn",
     intention_prompt=(
-        "The user has just submitted feedback about this assistant. "
-        "Thank them briefly and warmly. Invite any final thoughts but "
-        "do not probe — if they're done, let them be."
+        "The patient has just answered questions about their appointment "
+        "and about technology being used in their care. "
+        "Thank them briefly and warmly in plain English — no jargon. "
+        "If their answers suggest they felt worried or unsure about AI "
+        "or privacy, address that directly in one or two calm sentences "
+        "before thanking them. Keep it under three sentences total. "
+        "Invite any final question they may have, but don't push."
     ),
     hard_advance=lambda ctx: ctx.turn_in_state >= 4,
     advance_instruction=_advance(
-        "the user has added their final thoughts or signalled they're "
-        "ready to wrap up"
+        "the patient has asked their final question or signalled they're "
+        "ready to go"
     ),
-    # One turn of warm acknowledgement; on the second turn, start
-    # easing toward a close so the conversation doesn't drag.
     late_guidance_after=1,
     late_guidance=(
-        "The user has had one turn to add any final thoughts. If they "
-        "haven't volunteered anything substantial, gently move toward a "
-        "warm close — acknowledge they've shared, thank them, and leave "
-        "an opening to say goodbye. Don't extract more if they seem "
-        "done. Do not mention any UI or system vocabulary."
+        "The patient has had one turn. If they haven't raised a new "
+        "concern, ease gently toward a warm close — thank them, say "
+        "their answers help improve care, and leave an opening for "
+        "goodbye. Do not repeat reassurances already given. "
+        "Never use words like 'algorithm', 'data', or 'AI system'."
     ),
     facts_schema_name="post_feedback_yarn",
     facts_extraction_prompt=(
         "Read the slice and return a JSON object summarising any final "
-        "thoughts the user shared. Required fields:\n"
-        '  "final_thoughts": short string or null\n'
+        "concerns or questions the patient raised. Required fields:\n"
+        '  "final_question": short string or null\n'
+        '  "ai_concern_resolved": boolean\n'
         '  "any_unresolved_concern": boolean\n'
         '  "notes": one-sentence summary or null'
     ),
@@ -318,13 +334,14 @@ CLOSING_YARN = State(
     name="closing_yarn",
     kind="yarn",
     intention_prompt=(
-        "The conversation is winding down. Respond briefly and warmly. "
-        "Let the user go when they signal they're done."
+        "The conversation is wrapping up. Say goodbye warmly and briefly "
+        "in plain everyday English. Remind them their answers are "
+        "anonymous and will help improve care. Let them go as soon as "
+        "they're ready."
     ),
     hard_advance=lambda ctx: ctx.turn_in_state >= 4,
     advance_instruction=_advance(
-        "the user has signalled the exchange is over — said goodbye, "
-        "thanks-that's-all, or similar wind-down"
+        "the patient has said goodbye or signalled they're done"
     ),
     facts_schema_name="closing_yarn",
     facts_extraction_prompt=(

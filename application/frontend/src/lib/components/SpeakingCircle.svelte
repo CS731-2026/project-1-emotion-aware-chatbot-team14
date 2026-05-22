@@ -5,10 +5,12 @@
     phase,
     pulse = 0,
     compact = false,
+    mismatch = false,
   }: {
     phase: AssistantPhase;
     pulse?: number;
     compact?: boolean;
+    mismatch?: boolean;
   } = $props();
 
   const clampedPulse = $derived(Math.max(0, Math.min(pulse, 1)));
@@ -19,6 +21,7 @@
 <div class="circle-wrap" class:compact>
   <div
     class="visualiser {phase}"
+    class:mismatch
     style={`--core-scale:${coreScale}; --halo-scale:${haloScale}; --pulse-opacity:${0.28 + clampedPulse * 0.52};`}
     aria-hidden="true"
   >
@@ -143,5 +146,19 @@
     50% {
       transform: scale(1.03);
     }
+  }
+
+  .visualiser.mismatch .core {
+    background:
+      radial-gradient(circle at 35% 35%, rgba(255,120,120,0.98), rgba(220,60,60,0.86) 38%, rgba(180,30,30,0.22) 72%, rgba(140,0,0,0.08) 100%);
+    box-shadow:
+      inset 0 0 32px rgba(255,80,80,0.45),
+      0 0 60px rgba(220,50,50,0.28);
+    transition: background 600ms ease, box-shadow 600ms ease;
+  }
+  .visualiser.mismatch .halo {
+    background:
+      radial-gradient(circle at 30% 30%, rgba(255,160,160,0.72), rgba(220,80,80,0.05) 60%, transparent 72%),
+      radial-gradient(circle at 70% 70%, rgba(200,60,60,0.3), transparent 65%);
   }
 </style>

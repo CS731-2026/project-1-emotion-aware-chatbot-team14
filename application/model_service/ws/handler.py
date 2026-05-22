@@ -27,6 +27,12 @@ from ws.video import FrameDetectionResult, detect_from_message
 
 logger = logging.getLogger(__name__)
 
+_POSITIVE_PHRASES = frozenset({
+    "fine", "good", "okay", "ok", "alright", "great",
+    "no problem", "feel well", "feeling fine", "feeling okay",
+})
+_CONCERNING_EMOTIONS = frozenset({"fear_anxiety", "distrust", "sadness", "confusion"})
+
 # Type alias: every message handler is an async function that returns True to
 # continue the loop, or False to break (i.e. close the connection).
 MessageHandler = Callable[[dict[str, Any]], Awaitable[bool]]
@@ -120,6 +126,8 @@ async def _send_frame_messages(
     emotion: str,
     confidence: float,
     timestamp: float,
+    session_dominant: str,
+    mismatch_detected: bool = False,
 ) -> None:
     """Send the three per-frame WS messages: face_detection, frame_debug, emotion_update."""
     await websocket.send_text(json.dumps({
@@ -143,6 +151,8 @@ async def _send_frame_messages(
         "type": "emotion_update",
         "emotion": emotion,
         "confidence": confidence,
+        "session_dominant": session_dominant,
+        "mismatch_detected": mismatch_detected,
         "timestamp": timestamp,
     }))
 
@@ -245,14 +255,26 @@ def _make_handlers(
         result = detect_from_message(hri.face_detector, msg, session.frame_count)
         emotion, confidence = pick_emotion(result.face_crop, hri.emotion_model, result.detected, session)
         session.emotion_buffer.update(emotion, confidence, timestamp)
+        session.emotion_counter[emotion] = session.emotion_counter.get(emotion, 0) + 1
+        session_dominant = max(session.emotion_counter, key=session.emotion_counter.get)
+
+        recent_text = " ".join(s.text.lower() for s in session.transcript_buffer[-5:])
+        mismatch_detected = (
+            session_dominant in _CONCERNING_EMOTIONS
+            and any(p in recent_text for p in _POSITIVE_PHRASES)
+        )
 
         if session.frame_count == 1 or session.frame_count % 10 == 0:
             emit_debug(
                 f"Frame {session.frame_count} [{session.profile_id}]: "
-                f"detector_loaded={result.detector_loaded} detected={result.detected} emotion={emotion}"
+                f"detector_loaded={result.detector_loaded} detected={result.detected} "
+                f"emotion={emotion} session_dominant={session_dominant}"
             )
 
-        await _send_frame_messages(websocket, session, result, emotion, confidence, timestamp)
+        await _send_frame_messages(
+            websocket, session, result, emotion, confidence, timestamp, session_dominant,
+            mismatch_detected=mismatch_detected,
+        )
         return True
 
     async def on_audio_chunk(msg: dict[str, Any]) -> bool:

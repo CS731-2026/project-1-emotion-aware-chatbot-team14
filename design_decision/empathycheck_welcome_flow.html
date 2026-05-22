@@ -1,0 +1,210 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+.phone-frame { background: var(--color-background-secondary); border-radius: 20px; padding: 16px; max-width: 360px; margin: 0 auto; }
+.screen { background: var(--color-background-primary); border-radius: 16px; border: 0.5px solid var(--color-border-tertiary); overflow: hidden; display: none; }
+.screen.active { display: block; }
+.screen-inner { padding: 24px 20px 28px; }
+.step-dot-row { display: flex; gap: 6px; justify-content: center; margin-bottom: 28px; }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-border-secondary); }
+.dot.active { background: #534AB7; width: 18px; border-radius: 999px; }
+.practice-header { text-align: center; margin-bottom: 24px; }
+.practice-icon { width: 56px; height: 56px; border-radius: 16px; background: #EEEDFE; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; }
+.practice-icon i { font-size: 28px; color: #534AB7; }
+.welcome-label { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: #7F77DD; margin-bottom: 6px; }
+.welcome-title { font-size: 20px; font-weight: 500; color: var(--color-text-primary); line-height: 1.3; margin-bottom: 6px; }
+.welcome-sub { font-size: 14px; color: var(--color-text-secondary); line-height: 1.6; }
+.context-cards { display: flex; flex-direction: column; gap: 10px; margin: 20px 0; }
+.ctx-card { display: flex; align-items: flex-start; gap: 12px; background: var(--color-background-secondary); border-radius: 12px; padding: 14px; }
+.ctx-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.ctx-icon.purple { background: #EEEDFE; }
+.ctx-icon.purple i { color: #534AB7; font-size: 18px; }
+.ctx-icon.teal { background: #E1F5EE; }
+.ctx-icon.teal i { color: #0F6E56; font-size: 18px; }
+.ctx-icon.amber { background: #FAEEDA; }
+.ctx-icon.amber i { color: #854F0B; font-size: 18px; }
+.ctx-title { font-size: 13px; font-weight: 500; color: var(--color-text-primary); margin-bottom: 2px; }
+.ctx-desc { font-size: 12px; color: var(--color-text-secondary); line-height: 1.5; }
+.consent-row { display: flex; align-items: flex-start; gap: 10px; padding: 12px; background: #EEEDFE; border-radius: 10px; margin: 16px 0 20px; }
+.consent-row i { color: #534AB7; font-size: 16px; margin-top: 1px; flex-shrink: 0; }
+.consent-text { font-size: 12px; color: #3C3489; line-height: 1.5; }
+.big-btn { width: 100%; padding: 14px; border-radius: 12px; background: #534AB7; color: #EEEDFE; border: none; font-size: 16px; font-weight: 500; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.big-btn:active { opacity: 0.9; }
+.skip-link { text-align: center; font-size: 13px; color: var(--color-text-tertiary); margin-top: 14px; cursor: pointer; }
+
+.mode-section { margin-top: 8px; }
+.mode-label { font-size: 13px; color: var(--color-text-secondary); text-align: center; margin-bottom: 16px; line-height: 1.5; }
+.mode-cards { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; margin-bottom: 20px; }
+.mode-card { border: 2px solid var(--color-border-tertiary); border-radius: 14px; padding: 20px 12px; text-align: center; cursor: pointer; background: var(--color-background-primary); transition: border-color 0.15s; }
+.mode-card.selected { border-color: #534AB7; background: #EEEDFE; }
+.mode-card-icon { font-size: 32px; margin-bottom: 10px; display: block; }
+.mode-card-icon.purple { color: #534AB7; }
+.mode-card-icon.teal { color: #0F6E56; }
+.mode-card-title { font-size: 15px; font-weight: 500; color: var(--color-text-primary); margin-bottom: 4px; }
+.mode-card-desc { font-size: 12px; color: var(--color-text-secondary); line-height: 1.4; }
+.mode-card.selected .mode-card-title { color: #3C3489; }
+.mode-card.selected .mode-card-desc { color: #534AB7; }
+.or-divider { text-align: center; font-size: 12px; color: var(--color-text-tertiary); margin: 4px 0 16px; }
+
+.audio-note { display: flex; align-items: flex-start; gap: 10px; background: #E1F5EE; border-radius: 10px; padding: 12px; margin-bottom: 20px; }
+.audio-note i { color: #0F6E56; font-size: 16px; margin-top: 1px; flex-shrink: 0; }
+.audio-note-text { font-size: 12px; color: #085041; line-height: 1.5; }
+
+.nav-row { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 10px; border-bottom: 0.5px solid var(--color-border-tertiary); }
+.nav-back { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--color-text-secondary); cursor: pointer; }
+.nav-step { font-size: 12px; color: var(--color-text-tertiary); }
+</style>
+
+<div class="phone-frame">
+  <h2 class="sr-only">EmpathyCheck patient welcome flow — three screens: welcome and context, mode selection (audio or text), and confirmation before starting feedback</h2>
+
+  <div style="font-size:11px; color: var(--color-text-tertiary); text-align:center; margin-bottom:10px; letter-spacing:0.04em;">tap the buttons to walk through the flow</div>
+
+  <div class="screen active" id="screen1">
+    <div class="screen-inner">
+      <div class="step-dot-row">
+        <div class="dot active"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+      </div>
+      <div class="practice-header">
+        <div class="practice-icon"><i class="ti ti-stethoscope" aria-hidden="true"></i></div>
+        <div class="welcome-label">Riverside Medical Practice</div>
+        <div class="welcome-title">Welcome back, and thank you for seeing Dr. Khan today</div>
+        <div class="welcome-sub" style="margin-top:8px;">Before you go, your GP would love to hear how your appointment went — especially how you felt about the technology used today.</div>
+      </div>
+      <div class="context-cards">
+        <div class="ctx-card">
+          <div class="ctx-icon purple"><i class="ti ti-clock" aria-hidden="true"></i></div>
+          <div>
+            <div class="ctx-title">Takes about 3 minutes</div>
+            <div class="ctx-desc">Just a few simple questions — no right or wrong answers.</div>
+          </div>
+        </div>
+        <div class="ctx-card">
+          <div class="ctx-icon teal"><i class="ti ti-shield-check" aria-hidden="true"></i></div>
+          <div>
+            <div class="ctx-title">Completely anonymous</div>
+            <div class="ctx-desc">Your name is never attached to your answers unless you choose.</div>
+          </div>
+        </div>
+        <div class="ctx-card">
+          <div class="ctx-icon amber"><i class="ti ti-robot" aria-hidden="true"></i></div>
+          <div>
+            <div class="ctx-title">Questions about AI? Ask away</div>
+            <div class="ctx-desc">At the end, you can ask anything about how technology was used today.</div>
+          </div>
+        </div>
+      </div>
+      <div class="consent-row">
+        <i class="ti ti-info-circle" aria-hidden="true"></i>
+        <div class="consent-text">By continuing, you agree your anonymous feedback helps improve care at this practice. You can stop at any time.</div>
+      </div>
+      <button class="big-btn" onclick="showScreen(2)">
+        I'm ready to share feedback <i class="ti ti-arrow-right" style="font-size:16px;" aria-hidden="true"></i>
+      </button>
+      <div class="skip-link">No thanks, skip feedback</div>
+    </div>
+  </div>
+
+  <div class="screen" id="screen2">
+    <div class="nav-row">
+      <div class="nav-back" onclick="showScreen(1)"><i class="ti ti-arrow-left" style="font-size:15px;" aria-hidden="true"></i> Back</div>
+      <div class="nav-step">Step 1 of 3</div>
+    </div>
+    <div class="screen-inner" style="padding-top:20px;">
+      <div class="step-dot-row">
+        <div class="dot"></div>
+        <div class="dot active"></div>
+        <div class="dot"></div>
+      </div>
+      <div style="text-align:center; margin-bottom:20px;">
+        <div class="welcome-title" style="font-size:18px;">How would you like to answer?</div>
+        <div class="mode-label" style="margin-top:8px;">Choose whichever feels easier for you — you can switch at any time.</div>
+      </div>
+      <div class="mode-cards">
+        <div class="mode-card selected" id="card-text" onclick="selectMode('text')">
+          <i class="ti ti-keyboard mode-card-icon purple" aria-hidden="true"></i>
+          <div class="mode-card-title">Type</div>
+          <div class="mode-card-desc">Read questions and tap your answers</div>
+        </div>
+        <div class="mode-card" id="card-audio" onclick="selectMode('audio')">
+          <i class="ti ti-microphone mode-card-icon teal" aria-hidden="true"></i>
+          <div class="mode-card-title">Speak</div>
+          <div class="mode-card-desc">Listen to questions and answer out loud</div>
+        </div>
+      </div>
+      <div id="audio-hint" style="display:none;">
+        <div class="audio-note">
+          <i class="ti ti-volume" aria-hidden="true"></i>
+          <div class="audio-note-text">Each question will be read out to you. Just speak your answer clearly — no typing needed. Make sure your volume is turned up.</div>
+        </div>
+      </div>
+      <button class="big-btn" onclick="showScreen(3)">
+        Continue <i class="ti ti-arrow-right" style="font-size:16px;" aria-hidden="true"></i>
+      </button>
+      <div class="skip-link" onclick="showScreen(1)">Go back to the start</div>
+    </div>
+  </div>
+
+  <div class="screen" id="screen3">
+    <div class="nav-row">
+      <div class="nav-back" onclick="showScreen(2)"><i class="ti ti-arrow-left" style="font-size:15px;" aria-hidden="true"></i> Back</div>
+      <div class="nav-step">Step 2 of 3</div>
+    </div>
+    <div class="screen-inner" style="padding-top:20px;">
+      <div class="step-dot-row">
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot active"></div>
+      </div>
+      <div style="text-align:center; margin-bottom:22px;">
+        <div class="practice-icon" style="margin:0 auto 14px;"><i class="ti ti-circle-check" style="font-size:28px; color:#0F6E56;" aria-hidden="true"></i></div>
+        <div class="welcome-title" style="font-size:18px;">All set — here's what to expect</div>
+      </div>
+      <div class="context-cards">
+        <div class="ctx-card">
+          <div class="ctx-icon purple"><i class="ti ti-list-check" aria-hidden="true"></i></div>
+          <div>
+            <div class="ctx-title">A few short questions</div>
+            <div class="ctx-desc">About how you felt during the visit — tap the answer that feels right.</div>
+          </div>
+        </div>
+        <div class="ctx-card">
+          <div class="ctx-icon amber"><i class="ti ti-mood-smile" aria-hidden="true"></i></div>
+          <div>
+            <div class="ctx-title">We notice how you feel</div>
+            <div class="ctx-desc">If something seems off, we may gently ask if you'd like more information.</div>
+          </div>
+        </div>
+        <div class="ctx-card">
+          <div class="ctx-icon teal"><i class="ti ti-message-question" aria-hidden="true"></i></div>
+          <div>
+            <div class="ctx-title">Ask anything at the end</div>
+            <div class="ctx-desc">There's a space to ask any question — about AI, your visit, or your data.</div>
+          </div>
+        </div>
+      </div>
+      <button class="big-btn" style="margin-top:20px;" onclick="this.innerHTML='Starting your feedback...'">
+        Start my feedback <i class="ti ti-arrow-right" style="font-size:16px;" aria-hidden="true"></i>
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function showScreen(n) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen' + n).classList.add('active');
+}
+function selectMode(mode) {
+  document.getElementById('card-text').classList.toggle('selected', mode === 'text');
+  document.getElementById('card-audio').classList.toggle('selected', mode === 'audio');
+  document.getElementById('audio-hint').style.display = mode === 'audio' ? 'block' : 'none';
+  var icon = document.querySelector('#card-text .mode-card-icon');
+  var icon2 = document.querySelector('#card-audio .mode-card-icon');
+  icon.style.color = mode === 'text' ? '#534AB7' : '#888780';
+  icon2.style.color = mode === 'audio' ? '#0F6E56' : '#888780';
+}
+</script>
