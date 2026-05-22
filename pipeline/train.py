@@ -20,12 +20,10 @@ import sys
 import configs.baseline as baseline_cfg
 import configs.fast as fast_cfg
 import configs.thorough as thorough_cfg
-import datasets.fer2013 as fer2013
-import datasets.synthetic_imbalanced as synthetic_imbalanced
-import datasets.synthetic_smoke as synthetic_smoke
-from models import mlp, resnet18, tiny_cnn
 
+from pipeline.datasets import fer2013, synthetic_imbalanced, synthetic_smoke
 from pipeline.driver import sweep
+from pipeline.models import mlp, resnet18, tiny_cnn
 
 
 # ---- what to run ---------------------------------------------------------
