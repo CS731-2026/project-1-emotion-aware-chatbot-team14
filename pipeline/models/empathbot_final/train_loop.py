@@ -25,7 +25,7 @@ from torch.utils.data import DataLoader
 
 from pipeline.framework.context import Context
 from pipeline.framework.specs import DatasetSpec, TrainedModel
-from pipeline.training.loop import auto_device, collect_predictions
+from pipeline.training.loop import auto_device, collect_predictions, merge_cfg
 from pipeline.training.reporting import write_standard_artifacts
 
 from .augment import NEGATIVE_LABEL_IDS
@@ -50,16 +50,6 @@ CFG = dict(
     neg_boost       = 1.2,             # class_weights boost for NEGATIVE classes
     warmup_epochs   = 3,
 )
-
-
-def _config_overrides(ctx_cfg: dict[str, Any]) -> dict[str, Any]:
-    out = dict(CFG)
-    for k in ("epochs", "batch_size", "num_workers", "lr_head", "lr_backbone",
-              "weight_decay", "mixup_alpha", "backbone_freeze_epochs",
-              "label_smoothing", "grad_clip", "neg_boost", "warmup_epochs"):
-        if k in ctx_cfg:
-            out[k] = ctx_cfg[k]
-    return out
 
 
 def _compute_class_weights(train_ds: EmpathBotDataset, num_classes: int,
@@ -131,7 +121,7 @@ def _eval_epoch(model, loader, criterion, device):
 
 
 def run(ctx: Context, dataset: DatasetSpec, model: nn.Module) -> TrainedModel:
-    cfg = _config_overrides(ctx.config.train_cfg)
+    cfg = merge_cfg(CFG, ctx.config.train_cfg)
     device = auto_device()
     model = model.to(device)
     num_classes = dataset.num_classes

@@ -36,7 +36,7 @@ from torch.utils.data import DataLoader, WeightedRandomSampler
 
 from pipeline.framework.context import Context
 from pipeline.framework.specs import DatasetSpec, TrainedModel
-from pipeline.training.loop import auto_device, collect_predictions
+from pipeline.training.loop import auto_device, collect_predictions, merge_cfg
 from pipeline.training.reporting import write_standard_artifacts
 
 from .augment import HARD_LABEL_IDS
@@ -76,20 +76,6 @@ CFG = dict(
     priority_classes = [2, 3],
     num_workers     = 2,
 )
-
-
-def _config_overrides(ctx_cfg: dict[str, Any]) -> dict[str, Any]:
-    """Merge ctx.config.train_cfg over the default CFG. The pipeline's
-    fast/baseline/thorough configs can override individual keys
-    (epochs, batch_size) without forcing the team to maintain a
-    fully-specified empathbot-specific yaml."""
-    out = dict(CFG)
-    for key in ("epochs", "batch_size", "num_workers", "patience",
-                "backbone_lr", "head_lr", "weight_decay", "focal_gamma",
-                "label_smoothing", "freeze_epochs", "grad_clip"):
-        if key in ctx_cfg:
-            out[key] = ctx_cfg[key]
-    return out
 
 
 def _compute_class_weights(train_csv: str, num_classes: int) -> np.ndarray:
@@ -169,7 +155,7 @@ def _evaluate(model: nn.Module, loader: DataLoader, device,
 
 def run(ctx: Context, dataset: DatasetSpec, model: nn.Module) -> TrainedModel:
     """Run the notebook-6b training procedure against the prepared dataset."""
-    cfg = _config_overrides(ctx.config.train_cfg)
+    cfg = merge_cfg(CFG, ctx.config.train_cfg)
     device = auto_device()
     model = model.to(device)
     num_classes = dataset.num_classes

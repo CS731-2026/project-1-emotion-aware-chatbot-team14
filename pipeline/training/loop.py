@@ -22,6 +22,24 @@ if TYPE_CHECKING:
     from pipeline.context import Context
 
 
+def merge_cfg(default: dict, overrides: dict | None) -> dict:
+    """Shallow-merge `overrides` over `default`, ignoring unknown keys.
+
+    Used by every model's `run(ctx, dataset, model)` to apply the
+    pipeline-level CONFIG dict over the model's own CFG defaults:
+
+        cfg = merge_cfg(CFG, ctx.config.train_cfg)
+
+    Unknown keys in `overrides` (typos, keys that belong to a different
+    model) are silently dropped so a single shared config can be passed
+    to many models without each one breaking on extra fields. Any key
+    in `default` is automatically overridable — no manual whitelist.
+    """
+    if not overrides:
+        return dict(default)
+    return {**default, **{k: v for k, v in overrides.items() if k in default}}
+
+
 def auto_device() -> torch.device:
     """Pick CUDA → MPS → CPU. Matches what core/face_detector and the
     emotion model do — keep selection consistent across the project."""
