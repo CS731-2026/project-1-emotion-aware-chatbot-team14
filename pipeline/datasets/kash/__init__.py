@@ -16,17 +16,27 @@ Folder layout expected (matches the notebook's RAW_DIR):
         ...
 
 The notebook also performs face-detection + blur filtering during
-prep. We skip those in the initial port — run face_cropper.py
-separately if you want cropped faces, or extend this prepare() to
-call ingest.face_crop_imagefolder later.
+prep (cells 9-12). Both are opt-in via env vars:
+    KASH_FACE_CROP=1       run the shared YOLO detector + crop
+    KASH_BLUR_FILTER=1     reject by Laplacian variance < KASH_BLUR_THR
+    KASH_BLUR_THR=80.0     blur threshold (default = notebook 7)
+When either is set, prepare() routes through pipeline/datasets/kash/
+quality_filter.py and writes the filtered crops under
+output/data/kash/crops/ before the split.
 """
 
 from __future__ import annotations
 
+import json
+import logging
 import os
 from pathlib import Path
 
 from pipeline import ingest
+
+from . import quality_filter
+
+logger = logging.getLogger(__name__)
 
 
 NAME = "kash"
@@ -105,6 +115,13 @@ def prepare(ctx) -> "ingest.DatasetSpec":  # noqa: F821
     if not test_link.exists():
         test_link.symlink_to(raw_dir.resolve(), target_is_directory=True)
 
+    do_filter = (
+        os.environ.get("KASH_FACE_CROP", "0").lower() in {"1", "true", "yes"}
+        or os.environ.get("KASH_BLUR_FILTER", "0").lower() in {"1", "true", "yes"}
+    )
+    if do_filter:
+        return _prepare_filtered(cache_dir, source_dir)
+
     return ingest.finalize_dataset(
         name=NAME,
         cache_dir=cache_dir,
@@ -114,3 +131,50 @@ def prepare(ctx) -> "ingest.DatasetSpec":  # noqa: F821
         val_fraction=0.20,
         val_seed=42,
     )
+
+
+def _prepare_filtered(cache_dir: Path, source_dir: Path):
+    """Path taken when KASH_FACE_CROP or KASH_BLUR_FILTER is set.
+
+    Scans source/train (the symlink to raw_dir), remaps folder names to
+    EmpathBot labels, pushes the resulting (path, label) frame through
+    quality_filter.filter_dataset (which writes crops under
+    cache_dir/crops/), then carves train/val splits the same way the
+    default path does. test = train (notebook 7 doesn't carve a test
+    set — all images are train with a val_sample flag).
+    """
+    from pipeline.framework.specs import DatasetSpec
+
+    train_raw = ingest.scan_imagefolder(source_dir / "train")
+    train_remapped = ingest.apply_remap(train_raw, KASH_FOLDER_REMAP, CLASS_NAMES)
+    logger.info("kash: %d raw images after remap", len(train_remapped))
+
+    filtered = quality_filter.filter_dataset(
+        train_remapped, cache_dir / "crops", NAME,
+    )
+    if len(filtered) < 10:
+        raise RuntimeError(
+            f"kash: only {len(filtered)} images passed the quality filter — "
+            "loosen KASH_BLUR_THR or disable KASH_FACE_CROP."
+        )
+
+    filtered_pl = filtered[["path", "label"]].reset_index(drop=True)
+    train_df, val_df = ingest.carve_val(filtered_pl, 0.20, 42)
+    test_df = filtered_pl
+
+    splits = ingest.write_split_csvs(
+        {"train": train_df, "val": val_df, "test": test_df}, cache_dir,
+    )
+    weights = ingest.compute_class_weights(
+        train_df["label"], num_classes=len(CLASS_NAMES),
+    )
+    spec = DatasetSpec(
+        name=NAME, cache_dir=cache_dir, splits=splits,
+        num_classes=len(CLASS_NAMES), class_names=CLASS_NAMES,
+        class_weights=weights,
+        source_md5=ingest.md5_of_dir(source_dir),
+    )
+    (cache_dir / "manifest.json").write_text(json.dumps(spec.to_manifest(), indent=2))
+    logger.info("kash (filtered) ready — train=%d val=%d test=%d",
+                len(train_df), len(val_df), len(test_df))
+    return spec
