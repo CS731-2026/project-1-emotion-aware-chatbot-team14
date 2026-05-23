@@ -14,7 +14,11 @@ phases, models, or datasets.
 
 from .config import Config
 from .context import Context
+from .protocols import ConfigModule, DatasetModule, ModelModule
 from .specs import DatasetSpec, TrainedModel
 from .store import Store
 
-__all__ = ["Config", "Context", "DatasetSpec", "Store", "TrainedModel"]
+__all__ = [
+    "Config", "ConfigModule", "Context", "DatasetModule", "DatasetSpec",
+    "ModelModule", "Store", "TrainedModel",
+]
