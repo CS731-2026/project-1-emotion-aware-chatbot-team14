@@ -92,8 +92,8 @@ train:
 	python -m pipeline.train $(if $(RUN),--run "$(RUN)")
 
 train-list:
-	@python -c "from pipeline.runs_loader import load; \
-runs=load('runs.yaml'); \
+	@python -c "from pipeline.runs_loader import load_runs; \
+runs=load_runs('runs.yaml'); \
 print(f'{len(runs)} enabled run(s) in runs.yaml:'); \
 [print(f'  {r.dataset.NAME:24} x {r.model.__name__.rsplit(\".\",1)[-1]:22} x {r.config.NAME}') for r in runs]"
 

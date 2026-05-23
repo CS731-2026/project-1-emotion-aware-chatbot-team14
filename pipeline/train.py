@@ -26,7 +26,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from pipeline.driver import sweep
-from pipeline.runs_loader import load as load_runs
+from pipeline.runs_loader import load_runs
 
 
 def _filter_runs(resolved: list, pattern: str) -> list:

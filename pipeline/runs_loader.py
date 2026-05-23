@@ -86,7 +86,7 @@ def _make_overridden_config(base_module: ModuleType, overrides: dict[str, Any],
     return SimpleNamespace(NAME=f"{base_name}{suffix}", CONFIG=merged)
 
 
-def load(runs_yaml: Path | str = "runs.yaml") -> list[ResolvedRun]:
+def load_runs(runs_yaml: Path | str = "runs.yaml") -> list[ResolvedRun]:
     """Parse `runs_yaml` and return one ResolvedRun per enabled entry."""
     path = Path(runs_yaml)
     if not path.exists():
