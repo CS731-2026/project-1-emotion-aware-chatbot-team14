@@ -92,9 +92,10 @@ train:
 	python -m pipeline.train
 
 train-list:
-	@python -c "from pipeline.train import RUNS; \
-print(f'{len(RUNS)} run(s) declared in pipeline/train.py:'); \
-[print(f'  {d.NAME:24} x {m.__name__.rsplit(\".\",1)[-1]:14} x {c.NAME}') for (d,m,c) in RUNS]"
+	@python -c "from pipeline.runs_loader import load; \
+runs=load('runs.yaml'); \
+print(f'{len(runs)} enabled run(s) in runs.yaml:'); \
+[print(f'  {r.dataset.NAME:24} x {r.model.__name__.rsplit(\".\",1)[-1]:22} x {r.config.NAME}') for r in runs]"
 
 train-clean:
 	rm -rf output/

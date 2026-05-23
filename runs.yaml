@@ -1,0 +1,76 @@
+# What `make train` runs.
+#
+# Each entry under `runs:` declares one training run. Three required
+# fields (`dataset`, `model`, `config`) name the modules to use; an
+# optional `train_cfg` lets you override hyperparameters for just that
+# run without forking a config.
+#
+# Hyperparameter resolution (deepest → shallowest):
+#   1. pipeline/models/<model>/train_loop.py::CFG  (notebook defaults)
+#   2. configs/<config>.py::CONFIG                  (cross-cutting preset)
+#   3. this run's `train_cfg`                       (per-run override)
+#
+# Adding a run = one new YAML entry.
+# Skipping a run = comment its lines out, or use `enabled: false`.
+#
+# See pipeline/MIGRATING_NOTEBOOKS.md for the full walkthrough.
+
+runs:
+  # ── Smoke tests ─────────────────────────────────────────────────────
+  # Fast, network-free (synthetic data), prove the pipeline + each
+  # architecture wires up end-to-end.
+  - { dataset: synthetic_smoke,      model: mlp,                    config: fast }
+  - { dataset: synthetic_smoke,      model: tiny_cnn,               config: fast }
+  - { dataset: synthetic_smoke,      model: resnet18,               config: fast }
+  - { dataset: synthetic_smoke,      model: resnet18_fer_onecycle,  config: fast }
+  - { dataset: synthetic_smoke,      model: ada_df,                 config: fast }
+  - { dataset: synthetic_smoke,      model: empathbot_v1,           config: fast }
+  - { dataset: synthetic_smoke,      model: empathbot_v3,           config: fast }
+  - { dataset: synthetic_smoke,      model: empathbot_resnet18,     config: fast }
+  - { dataset: synthetic_smoke,      model: empathbot_final,        config: fast }
+
+  # ── Class-imbalance exercise ────────────────────────────────────────
+  # Validates class_weights: auto without needing Kaggle.
+  - { dataset: synthetic_imbalanced, model: tiny_cnn,               config: baseline }
+
+  # ── Real training on real data (requires Kaggle creds in .env) ──────
+  - { dataset: fer2013,              model: tiny_cnn,               config: baseline }
+  - { dataset: fer2013,              model: resnet18,               config: thorough }
+  - { dataset: fer2013,              model: resnet18_fer_onecycle,  config: thorough }
+  - { dataset: fer2013,              model: ada_df,                 config: thorough }
+  - { dataset: fer2013,              model: empathbot_v1,           config: thorough }
+  - { dataset: fer2013,              model: empathbot_v3,           config: thorough }
+  - { dataset: fer2013,              model: empathbot_resnet18,     config: thorough }
+  - { dataset: fer2013,              model: empathbot_final,        config: thorough }
+
+  # ── Examples of per-run overrides (commented out) ───────────────────
+  #
+  # Re-run empathbot_final with a shorter freeze + stronger mixup:
+  # - dataset: fer2013
+  #   model: empathbot_final
+  #   config: thorough
+  #   train_cfg:
+  #     backbone_freeze_epochs: 3
+  #     mixup_alpha: 0.3
+  #
+  # Quick 5-epoch sanity check:
+  # - dataset: fer2013
+  #   model: resnet18
+  #   config: thorough
+  #   train_cfg:
+  #     epochs: 5
+
+  # ── POSTER++ ────────────────────────────────────────────────────────
+  # Needs `make install-training` so vendor/POSTER_V2 is cloned + staged,
+  # and the published RAF-DB checkpoint at output/models/posterv2_rafdb.pth.
+  # - { dataset: fer2013, model: posterplus, config: thorough }
+
+  # ── Local-disk datasets ─────────────────────────────────────────────
+  # kash needs $KASH_DATASET_DIR or output/data/kash/raw/ populated.
+  # - { dataset: kash, model: tiny_cnn,     config: baseline }
+  # - { dataset: kash, model: empathbot_v1, config: thorough }
+  #
+  # empath needs at least one of EMPATH_{AFFECTNET,RAFDB,SFEW}_DIR.
+  # - { dataset: empath, model: tiny_cnn,        config: baseline }
+  # - { dataset: empath, model: empathbot_v1,    config: thorough }
+  # - { dataset: empath, model: empathbot_final, config: thorough }
