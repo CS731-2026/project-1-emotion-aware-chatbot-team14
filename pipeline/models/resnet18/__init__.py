@@ -1,5 +1,19 @@
 """ResNet18 baseline — faithful port of Notebooks/2_benchmark_resnet18.ipynb.
 
+Also covers:
+
+  * Notebooks/2_benchmark_resnet18_colab.ipynb — functionally identical
+    training procedure (same Adam lr=1e-4, weight_decay=1e-4, StepLR
+    ×0.5 every 10 epochs, dropout-0.3 head, weighted CE, EmpathBot
+    6-class). Adds only Drive mounting + output zipping cells.
+
+  * Notebooks/2_colab_hf_datasets_resnet18.ipynb — same training
+    procedure; differs only in BATCH_SIZE=64 (vs 32) and resumable
+    latest+best checkpointing. The notebook's distinctive contribution
+    is its dataset-prep flow (HF download + YOLO face-crop + label
+    mapping + class weights JSON) which lives under
+    pipeline/datasets/empath/ — not in this model module.
+
 The notebook is the source of truth; any architecture or training
 procedure tweak should land there first and be re-lifted across this
 package's files.
