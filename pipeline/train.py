@@ -34,9 +34,9 @@ from pipeline.models import (
     empathbot_final,
     empathbot_v1,
     mlp,
+    posterplus,
     resnet18,
     tiny_cnn,
-    # posterplus,  # stub — needs POSTER_V2 vendored via git-weave first
 )
 
 
@@ -69,7 +69,10 @@ RUNS = [
     (fer2013,               empathbot_v1,     thorough_cfg),
     (fer2013,               empathbot_final,  thorough_cfg),
 
-    # posterplus skipped until POSTER_V2 is vendored via git-weave.
+    # POSTER++ requires the POSTER_V2 repo cloned via `make init` (the
+    # .thread file in pipeline/models/posterplus/ pulls it in).
+    # Uncomment after running make init.
+    # (fer2013,               posterplus,       thorough_cfg),
 
     # ─── Local-disk datasets (uncomment after pointing env vars at sources) ──
     # kash needs $KASH_DATASET_DIR or output/data/kash/raw/ populated
