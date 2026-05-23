@@ -12,6 +12,7 @@ checkpoint without retraining.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 import torch
@@ -23,7 +24,9 @@ if TYPE_CHECKING:
 
 
 def merge_cfg(default: dict, overrides: dict | None) -> dict:
-    """Shallow-merge `overrides` over `default`, ignoring unknown keys.
+    """Shallow-merge `overrides` over `default`, ignoring unknown keys,
+    and log the resolved + diff so it's never ambiguous what
+    hyperparameters a run actually used.
 
     Used by every model's `run(ctx, dataset, model)` to apply the
     pipeline-level CONFIG dict over the model's own CFG defaults:
@@ -34,10 +37,31 @@ def merge_cfg(default: dict, overrides: dict | None) -> dict:
     model) are silently dropped so a single shared config can be passed
     to many models without each one breaking on extra fields. Any key
     in `default` is automatically overridable — no manual whitelist.
+
+    Three lines land at INFO so the run log is self-documenting:
+      hparams (defaults): {...}        ← model's CFG (notebook values)
+      hparams (overrides): {...}       ← what the config/train_cfg supplied
+      hparams (resolved): {...}        ← what training will actually use
+    Plus a warning for any override keys that were ignored as unknown.
     """
-    if not overrides:
-        return dict(default)
-    return {**default, **{k: v for k, v in overrides.items() if k in default}}
+    resolved = {**default, **{k: v for k, v in (overrides or {}).items()
+                               if k in default}}
+
+    _log = logging.getLogger("pipeline.training.hparams")
+    if overrides:
+        applied   = {k: v for k, v in overrides.items() if k in default}
+        ignored   = {k: v for k, v in overrides.items() if k not in default}
+        _log.info("hparams (defaults):  %s", default)
+        _log.info("hparams (overrides): %s", applied if applied else "(none applied)")
+        _log.info("hparams (resolved):  %s", resolved)
+        if ignored:
+            _log.warning(
+                "hparams: %d override key(s) ignored (not in this model's CFG): %s",
+                len(ignored), sorted(ignored),
+            )
+    else:
+        _log.info("hparams (resolved):  %s", resolved)
+    return resolved
 
 
 def auto_device() -> torch.device:
