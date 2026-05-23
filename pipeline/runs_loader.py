@@ -1,5 +1,4 @@
-"""Load runs.yaml into the (dataset_module, model_module, config_module)
-tuples the driver expects.
+"""Load runs.yaml → ResolvedRun list the driver expects.
 
 YAML schema:
 
@@ -12,26 +11,15 @@ YAML schema:
           epochs: 5
           backbone_freeze_epochs: 3
 
-What each field's module is then required to expose:
+What each field's module must expose (also in framework.protocols):
 
-    field      module                            attribute used by the framework
-    ────────   ──────────────────────────────    ──────────────────────────────────
-    dataset    pipeline.datasets.<name>          NAME: str
-                                                 CLASS_NAMES: list[str]
-                                                 prepare(ctx) -> DatasetSpec
-    model      pipeline.models.<name>            train(ctx, dataset) -> TrainedModel
-                                                 (optionally: build(num_classes),
-                                                  PREPROCESS for the live service)
-    config     configs.<name>                    NAME: str
-                                                 CONFIG: dict[str, Any]
+    dataset    NAME, CLASS_NAMES, prepare(ctx) -> DatasetSpec
+    model      train(ctx, dataset) -> TrainedModel
+    config     NAME, CONFIG (dict)
 
-The optional `train_cfg` is shallow-merged over the named config's
-CONFIG dict so a single run can tweak hyperparameters without forking
-a whole config file. When overrides are present the run dir slug gets
-a `+key1-key2` suffix so distinct variants don't collide.
-
-Errors are explicit — an unknown name or a missing required field
-raises with a clear message naming the offending run index.
+train_cfg is shallow-merged over the named config's CONFIG. When
+overrides are present the run dir slug gets a `+key1-key2` suffix so
+distinct variants don't collide. Errors name the offending run index.
 """
 
 from __future__ import annotations
@@ -40,7 +28,7 @@ import importlib
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from typing import Any
 
 import yaml
@@ -48,60 +36,47 @@ import yaml
 
 @dataclass
 class ResolvedRun:
-    """One run after name → module resolution. The driver's `sweep()`
-    accepts these as 3-tuples (dataset_module, model_module, config_like).
-    `config_like` is a SimpleNamespace exposing the same `NAME` + `CONFIG`
-    that real config modules do, so per-run train_cfg overrides slot in
-    without changing the driver."""
+    """One run after name → module resolution. .as_tuple() = what sweep() takes."""
     dataset: ModuleType
     model:   ModuleType
-    config:  Any   # module-like — has .NAME and .CONFIG attributes
+    config:  Any   # module or SimpleNamespace — has .NAME and .CONFIG
 
     def as_tuple(self) -> tuple[ModuleType, ModuleType, Any]:
         return (self.dataset, self.model, self.config)
 
 
 def _import(parent: str, name: str, run_index: int) -> ModuleType:
-    """Import `parent.name`, with a friendly error if it doesn't exist."""
     try:
         return importlib.import_module(f"{parent}.{name}")
     except ImportError as e:
         raise ValueError(
             f"runs.yaml entry #{run_index}: can't import {parent}.{name} "
-            f"({e}). Check the spelling against the directories under "
+            f"({e}). Check spelling vs the directories under "
             f"{parent.replace('.', '/')}/."
         ) from e
 
 
 def _make_overridden_config(base_module: ModuleType, overrides: dict[str, Any],
-                              run_index: int) -> Any:
-    """Return a config object that exposes NAME + a merged CONFIG dict.
-
-    When `overrides` is empty, returns the base module unchanged so the
-    sweep slug stays the named config. When non-empty, wraps it in a
-    SimpleNamespace with a `+overrides` suffix on the name so two runs
-    sharing the same named config but different overrides land in
-    distinct run dirs.
-    """
+                             run_index: int) -> Any:
+    """No overrides → return module unchanged (keeps slug clean). Otherwise
+    wrap in a SimpleNamespace with a `+keys` suffix so two runs with the
+    same base config but different overrides land in distinct run dirs."""
     if not overrides:
         return base_module
-
     if not hasattr(base_module, "CONFIG"):
         raise ValueError(
             f"runs.yaml entry #{run_index}: config '{base_module.__name__}' "
             "has no CONFIG dict — can't apply train_cfg overrides."
         )
-
-    from types import SimpleNamespace
-    merged = deepcopy(getattr(base_module, "CONFIG", {}))
+    merged = deepcopy(base_module.CONFIG)
     merged.update(overrides)
     base_name = getattr(base_module, "NAME", base_module.__name__.split(".")[-1])
-    suffix = "+" + "-".join(sorted(overrides.keys()))[:40]
+    suffix = "+" + "-".join(sorted(overrides))[:40]
     return SimpleNamespace(NAME=f"{base_name}{suffix}", CONFIG=merged)
 
 
 def load_runs(runs_yaml: Path | str = "runs.yaml") -> list[ResolvedRun]:
-    """Parse `runs_yaml` and return one ResolvedRun per enabled entry."""
+    """Parse runs_yaml, return one ResolvedRun per enabled entry."""
     path = Path(runs_yaml)
     if not path.exists():
         raise FileNotFoundError(
@@ -109,8 +84,7 @@ def load_runs(runs_yaml: Path | str = "runs.yaml") -> list[ResolvedRun]:
             f"Create it (see pipeline/MIGRATING_NOTEBOOKS.md) or pass --runs."
         )
 
-    with path.open() as f:
-        data = yaml.safe_load(f) or {}
+    data = yaml.safe_load(path.read_text()) or {}
     raw_runs = data.get("runs") or []
     if not isinstance(raw_runs, list):
         raise ValueError(f"runs.yaml: top-level `runs:` must be a list, got {type(raw_runs).__name__}")
@@ -126,15 +100,14 @@ def load_runs(runs_yaml: Path | str = "runs.yaml") -> list[ResolvedRun]:
             if required not in entry:
                 raise ValueError(f"runs.yaml entry #{idx}: missing required field '{required}'")
 
-        dataset_mod = _import("pipeline.datasets", entry["dataset"], idx)
-        model_mod   = _import("pipeline.models",   entry["model"],   idx)
-        config_mod  = _import("configs",           entry["config"],  idx)
-
         overrides = entry.get("train_cfg") or {}
         if overrides and not isinstance(overrides, dict):
             raise ValueError(f"runs.yaml entry #{idx}: train_cfg must be a mapping")
 
-        cfg_obj = _make_overridden_config(config_mod, overrides, idx)
-        resolved.append(ResolvedRun(dataset=dataset_mod, model=model_mod, config=cfg_obj))
-
+        resolved.append(ResolvedRun(
+            dataset=_import("pipeline.datasets", entry["dataset"], idx),
+            model  =_import("pipeline.models",   entry["model"],   idx),
+            config =_make_overridden_config(
+                _import("configs", entry["config"], idx), overrides, idx),
+        ))
     return resolved

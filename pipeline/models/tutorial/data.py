@@ -1,8 +1,7 @@
-"""Dataset class — turns the CSV (`path,label`) into (image, label) batches.
+"""Dataset class — CSV (`path,label`) → batches of (image, label).
 
-Common case; copy verbatim. For per-sample routing (e.g. stronger augment
-for hard classes, weighted sampling, blur filters) see
-pipeline/models/empathbot_v1/data.py.
+Copy verbatim for the common case. See pipeline/models/empathbot_v1/data.py
+for per-sample routing (stronger augment for hard classes, etc).
 """
 
 from __future__ import annotations
@@ -17,17 +16,16 @@ from torch.utils.data import Dataset
 class CsvImageDataset(Dataset):
     def __init__(self, csv_path, transform) -> None:
         df = pd.read_csv(csv_path)
-
-        # Drop rows whose files no longer exist (dataset module logs a warning
-        # when it sees these). After this, __getitem__ can trust the path.
+        # Drop missing files at init so __getitem__ can trust the path.
         valid = df["path"].apply(lambda p: Path(p).exists())
         self.df = df[valid].reset_index(drop=True)
-        self.transform = transform                # train vs val transform per-loader
+        self.transform = transform
 
     def __len__(self) -> int:
         return len(self.df)
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
-        img = Image.open(row["path"]).convert("RGB")  # force RGB (some FER sets ship grayscale)
+        # Force RGB — some FER sets ship grayscale.
+        img = Image.open(row["path"]).convert("RGB")
         return self.transform(img), int(row["label"])

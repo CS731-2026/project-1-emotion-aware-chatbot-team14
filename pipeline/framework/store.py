@@ -1,15 +1,4 @@
-"""Phase-to-phase handoff bag.
-
-Each phase puts the objects it produces under a key from
-`pipeline.keys`; later phases get them back, type-asserted at the
-boundary so a misnamed key or wrong-type clobber fails loudly instead
-of propagating None.
-
-Strict by default: `put` refuses to overwrite an existing key — use
-`replace` when overwriting is the intent (e.g. a re-eval phase
-replacing an earlier `EVAL_REPORT`). Catches the easy bug where two
-phases accidentally share a key.
-"""
+"""Phase-to-phase handoff bag. Strict put (no clobber), typed get."""
 
 from __future__ import annotations
 
@@ -23,27 +12,23 @@ class Store:
         self._data: dict[str, Any] = {}
 
     def put(self, key: str, value: Any) -> None:
-        """Insert a value under `key`. Raises if the key is already set."""
+        # Refuses overwrite; use replace() if that's the intent. Catches
+        # two phases accidentally sharing a key.
         if key in self._data:
             raise KeyError(
                 f"store already has {key!r} "
-                f"(holding a {type(self._data[key]).__name__}). "
+                f"(holding {type(self._data[key]).__name__}). "
                 f"Use replace() if overwriting is intentional."
             )
         self._data[key] = value
 
     def replace(self, key: str, value: Any) -> None:
-        """Overwrite-allowed sibling of put(). Use when a phase legitimately
-        produces a new version of an existing key (e.g. re-evaluation)."""
+        # For phases that legitimately produce a new version (e.g. re-eval).
         self._data[key] = value
 
     def get(self, key: str, expected: type[T]) -> T:
-        """Fetch a value by key, asserting it's an instance of `expected`.
-
-        Both missing-key and wrong-type cases raise with a message naming
-        the available keys so the caller can spot a typo or a skipped
-        earlier phase without reading the trace.
-        """
+        # Type-asserts at the boundary so a typo / wrong-type clobber fails
+        # loudly with a useful message instead of propagating None.
         if key not in self._data:
             raise KeyError(
                 f"store has no entry for {key!r}. "
