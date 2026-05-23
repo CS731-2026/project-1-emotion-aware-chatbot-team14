@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 
 .PHONY: dev dev-services dev-harness dev-backend dev-frontend install install-training open kill crop-faces test-face-cropper \
-        train train-list train-clean deploy-model publish-model fetch-models
+        train train-list train-clean deploy-model publish-model fetch-models compare
 
 dev: kill
 	$(MAKE) -j3 --keep-going dev-harness dev-backend dev-frontend
@@ -100,6 +100,17 @@ print(f'{len(runs)} enabled run(s) in runs.yaml:'); \
 train-clean:
 	rm -rf output/
 	@echo "wiped output/ (cached datasets + run dirs + checkpoints)"
+
+# Print a leaderboard of every run under output/run/.
+#   make compare                         # everything, sorted by test_acc
+#   make compare FILTER=empathbot        # substring filter
+#   make compare FILTER=fer2013 TOP=10
+#   make compare SORT=val_acc
+compare:
+	@python -m pipeline.cli.compare \
+		$(if $(FILTER),--filter "$(FILTER)") \
+		$(if $(SORT),--sort-by $(SORT)) \
+		$(if $(TOP),--top $(TOP))
 
 # ──────────────────────────────────────────────────────────────────────────
 # Deploy a trained checkpoint into the model_service.
