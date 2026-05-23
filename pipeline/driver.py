@@ -54,12 +54,12 @@ def run_one(
     """
     phases_to_run = phases_to_run or ["setup", "prepare_dataset", "train"]
     cfg = Config(
-        dataset    = dataset_module.NAME,
-        model      = _model_name(model_module),
-        config     = config_module.NAME,
-        seed       = seed,
-        train_cfg  = dict(config_module.CONFIG),
-        phases     = list(phases_to_run),
+        dataset_name = dataset_module.NAME,
+        model_name   = _short_module_name(model_module),
+        config_name  = config_module.NAME,
+        seed         = seed,
+        train_cfg    = dict(config_module.CONFIG),
+        phases       = list(phases_to_run),
     )
     ctx = Context.create(cfg, dataset_module=dataset_module, model_module=model_module)
     try:
@@ -99,18 +99,18 @@ def sweep(
     for i, (ds, m, c) in enumerate(runs, 1):
         logger.info("─" * 60)
         logger.info("sweep [%d/%d]: %s × %s × %s",
-                    i, len(runs), ds.NAME, _model_name(m), c.NAME)
+                    i, len(runs), ds.NAME, _short_module_name(m), c.NAME)
         try:
             contexts.append(run_one(ds, m, c, seed=seed))
         except Exception:
             logger.exception("sweep cell failed: %s × %s × %s",
-                             ds.NAME, _model_name(m), c.NAME)
+                             ds.NAME, _short_module_name(m), c.NAME)
             if fail_fast:
                 raise
     return contexts
 
 
-def _model_name(module: ModuleType) -> str:
+def _short_module_name(module: ModuleType) -> str:
     """Models don't carry a NAME constant — derive it from the module
     path. `models.tiny_cnn` → `tiny_cnn`."""
     return module.__name__.rsplit(".", 1)[-1]

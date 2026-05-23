@@ -75,9 +75,9 @@ class Context:
 
         # Snapshot the resolved config — first thing in the dir.
         (run_dir / "config.yaml").write_text(yaml.safe_dump({
-            "dataset":    config.dataset,
-            "model":      config.model,
-            "config":     config.config,
+            "dataset":    config.dataset_name,
+            "model":      config.model_name,
+            "config":     config.config_name,
             "seed":       config.seed,
             "phases":     config.phases,
             "train_cfg":  config.train_cfg,
