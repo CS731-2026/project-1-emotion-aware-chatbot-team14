@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 
 .PHONY: dev dev-services dev-harness dev-backend dev-frontend install install-training open kill crop-faces test-face-cropper \
-        train train-list train-clean
+        train train-list train-clean deploy-model
 
 dev: kill
 	$(MAKE) -j3 --keep-going dev-harness dev-backend dev-frontend
@@ -99,3 +99,33 @@ print(f'{len(RUNS)} run(s) declared in pipeline/train.py:'); \
 train-clean:
 	rm -rf output/
 	@echo "wiped output/ (cached datasets + run dirs + checkpoints)"
+
+# ──────────────────────────────────────────────────────────────────────────
+# Deploy a trained checkpoint into the model_service.
+#
+# Copies output/run/<RUN>/checkpoints/best.pth → models/<ID>/best.pth and
+# adds an entry to application/model_service/models.yaml mapping <ID>
+# to the correct service variant. After deploy, set EMOTION_MODEL_ID=<ID>
+# in .env (or inline) and `make dev` to use it.
+#
+# Usage:
+#   make deploy-model RUN=fer2013__empathbot_final__thorough__20260524-... ID=empathbot_final
+#   make deploy-model RUN=LATEST ID=my_model         # picks newest output/run/ subdir
+#   make deploy-model RUN=... ID=... VARIANT=resnet18  # override inferred variant
+# ──────────────────────────────────────────────────────────────────────────
+deploy-model:
+	@if [ -z "$(RUN)" ] || [ -z "$(ID)" ]; then \
+		echo "usage: make deploy-model RUN=<run-dir-name> ID=<model-id> [VARIANT=<variant>] [CHECKPOINT=best.pth]"; \
+		echo "  RUN=LATEST  picks the most recently created dir under output/run/"; \
+		exit 2; \
+	fi
+	@RUN_RESOLVED="$(RUN)"; \
+	if [ "$$RUN_RESOLVED" = "LATEST" ]; then \
+		RUN_RESOLVED=$$(ls -t output/run/ | head -1); \
+		echo "→ LATEST resolved to: $$RUN_RESOLVED"; \
+	fi; \
+	python -m pipeline.cli.deploy_model \
+		--run "output/run/$$RUN_RESOLVED" \
+		--id "$(ID)" \
+		$(if $(VARIANT),--variant $(VARIANT)) \
+		$(if $(CHECKPOINT),--checkpoint $(CHECKPOINT))
