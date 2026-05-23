@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import config
 
+from ..model_resolver import resolve_checkpoint
 from .base import EmotionModel
 
 
@@ -37,7 +38,12 @@ def create_emotion_model(variant: str = "placeholder") -> EmotionModel:
                 f"models.yaml. Known ids: {sorted(registry.keys())}"
             )
         variant = entry["variant"]
-        checkpoint_path = str(config.REPO_ROOT / entry["path"])
+        # Auto-fetches from Kaggle if missing locally — see model_resolver.py
+        # for the resolution flow ("creds-only" team distribution).
+        checkpoint_path = str(resolve_checkpoint(
+            entry["path"], repo_root=config.REPO_ROOT,
+            model_id=config.EMOTION_MODEL_ID,
+        ))
 
     if variant == "placeholder":
         from .placeholder import PlaceholderEmotionModel
