@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 
 .PHONY: dev dev-services dev-harness dev-backend dev-frontend install install-training open kill crop-faces test-face-cropper \
-        train train-list train-clean deploy-model publish-model fetch-models compare
+        train train-list train-clean deploy-model publish-model fetch-models compare new-model
 
 dev: kill
 	$(MAKE) -j3 --keep-going dev-harness dev-backend dev-frontend
@@ -100,6 +100,18 @@ print(f'{len(runs)} enabled run(s) in runs.yaml:'); \
 train-clean:
 	rm -rf output/
 	@echo "wiped output/ (cached datasets + run dirs + checkpoints)"
+
+# Scaffold a new model module under pipeline/models/<id>/.
+#   make new-model ID=my_model                 # simple template (30-line)
+#   make new-model ID=my_model TEMPLATE=custom # full 5-file layout
+new-model:
+	@if [ -z "$(ID)" ]; then \
+		echo "usage: make new-model ID=<snake_case_id> [TEMPLATE=simple|custom] [FORCE=1]"; \
+		exit 2; \
+	fi
+	@python -m pipeline.cli.new_model "$(ID)" \
+		$(if $(TEMPLATE),--template $(TEMPLATE),--template simple) \
+		$(if $(FORCE),--force)
 
 # Print a leaderboard of every run under output/run/.
 #   make compare                         # everything, sorted by test_acc
