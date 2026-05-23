@@ -1,11 +1,27 @@
 """Pipeline driver.
 
 Composition file — orchestrates phases and the dataset×model×config
-sweep. Reads module references registered in pipeline/train.py (the
-entry point) and walks the cross-product, one run per cell.
+sweep. Reads module references resolved from runs.yaml (via
+pipeline.runs_loader.load_runs) and walks them, one run per entry.
 
 The PHASES dict is the registry of phase functions. Adding a new
 phase = one function in phases.py + one entry here.
+
+Call chain for one run (from `make train` down to your model code):
+
+    make train
+      → pipeline/train.py::main()
+          → pipeline.runs_loader.load_runs("runs.yaml")
+              → importlib resolves dataset/model/config names → modules
+          → pipeline.driver.sweep(runs)
+              → for each: pipeline.driver.run_one(ds, m, c)
+                  → pipeline.framework.context.Context.create(...)   # builds run dir
+                  → for each phase in PHASES (setup, prepare_dataset, train):
+                      → pipeline.phases.<phase>(ctx)
+                          # prepare_dataset → ctx.dataset_module.prepare(ctx)
+                          #                    = pipeline.datasets.<name>.prepare(ctx)
+                          # train           → ctx.model_module.train(ctx, dataset)
+                          #                    = pipeline.models.<name>.train(ctx, dataset)
 """
 
 from __future__ import annotations

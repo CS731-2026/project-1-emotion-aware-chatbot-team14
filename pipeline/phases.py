@@ -81,8 +81,15 @@ def train(ctx: Context) -> None:
     write their own loop directly here. The phase is just glue:
     invoke train(), assert the return type, put the TrainedModel
     in the store.
+
+    Note for readers: there are TWO functions called `train` involved.
+    This one (pipeline.phases.train) is the framework phase. The call
+    `ctx.model_module.train(ctx, ds)` below invokes the USER's train,
+    defined in pipeline/models/<your_model>/__init__.py — that's the
+    function whose contract the model tutorial documents.
     """
     ds = ctx.store.get(K.DATASET, DatasetSpec)
+    # ↓ user function: pipeline.models.<name>.train(ctx, dataset)
     trained = ctx.model_module.train(ctx, ds)
     if not isinstance(trained, TrainedModel):
         raise TypeError(
