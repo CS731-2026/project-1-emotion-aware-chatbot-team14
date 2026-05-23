@@ -19,16 +19,18 @@ env var (EMPATH_AFFECTNET_DIR / EMPATH_RAFDB_DIR / EMPATH_SFEW_DIR)
 and fails loudly if not set. Place the team's processed (face-cropped)
 copies at those paths.
 
-The notebook also runs YOLO face detection + cropping (cell 22) before
-merging. We skip that here — run pipeline.face_cropper.py (or the
-top-level face_cropper.py CLI) against the raw sources first, then
-point the env vars at the cropped outputs. This keeps prepare()
-deterministic and fast.
+The notebook also runs YOLO face detection + cropping (cells 24-26)
+before merging. By default we skip that step — set EMPATH_FACE_CROP=1
+to enable the in-line face-detection pre-pass (cached under
+output/data/empath/crops/<source>/<label>/). Otherwise, run
+face_cropper.py against the raw sources first and point the env vars
+at the cropped outputs.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -36,7 +38,7 @@ import pandas as pd
 from pipeline import ingest
 from pipeline.framework.specs import DatasetSpec
 
-from . import affectnet, rafdb, sfew
+from . import affectnet, face_crop, rafdb, sfew
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +69,9 @@ def prepare(ctx) -> DatasetSpec:
     # Collect available sources. Each loader returns a DataFrame with
     # columns ['path', 'label', 'split'] where label is the EmpathBot
     # class index and split is one of {'train', 'val', 'test'}.
+    do_face_crop = os.environ.get("EMPATH_FACE_CROP", "0").lower() in {"1", "true", "yes"}
+    crops_root = cache_dir / "crops"
+
     parts: list[pd.DataFrame] = []
     for name, loader in [
         ("affectnet", affectnet.load),
@@ -75,6 +80,8 @@ def prepare(ctx) -> DatasetSpec:
     ]:
         try:
             df = loader()
+            if do_face_crop:
+                df = face_crop.crop_dataset(df, crops_root / name, name)
             df["dataset"] = name
             parts.append(df)
             logger.info("empath: loaded %s — %d rows", name, len(df))
