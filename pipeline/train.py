@@ -21,7 +21,13 @@ import configs.baseline as baseline_cfg
 import configs.fast as fast_cfg
 import configs.thorough as thorough_cfg
 
-from pipeline.datasets import fer2013, synthetic_imbalanced, synthetic_smoke
+from pipeline.datasets import (
+    empath,
+    fer2013,
+    kash,
+    synthetic_imbalanced,
+    synthetic_smoke,
+)
 from pipeline.driver import sweep
 from pipeline.models import (
     ada_df,
@@ -64,6 +70,18 @@ RUNS = [
     (fer2013,               empathbot_final,  thorough_cfg),
 
     # posterplus skipped until POSTER_V2 is vendored via git-weave.
+
+    # ─── Local-disk datasets (uncomment after pointing env vars at sources) ──
+    # kash needs $KASH_DATASET_DIR or output/data/kash/raw/ populated
+    # (see Notebooks/7_kash_dataset_prep.ipynb for the expected layout).
+    # (kash,                  tiny_cnn,         baseline_cfg),
+    # (kash,                  empathbot_v1,     thorough_cfg),
+
+    # empath needs at least one of EMPATH_{AFFECTNET,RAFDB,SFEW}_DIR set
+    # (see Notebooks/1_dataset_pipeline.ipynb).
+    # (empath,                tiny_cnn,         baseline_cfg),
+    # (empath,                empathbot_v1,     thorough_cfg),
+    # (empath,                empathbot_final,  thorough_cfg),
 ]
 
 # --------------------------------------------------------------------------
