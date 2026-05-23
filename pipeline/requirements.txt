@@ -1,0 +1,25 @@
+# Training pipeline (v2) dependencies — see TRAINING.md.
+# `make install-training` installs these.
+#
+# Core (every model + dataset module needs these):
+torch>=2.0.0
+torchvision>=0.15.0
+numpy>=1.24.0
+pandas>=2.0.0
+Pillow>=10.0.0
+scikit-learn>=1.3.0
+PyYAML>=6.0
+
+# Architecture-specific:
+# timm — EfficientNet-B2 backbone for empathbot_v1, empathbot_final, ada_df
+timm>=0.9.0
+
+# Face crop / blur filter pre-steps (empath/face_crop.py + kash/quality_filter.py).
+# Both are opt-in via env vars (EMPATH_FACE_CROP, KASH_FACE_CROP, KASH_BLUR_FILTER);
+# remove these two lines if you'll never use the filters.
+opencv-python>=4.8.0
+ultralytics>=8.0.0
+
+# POSTER++ model dependencies (only needed if running the posterplus row in RUNS).
+# `make install-training` clones POSTER_V2 via git-weave from vendor/POSTER_V2.thread.
+einops>=0.7.0

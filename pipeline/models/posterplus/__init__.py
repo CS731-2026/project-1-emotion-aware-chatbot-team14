@@ -2,9 +2,11 @@
 
 Source of truth: Notebooks/3_benchmark_posterplus.ipynb. The notebook
 clones github.com/Talented-Q/POSTER_V2 at run time; we do the same
-via a `.thread` file (see POSTER_V2.thread) so `make init` /
-`npx weave sync` pulls it into pipeline/models/posterplus/POSTER_V2/
-on first setup.
+via a `.thread` file at `vendor/POSTER_V2.thread` (weave config
+`weave.json` scans `vendor/`). `make install-training` runs
+`npx weave sync` to clone it into `vendor/POSTER_V2/` and then
+symlinks that into `pipeline/models/posterplus/POSTER_V2/` so the
+Python imports below resolve.
 
 Architecture:
   - POSTER_V2's pyramid_trans_expr2 (Pyramid Transformer Expression v2)
@@ -12,10 +14,10 @@ Architecture:
     to dataset.num_classes for our 6-class EmpathBot use
 
 First-run setup:
-  make init          # → `npx weave sync` clones POSTER_V2 here
+  make install-training   # pip install + weave sync + stage symlink
   # OR manually:
-  git clone https://github.com/Talented-Q/POSTER_V2.git \\
-      pipeline/models/posterplus/POSTER_V2
+  npx weave sync
+  ln -s ../../../vendor/POSTER_V2 pipeline/models/posterplus/POSTER_V2
 
 The notebook is **inference-only** — it loads the published RAF-DB
 checkpoint and reports accuracy / per-class metrics against the test

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "scan": [".", "sandbox/student_taurajgreig/services/wisper.cpp/"],
+  "scan": [".", "vendor/", "sandbox/student_taurajgreig/services/wisper.cpp/"],
   "syncStrategy": "latest",
   "hooks": {
     "postMerge": true,
