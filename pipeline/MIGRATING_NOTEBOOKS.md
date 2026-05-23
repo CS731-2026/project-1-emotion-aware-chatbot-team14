@@ -218,6 +218,51 @@ These are the artifacts your notebook's final cells produced. If
 something's missing, the post-training step logged a warning — search
 the run's stdout for `reporting:`.
 
+### Adding your own artifacts (any plot, table, metric you want)
+
+Every phase function receives a `ctx` (Context). It exposes five
+artifact-save methods — that's the entire API. **You never write a
+path yourself** — `ctx` knows where the current run dir is and
+handles the filesystem for you:
+
+```python
+def run(ctx, dataset, model):
+    ...
+    # any matplotlib figure
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots()
+    ax.plot([1, 2, 3])
+    ctx.save_image("my_custom_plot", fig)          # → artifacts/my_custom_plot.png
+
+    # any JSON-serialisable dict (or list of dicts, etc)
+    ctx.save_json("eval_breakdown", {              # → artifacts/eval_breakdown.json
+        "per_subject": {...},
+        "by_lighting": {...},
+    })
+
+    # plain text — reports, prompts, debug dumps
+    ctx.save_text("notes", "trained 30 epochs, …") # → artifacts/notes.txt
+
+    # one metric line — appended to metrics.jsonl, cheap to call per batch
+    ctx.save_scalar("custom/lr", current_lr, step=epoch)
+
+    # torch state dict (you usually don't need this — write_standard_artifacts
+    # already saves best.pth; this is for extra/intermediate checkpoints)
+    ctx.save_checkpoint("epoch_10_snapshot", model.state_dict())
+```
+
+All paths land under the run dir automatically. **The
+`output/run/<slug>__<ts>/` directory is an implementation detail —
+you only touch it when reading completed runs back from disk
+(`ctx.run_dir` is exposed if you really need it, e.g. to load the
+best.pth back at end of training).**
+
+Files with no extension get a default one (`.png` for save_image,
+`.json` for save_json, `.txt` for save_text). Subdirectories work:
+`ctx.save_image("epoch_5/predictions", fig)` lands at
+`artifacts/epoch_5/predictions.png`. The parent dirs are created
+automatically.
+
 ## 6. Datasets
 
 Auto-downloadable:
@@ -261,16 +306,52 @@ EMOTION_MODEL_ID=my_empathbot
 Variants supported by the service: `placeholder`, `resnet18`,
 `empathbot`. Pass `VARIANT=resnet18` to override the inferred one.
 
-To share weights with the team without committing binaries:
+### Sharing weights with the team — "creds only"
+
+Trained checkpoints don't belong in git. The team distributes them
+through one Kaggle dataset (slug in `KAGGLE_WEIGHTS_SLUG`, default
+`team14/empathbot-checkpoints`).
+
+**Author flow** — you trained a model:
 
 ```bash
-make publish-model ID=my_empathbot NEW=1          # first time
-make publish-model ID=my_empathbot MESSAGE="..."  # subsequent versions
-make fetch-models                                  # other teammate pulls
+make deploy-model RUN=LATEST ID=my_empathbot     # local: copy + register
+make publish-models                              # upload all local models/<id>/* to Kaggle
 ```
 
-Uses the Kaggle dataset slug in `KAGGLE_WEIGHTS_SLUG` (default
-`team14/empathbot-checkpoints`).
+**Teammate flow** — they want to *use* your model in the live app:
+
+```bash
+# .env
+KAGGLE_USERNAME=their_username
+KAGGLE_KEY=their_api_key
+EMOTION_MODEL_ID=my_empathbot
+
+make dev
+```
+
+That's it. The model service auto-fetches the checkpoint from Kaggle
+on first boot (when `models/my_empathbot/best.pth` is missing) and
+caches it locally. Subsequent boots skip the fetch.
+
+If your teammate prefers to pull everything explicitly:
+
+```bash
+make fetch-models           # pulls all team weights into models/
+```
+
+Notes:
+- `publish-models` (plural) uploads **all** `models/<id>/*` as one
+  Kaggle dataset version. Kaggle datasets are atomic, so per-model
+  publish would erase every other team weight. The `publish-model`
+  (singular) target still exists but warns; reach for it only if you
+  know what you're doing.
+- The slug + `KAGGLE_*` creds live in `.env`. `application/model_service/
+  config.py` and `pipeline/train.py` both call `load_dotenv()` so a
+  single .env covers training, deploy, publish, and the live service.
+- For programmatic use (from a notebook or ad-hoc script):
+  `from pipeline.kaggle import download_dataset, publish_models,
+  fetch_models, creds_present`.
 
 ## 8. Test your deployed model in isolation
 
