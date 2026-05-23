@@ -67,6 +67,15 @@ class EmpathBotV1(nn.Module):
             x = self.gap(x)
         return self.classifier(x)
 
+    # ── notebook freeze methods (cell 22) ────────────────────────────────
+    def freeze_backbone(self) -> None:
+        for p in self.backbone.parameters():
+            p.requires_grad_(False)
+
+    def unfreeze_backbone(self) -> None:
+        for p in self.backbone.parameters():
+            p.requires_grad_(True)
+
 
 def build(num_classes: int) -> nn.Module:
     """Default to the EfficientNet-B2 variant — the notebook's primary recommendation."""
