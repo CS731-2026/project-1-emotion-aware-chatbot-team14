@@ -6,8 +6,9 @@ import config
 from core import debug_flags
 from core.app_state import HRIAppState
 from fastapi import FastAPI, WebSocket
+from fastapi.middleware.cors import CORSMiddleware
 
-from routers import chat
+from routers import chat, debug_emotion
 from ws.handler import handle_websocket
 
 logging.basicConfig(
@@ -130,4 +131,21 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     await handle_websocket(websocket)
 
 
+# Permit cross-origin requests from the dev frontend (SvelteKit on 5173)
+# and the deployed surface. The frontend's /emotion-test/ page POSTs
+# directly to /api/v1/debug/emotion to toggle runtime debug flags.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(chat.router, prefix="/api/v1")
+# debug_emotion router already namespaces its own /api/v1/debug/emotion path,
+# so it mounts without an extra prefix.
+app.include_router(debug_emotion.router)
