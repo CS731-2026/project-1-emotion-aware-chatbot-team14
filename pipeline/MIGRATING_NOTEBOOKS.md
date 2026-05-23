@@ -119,22 +119,29 @@ to swap an augmentation or tweak the loss without touching the
 training loop, they edit one small file instead of grepping a
 500-line notebook.
 
-### Read `pipeline/models/tutorial/` first
+### Read the tutorial modules first
 
-The fastest way to learn the framework is to **read the tutorial
-module top-to-bottom**. It's a working model (trains on
-synthetic_smoke in seconds) AND the source the scaffolder copies from
-when you run `make new-model`. Every framework feature you'll use
-appears once, heavily commented:
+The fastest way to learn the framework is to **read the two tutorial
+modules top-to-bottom**. Both are working code that trains end-to-end
+AND the source the scaffolder copies from. Every framework affordance
+you'll use appears once, with small inline comments next to the code
+they explain:
 
 ```
-pipeline/models/tutorial/
-  __init__.py     ← start here. ~70 lines. The pipeline-facing surface.
+pipeline/models/tutorial/        ← the model-side reference
+  __init__.py     ← start here. ~25 lines. The pipeline-facing surface.
   model.py        ← architecture. ResNet-18 + dropout head.
-  augment.py      ← TRAIN_TF / VAL_TF transforms, with rationale per knob.
+  augment.py      ← TRAIN_TF / VAL_TF, rationale per knob.
   data.py         ← CsvImageDataset — copy verbatim for most cases.
-  train_loop.py   ← THE main file. CFG → loaders → loop → reporting.
-                    Demonstrates every save_* helper + custom artifacts.
+  train_loop.py   ← THE main file. Opens with a FRAMEWORK CHEATSHEET
+                    listing every affordance (ctx surface, dataset
+                    surface, training helpers, reporting, kaggle).
+
+pipeline/datasets/tutorial/      ← the dataset-side reference
+  __init__.py     ← one file. Opens with a DATASET CHEATSHEET listing
+                    every ingest helper. Demonstrates cache check →
+                    acquire (generate_synthetic / download_kaggle) →
+                    label remap (with __drop__) → finalize_dataset.
 ```
 
 Other models at increasing complexity once you've read the tutorial:
