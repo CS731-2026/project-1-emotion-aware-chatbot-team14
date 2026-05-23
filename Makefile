@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 
 .PHONY: dev dev-services dev-harness dev-backend dev-frontend install install-training open kill crop-faces test-face-cropper \
-        train train-list train-clean deploy-model
+        train train-list train-clean deploy-model publish-model fetch-models
 
 dev: kill
 	$(MAKE) -j3 --keep-going dev-harness dev-backend dev-frontend
@@ -129,3 +129,27 @@ deploy-model:
 		--id "$(ID)" \
 		$(if $(VARIANT),--variant $(VARIANT)) \
 		$(if $(CHECKPOINT),--checkpoint $(CHECKPOINT))
+
+# ──────────────────────────────────────────────────────────────────────────
+# Publish a deployed model to the team Kaggle weights dataset.
+#
+#   make publish-model ID=<id> [MESSAGE="…"]    bump version
+#   make publish-model ID=<id> NEW=1            first-time dataset create
+#
+# Auth via KAGGLE_USERNAME/KAGGLE_KEY in .env (or ~/.kaggle/kaggle.json).
+# Default slug comes from KAGGLE_WEIGHTS_SLUG in .env.
+# ──────────────────────────────────────────────────────────────────────────
+publish-model:
+	@if [ -z "$(ID)" ]; then \
+		echo "usage: make publish-model ID=<id> [MESSAGE=\"version note\"] [NEW=1]"; \
+		exit 2; \
+	fi
+	python -m pipeline.cli.publish_model --id "$(ID)" \
+		$(if $(MESSAGE),--message "$(MESSAGE)") \
+		$(if $(NEW),--new-dataset)
+
+# Pull every checkpoint from the Kaggle weights dataset into models/.
+# After this, `make deploy-model RUN=... ID=...` or a manual models.yaml
+# edit registers them with the live service.
+fetch-models:
+	python -m pipeline.cli.fetch_models $(if $(SLUG),--slug $(SLUG))
