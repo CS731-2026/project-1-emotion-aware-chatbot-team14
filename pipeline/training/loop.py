@@ -69,6 +69,27 @@ def train_one_epoch(
 
 
 @torch.no_grad()
+def collect_predictions(
+    model:  nn.Module,
+    loader: DataLoader,
+    device: torch.device,
+) -> tuple[list[int], list[int]]:
+    """Run inference over `loader` and return (preds, labels) as flat
+    Python lists. Used by the post-training reporting step so each
+    model only needs to walk the test loader once for both accuracy
+    metrics and per-class breakdowns."""
+    model.eval()
+    preds: list[int] = []
+    labels: list[int] = []
+    for x, y in loader:
+        x = x.to(device, non_blocking=True)
+        logits = model(x)
+        preds.extend(logits.argmax(dim=1).cpu().tolist())
+        labels.extend(y.tolist())
+    return preds, labels
+
+
+@torch.no_grad()
 def evaluate(
     model:    nn.Module,
     loader:   DataLoader,

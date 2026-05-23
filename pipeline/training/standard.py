@@ -23,9 +23,10 @@ import torchvision.transforms as T
 from ..framework.specs import DatasetSpec, TrainedModel
 from .augmentations import get_augment
 from .data import make_loader
-from .loop import auto_device, evaluate as run_eval, train_one_epoch
+from .loop import auto_device, collect_predictions, evaluate as run_eval, train_one_epoch
 from .losses import get_loss
 from .optimizers import get_optimizer
+from .reporting import write_standard_artifacts
 
 if TYPE_CHECKING:
     from torch import nn
@@ -117,15 +118,24 @@ def train_classifier(
 
     model.load_state_dict(torch.load(best_ckpt, map_location=device))
     test_metrics = run_eval(model, test_loader, loss_fn, device)
+    test_preds, test_labels = collect_predictions(model, test_loader, device)
     ctx.save_scalar("test/loss", test_metrics["loss"])
     ctx.save_scalar("test/acc",  test_metrics["acc"])
     ctx.save_json("history", history)
-    ctx.save_json("final", {
-        "best_epoch":  best_epoch,
-        "best_val":    {"acc": best_val_acc},
-        "final_val":   history[-1] if history else {},
-        "test":        test_metrics,
-    })
+    write_standard_artifacts(
+        ctx,
+        history=history,
+        test_preds=test_preds,
+        test_labels=test_labels,
+        num_classes=dataset.num_classes,
+        class_names=dataset.class_names,
+        final_summary={
+            "best_epoch":  best_epoch,
+            "best_val":    {"acc": best_val_acc},
+            "final_val":   history[-1] if history else {},
+            "test":        test_metrics,
+        },
+    )
 
     logger.info("train_classifier: complete. best_val_acc=%.4f@epoch%d test_acc=%.4f",
                 best_val_acc, best_epoch, test_metrics["acc"])
