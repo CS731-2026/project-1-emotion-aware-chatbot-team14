@@ -17,14 +17,21 @@ First-run setup:
   git clone https://github.com/Talented-Q/POSTER_V2.git \\
       pipeline/models/posterplus/POSTER_V2
 
-If you want to load the official pretrained weights from the paper,
-drop the checkpoint at output/models/posterv2_rafdb.pth and uncomment
-the load_state_dict line in train() (notebook cell 13 has the
-checkpoint URL).
+The notebook is **inference-only** — it loads the published RAF-DB
+checkpoint and reports accuracy / per-class metrics against the test
+split. `train()` mirrors that: if the published checkpoint is found
+(see inference_loop.py for resolution order), it runs the faithful
+benchmark; otherwise it falls back to a generic fine-tune via
+train_classifier.
+
+To run the faithful benchmark, drop the checkpoint at
+output/models/posterv2_rafdb.pth or set POSTER_CHECKPOINT_PATH (URL
+in notebook cell 9).
 """
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -33,6 +40,8 @@ import torchvision.transforms as T
 from pipeline.framework.context import Context
 from pipeline.framework.specs import DatasetSpec, TrainedModel
 from pipeline.training.standard import train_classifier
+
+from .inference_loop import run as _benchmark
 
 
 _REPO_DIR = Path(__file__).parent / "POSTER_V2"
@@ -68,9 +77,21 @@ def build(num_classes: int):
     return pyramid_trans_expr2(img_size=_IMG_SIZE, num_classes=num_classes)
 
 
+def _published_checkpoint_present(ctx: Context) -> bool:
+    cfg = ctx.config.train_cfg
+    for src in (cfg.get("checkpoint_path"),
+                os.environ.get("POSTER_CHECKPOINT_PATH"),
+                "output/models/posterv2_rafdb.pth"):
+        if src and Path(src).exists():
+            return True
+    return False
+
+
 def train(ctx: Context, dataset: DatasetSpec) -> TrainedModel:
-    return train_classifier(
-        ctx, dataset,
-        model=build(dataset.num_classes),
-        preprocess=PREPROCESS,
-    )
+    """If the published RAF-DB checkpoint is on disk, run the faithful
+    notebook-3 inference benchmark; otherwise fine-tune from ImageNet
+    init via train_classifier."""
+    model = build(dataset.num_classes)
+    if _published_checkpoint_present(ctx):
+        return _benchmark(ctx, dataset, model=model, preprocess=PREPROCESS)
+    return train_classifier(ctx, dataset, model=model, preprocess=PREPROCESS)
