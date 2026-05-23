@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 
 .PHONY: dev dev-services dev-harness dev-backend dev-frontend install install-training open kill crop-faces test-face-cropper \
-        train train-list train-clean deploy-model publish-model fetch-models compare new-model
+        train train-list train-clean deploy-model publish-model publish-models fetch-models compare new-model
 
 dev: kill
 	$(MAKE) -j3 --keep-going dev-harness dev-backend dev-frontend
@@ -155,25 +155,36 @@ deploy-model:
 		$(if $(CHECKPOINT),--checkpoint $(CHECKPOINT))
 
 # ──────────────────────────────────────────────────────────────────────────
-# Publish a deployed model to the team Kaggle weights dataset.
+# Kaggle weights dataset — share trained checkpoints without committing
+# binaries. Auth: KAGGLE_USERNAME/KAGGLE_KEY in .env (or kaggle.json).
+# Slug from KAGGLE_WEIGHTS_SLUG in .env (default team14/empathbot-checkpoints).
 #
-#   make publish-model ID=<id> [MESSAGE="…"]    bump version
-#   make publish-model ID=<id> NEW=1            first-time dataset create
+#   make publish-models [MESSAGE="…"]   # uploads ALL models/<id>/ as one version
+#   make publish-models NEW=1            # first-time dataset create
+#   make fetch-models                    # pulls every model into models/
 #
-# Auth via KAGGLE_USERNAME/KAGGLE_KEY in .env (or ~/.kaggle/kaggle.json).
-# Default slug comes from KAGGLE_WEIGHTS_SLUG in .env.
+# Note: the live model_service auto-fetches from Kaggle when a configured
+# model id resolves to a missing local path — usually you don't need to
+# run fetch-models manually.
 # ──────────────────────────────────────────────────────────────────────────
+publish-models:
+	python -m pipeline.cli.publish_models \
+		$(if $(MESSAGE),--message "$(MESSAGE)") \
+		$(if $(NEW),--new-dataset) \
+		$(if $(SLUG),--slug $(SLUG))
+
+# Discouraged: publish just one model. Kaggle datasets are atomic, so
+# this REPLACES every other model in the dataset with just <id>. Use
+# `make publish-models` (plural) unless you have a specific reason.
 publish-model:
 	@if [ -z "$(ID)" ]; then \
-		echo "usage: make publish-model ID=<id> [MESSAGE=\"version note\"] [NEW=1]"; \
+		echo "usage: make publish-model ID=<id>     # DISCOURAGED — use publish-models (plural)"; \
 		exit 2; \
 	fi
-	python -m pipeline.cli.publish_model --id "$(ID)" \
+	python -m pipeline.cli.publish_models --id "$(ID)" \
 		$(if $(MESSAGE),--message "$(MESSAGE)") \
-		$(if $(NEW),--new-dataset)
+		$(if $(NEW),--new-dataset) \
+		$(if $(SLUG),--slug $(SLUG))
 
-# Pull every checkpoint from the Kaggle weights dataset into models/.
-# After this, `make deploy-model RUN=... ID=...` or a manual models.yaml
-# edit registers them with the live service.
 fetch-models:
 	python -m pipeline.cli.fetch_models $(if $(SLUG),--slug $(SLUG))
