@@ -14,10 +14,10 @@ Architecture:
     to dataset.num_classes for our 6-class EmpathBot use
 
 First-run setup:
-  make install-training   # pip install + weave sync + stage symlink
+  make install-training   # pip install + weave sync + copy vendor tree
   # OR manually:
   npx weave sync
-  ln -s ../../../vendor/POSTER_V2 pipeline/models/posterplus/POSTER_V2
+  cp -R vendor/POSTER_V2 pipeline/models/posterplus/POSTER_V2
 
 The notebook is **inference-only** — it loads the published RAF-DB
 checkpoint and reports accuracy / per-class metrics against the test

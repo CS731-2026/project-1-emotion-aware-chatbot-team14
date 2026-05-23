@@ -80,8 +80,12 @@ install-training:
 		echo "✗ $(VENDOR_POSTER_V2) missing — weave sync did not clone it. Check vendor/POSTER_V2.thread."; \
 		exit 1; \
 	fi
-	rm -rf "$(POSTER_V2_LINK)"
-	ln -s "../../../$(VENDOR_POSTER_V2)" "$(POSTER_V2_LINK)"
+	@if [ -e "$(POSTER_V2_LINK)" ] || [ -L "$(POSTER_V2_LINK)" ]; then \
+		echo "  $(POSTER_V2_LINK) already exists — leaving in place. Remove it manually to re-stage."; \
+	else \
+		cp -R "$(VENDOR_POSTER_V2)" "$(POSTER_V2_LINK)"; \
+		echo "  copied vendor tree into $(POSTER_V2_LINK)"; \
+	fi
 	@echo "✓ training pipeline ready. Run \`make train-list\` to see the declared runs."
 
 train:
