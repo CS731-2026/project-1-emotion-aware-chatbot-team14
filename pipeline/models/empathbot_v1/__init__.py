@@ -1,52 +1,34 @@
-"""EmpathBot V1 — the team's best model so far (~73% val acc).
+"""EmpathBot V1 — faithful port of Notebooks/6b_empathbot_v1_improvements.ipynb.
 
-Source of truth: `Notebooks/6b_empathbot_v1_improvements.ipynb`. This
-package ports the architecture + the val-time preprocessing (VAL_TF)
-verbatim, then trains via the shared pipeline.training.standard
-helper. Train-time augmentation strength is config-controlled
-(configs/<name>.yaml's `augment:` section) rather than hard-coded
-here, so the same model can be swept across multiple augment regimes.
+The whole training procedure is lifted: FocalLoss with class weights +
+label smoothing, AdamW with split LR (backbone vs head), linear-
+warmup + cosine LR schedule, head-only freeze for the first
+CFG['freeze_epochs'], gradient clipping, WeightedRandomSampler
+with 1.3x bias toward HARD_LABEL_IDS, early stopping on val_acc,
+checkpoint envelope matching what model_service expects.
 
-Architecture:
-  - EfficientNet-B2 backbone via timm (pretrained=True)
-  - 3-layer BN classifier head (in → max(in//2,256) → 128 → num_classes)
-  - ~7M params
+Package layout — each file mirrors one section of the notebook:
 
-See `model.py` for the architecture, this `__init__.py` for the
-pipeline-facing surface (PREPROCESS + train).
+  __init__.py     pipeline surface (PREPROCESS + train)
+  model.py        architecture (notebook cell 9)
+  augment.py      BASE_AUG / STRONG_AUG / VAL_TF (notebook cell 7)
+  data.py         EmpathBotDataset (notebook cell 7)
+  loss.py         FocalLoss (notebook cell 11)
+  train_loop.py   optimizer + scheduler + per-epoch loop (cells 13 + 15)
+
+The notebook stays the source of truth; any tweak should land there
+first and be re-lifted across these files.
 """
 
 from __future__ import annotations
 
-import torchvision.transforms as T
-
 from pipeline.framework.context import Context
 from pipeline.framework.specs import DatasetSpec, TrainedModel
-from pipeline.training.standard import train_classifier
 
+from .augment import VAL_TF as PREPROCESS  # val-time transform, no augmentation
 from .model import build
-
-
-# Val-time preprocessing — verbatim from notebook 6b's VAL_TF.
-# 224×224 input (the notebook's CFG['img_size']), ImageNet stats
-# (EfficientNet-B2 is tuned for this distribution regardless of
-# whether we load pretrained or from-scratch).
-_IMG_SIZE = 224
-PREPROCESS = T.Compose([
-    T.Resize((_IMG_SIZE, _IMG_SIZE)),
-    T.ToTensor(),
-    T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-])
+from .train_loop import run as _run
 
 
 def train(ctx: Context, dataset: DatasetSpec) -> TrainedModel:
-    """Delegate to the shared classifier loop. The notebook's bespoke
-    bits (split LR for backbone/head, focal loss, two-phase freeze→
-    unfreeze schedule) live behind the augment / loss / optimizer
-    config keys — extend pipeline.training.registries to enable them
-    if a config asks."""
-    return train_classifier(
-        ctx, dataset,
-        model=build(dataset.num_classes),
-        preprocess=PREPROCESS,
-    )
+    return _run(ctx, dataset, model=build(dataset.num_classes))
