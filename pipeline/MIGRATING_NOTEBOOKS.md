@@ -117,11 +117,44 @@ pipeline/models/<your_model>/
 Why split? Each file owns *one concern*. When a teammate later wants
 to swap an augmentation or tweak the loss without touching the
 training loop, they edit one small file instead of grepping a
-500-line notebook. Look at any existing model for the template:
+500-line notebook.
 
-  - `pipeline/models/empathbot_final/` — full-featured port with all six files
-  - `pipeline/models/resnet18/` — simpler; no custom data.py or loss.py
+### Read `pipeline/models/tutorial/` first
+
+The fastest way to learn the framework is to **read the tutorial
+module top-to-bottom**. It's a working model (trains on
+synthetic_smoke in seconds) AND the source the scaffolder copies from
+when you run `make new-model`. Every framework feature you'll use
+appears once, heavily commented:
+
+```
+pipeline/models/tutorial/
+  __init__.py     ← start here. ~70 lines. The pipeline-facing surface.
+  model.py        ← architecture. ResNet-18 + dropout head.
+  augment.py      ← TRAIN_TF / VAL_TF transforms, with rationale per knob.
+  data.py         ← CsvImageDataset — copy verbatim for most cases.
+  train_loop.py   ← THE main file. CFG → loaders → loop → reporting.
+                    Demonstrates every save_* helper + custom artifacts.
+```
+
+Other models at increasing complexity once you've read the tutorial:
+
   - `pipeline/models/mlp/` — minimal; uses the shared classifier helper
+  - `pipeline/models/resnet18/` — simpler custom loop, no per-sample routing
+  - `pipeline/models/empathbot_final/` — full-featured: split-LR, freeze
+    schedule, MixUp, label smoothing, neg_boost, per-class augmentation
+
+### Starting from the scaffolder
+
+```bash
+make new-model ID=my_model                  # default: tutorial template
+make new-model ID=my_model TEMPLATE=simple  # 30-line minimum (no custom loop)
+```
+
+The tutorial scaffolder copies `pipeline/models/tutorial/` with names
+rewritten (`Tutorial` → `MyModel`, `tutorial` → `my_model`). You get
+five files, all annotated, that trains on first run. Delete the
+comments and tweak the architecture from there.
 
 ## 1. Find your port
 

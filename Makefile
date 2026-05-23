@@ -102,15 +102,17 @@ train-clean:
 	@echo "wiped output/ (cached datasets + run dirs + checkpoints)"
 
 # Scaffold a new model module under pipeline/models/<id>/.
-#   make new-model ID=my_model                 # simple template (30-line)
-#   make new-model ID=my_model TEMPLATE=custom # full 5-file layout
+#   make new-model ID=my_model                  # tutorial template (heavily commented)
+#   make new-model ID=my_model TEMPLATE=simple  # minimum 30-line template
+# Tutorial source: pipeline/models/tutorial/ — read it directly to learn
+# the framework. The scaffolder copies that dir verbatim with names rewritten.
 new-model:
 	@if [ -z "$(ID)" ]; then \
-		echo "usage: make new-model ID=<snake_case_id> [TEMPLATE=simple|custom] [FORCE=1]"; \
+		echo "usage: make new-model ID=<snake_case_id> [TEMPLATE=tutorial|simple] [FORCE=1]"; \
 		exit 2; \
 	fi
 	@python -m pipeline.cli.new_model "$(ID)" \
-		$(if $(TEMPLATE),--template $(TEMPLATE),--template simple) \
+		--template $(if $(TEMPLATE),$(TEMPLATE),tutorial) \
 		$(if $(FORCE),--force)
 
 # Print a leaderboard of every run under output/run/.

@@ -43,6 +43,13 @@ runs:
   - { dataset: fer2013,              model: empathbot_resnet18,     config: thorough }
   - { dataset: fer2013,              model: empathbot_final,        config: thorough }
 
+  # ── Tutorial reference model (uncomment to run it once) ─────────────
+  # pipeline/models/tutorial/ is the heavily commented template for
+  # `make new-model`. Run it once to see what a fully-wired model
+  # produces (training_curves, confusion_matrix, custom per-class
+  # distribution plot, notes.txt, etc).
+  # - { dataset: synthetic_smoke, model: tutorial, config: fast }
+
   # ── Examples of per-run overrides (commented out) ───────────────────
   #
   # Re-run empathbot_final with a shorter freeze + stronger mixup:
