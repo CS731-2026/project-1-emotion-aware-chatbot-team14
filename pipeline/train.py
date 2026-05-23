@@ -29,10 +29,26 @@ from pipeline.driver import sweep
 from pipeline.runs_loader import load as load_runs
 
 
+def _filter_runs(resolved: list, pattern: str) -> list:
+    """Keep runs whose slug contains `pattern`. Match is case-insensitive
+    and checks the synthesised '<dataset> <model> <config>' string so
+    `--run my_model` or `--run fer2013` or `--run thorough` all work."""
+    needle = pattern.lower()
+    out = []
+    for r in resolved:
+        slug = f"{r.dataset.NAME} {r.model.__name__.rsplit('.', 1)[-1]} {r.config.NAME}".lower()
+        if needle in slug:
+            out.append(r)
+    return out
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run every enabled entry in a runs.yaml file.")
     parser.add_argument("--runs", default="runs.yaml",
                         help="path to runs file (default: ./runs.yaml)")
+    parser.add_argument("--run", default=None,
+                        help="case-insensitive substring filter — run only entries "
+                             "whose dataset/model/config slug contains this string")
     parser.add_argument("--verbose", "-v", action="store_true",
                         help="DEBUG-level logs")
     parser.add_argument("--fail-fast", action="store_true",
@@ -48,6 +64,15 @@ def main() -> int:
     if not resolved:
         print(f"no enabled runs in {args.runs}", file=sys.stderr)
         return 1
+
+    if args.run:
+        before = len(resolved)
+        resolved = _filter_runs(resolved, args.run)
+        if not resolved:
+            print(f"no runs match --run {args.run!r} ({before} entries in {args.runs})",
+                  file=sys.stderr)
+            return 1
+        print(f"--run {args.run!r}: matched {len(resolved)} of {before} run(s)")
 
     triples = [r.as_tuple() for r in resolved]
     contexts = sweep(triples, fail_fast=args.fail_fast)

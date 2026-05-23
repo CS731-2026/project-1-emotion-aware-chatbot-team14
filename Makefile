@@ -89,7 +89,7 @@ install-training:
 	@echo "✓ training pipeline ready. Run \`make train-list\` to see the declared runs."
 
 train:
-	python -m pipeline.train
+	python -m pipeline.train $(if $(RUN),--run "$(RUN)")
 
 train-list:
 	@python -c "from pipeline.runs_loader import load; \
