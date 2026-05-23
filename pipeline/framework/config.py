@@ -1,14 +1,4 @@
-"""Experiment config — the immutable input plan for one run.
-
-A Config is built by the driver from three Python modules (dataset,
-model, config) registered in pipeline/train.py. The names go into the
-run slug; train_cfg (the dict from the config module's CONFIG export)
-goes to the train phase.
-
-There's no yaml-loader here anymore — datasets and configs are Python,
-not yaml, so the driver constructs Config directly from module
-references without parsing.
-"""
+"""Resolved experiment plan (frozen). Built by the driver from the three modules in runs.yaml."""
 
 from __future__ import annotations
 
@@ -18,20 +8,22 @@ from typing import Any
 
 @dataclass(frozen=True)
 class Config:
-    # Three names — for slug + leaderboard
-    dataset:  str
-    model:    str
-    config:   str
-
-    seed:     int
-
-    # Loaded from the config module's CONFIG dict
-    train_cfg:  dict[str, Any]
-
-    # Phases the driver will run, in order
-    phases:   list[str] = field(default_factory=list)
+    dataset_name:  str         # e.g. "fer2013"
+    model_name:    str         # e.g. "empathbot_final"
+    config_name:   str         # e.g. "thorough"
+    seed:          int
+    train_cfg:     dict[str, Any]                     # from configs.<name>.CONFIG (+ per-run overrides)
+    phases:        list[str] = field(default_factory=list)
 
     def slug(self) -> str:
-        """Filesystem-safe identifier for the (dataset × model × config)
-        triple. The timestamp suffix is added by Context.create."""
-        return f"{self.dataset}__{self.model}__{self.config}"
+        # <dataset>__<model>__<config>; Context.create appends a timestamp.
+        return f"{self.dataset_name}__{self.model_name}__{self.config_name}"
+
+    # Back-compat shims — older call sites use ctx.config.dataset / .model / .config.
+    # Drop these once all model train_loops migrate to the *_name fields.
+    @property
+    def dataset(self) -> str:    return self.dataset_name
+    @property
+    def model(self) -> str:      return self.model_name
+    @property
+    def config(self) -> str:     return self.config_name

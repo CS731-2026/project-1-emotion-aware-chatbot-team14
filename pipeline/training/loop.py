@@ -12,6 +12,7 @@ checkpoint without retraining.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 import torch
@@ -20,6 +21,47 @@ from torch.utils.data import DataLoader
 
 if TYPE_CHECKING:
     from pipeline.context import Context
+
+
+def merge_cfg(default: dict, overrides: dict | None) -> dict:
+    """Shallow-merge `overrides` over `default`, ignoring unknown keys,
+    and log the resolved + diff so it's never ambiguous what
+    hyperparameters a run actually used.
+
+    Used by every model's `run(ctx, dataset, model)` to apply the
+    pipeline-level CONFIG dict over the model's own CFG defaults:
+
+        cfg = merge_cfg(CFG, ctx.config.train_cfg)
+
+    Unknown keys in `overrides` (typos, keys that belong to a different
+    model) are silently dropped so a single shared config can be passed
+    to many models without each one breaking on extra fields. Any key
+    in `default` is automatically overridable — no manual whitelist.
+
+    Three lines land at INFO so the run log is self-documenting:
+      hparams (defaults): {...}        ← model's CFG (notebook values)
+      hparams (overrides): {...}       ← what the config/train_cfg supplied
+      hparams (resolved): {...}        ← what training will actually use
+    Plus a warning for any override keys that were ignored as unknown.
+    """
+    resolved = {**default, **{k: v for k, v in (overrides or {}).items()
+                               if k in default}}
+
+    _log = logging.getLogger("pipeline.training.hparams")
+    if overrides:
+        applied   = {k: v for k, v in overrides.items() if k in default}
+        ignored   = {k: v for k, v in overrides.items() if k not in default}
+        _log.info("hparams (defaults):  %s", default)
+        _log.info("hparams (overrides): %s", applied if applied else "(none applied)")
+        _log.info("hparams (resolved):  %s", resolved)
+        if ignored:
+            _log.warning(
+                "hparams: %d override key(s) ignored (not in this model's CFG): %s",
+                len(ignored), sorted(ignored),
+            )
+    else:
+        _log.info("hparams (resolved):  %s", resolved)
+    return resolved
 
 
 def auto_device() -> torch.device:
@@ -66,6 +108,27 @@ def train_one_epoch(
             ctx.save_scalar("train/loss", float(loss.item()), step=step)
 
     return {"loss": running_loss / max(1, n_batches)}
+
+
+@torch.no_grad()
+def collect_predictions(
+    model:  nn.Module,
+    loader: DataLoader,
+    device: torch.device,
+) -> tuple[list[int], list[int]]:
+    """Run inference over `loader` and return (preds, labels) as flat
+    Python lists. Used by the post-training reporting step so each
+    model only needs to walk the test loader once for both accuracy
+    metrics and per-class breakdowns."""
+    model.eval()
+    preds: list[int] = []
+    labels: list[int] = []
+    for x, y in loader:
+        x = x.to(device, non_blocking=True)
+        logits = model(x)
+        preds.extend(logits.argmax(dim=1).cpu().tolist())
+        labels.extend(y.tolist())
+    return preds, labels
 
 
 @torch.no_grad()

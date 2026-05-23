@@ -36,7 +36,8 @@ from torch.utils.data import DataLoader, WeightedRandomSampler
 
 from pipeline.framework.context import Context
 from pipeline.framework.specs import DatasetSpec, TrainedModel
-from pipeline.training.loop import auto_device
+from pipeline.training.loop import auto_device, collect_predictions, merge_cfg
+from pipeline.training.reporting import write_standard_artifacts
 
 from .augment import HARD_LABEL_IDS
 from .data import EmpathBotDataset
@@ -75,20 +76,6 @@ CFG = dict(
     priority_classes = [2, 3],
     num_workers     = 2,
 )
-
-
-def _config_overrides(ctx_cfg: dict[str, Any]) -> dict[str, Any]:
-    """Merge ctx.config.train_cfg over the default CFG. The pipeline's
-    fast/baseline/thorough configs can override individual keys
-    (epochs, batch_size) without forcing the team to maintain a
-    fully-specified empathbot-specific yaml."""
-    out = dict(CFG)
-    for key in ("epochs", "batch_size", "num_workers", "patience",
-                "backbone_lr", "head_lr", "weight_decay", "focal_gamma",
-                "label_smoothing", "freeze_epochs", "grad_clip"):
-        if key in ctx_cfg:
-            out[key] = ctx_cfg[key]
-    return out
 
 
 def _compute_class_weights(train_csv: str, num_classes: int) -> np.ndarray:
@@ -168,7 +155,7 @@ def _evaluate(model: nn.Module, loader: DataLoader, device,
 
 def run(ctx: Context, dataset: DatasetSpec, model: nn.Module) -> TrainedModel:
     """Run the notebook-6b training procedure against the prepared dataset."""
-    cfg = _config_overrides(ctx.config.train_cfg)
+    cfg = merge_cfg(CFG, ctx.config.train_cfg)
     device = auto_device()
     model = model.to(device)
     num_classes = dataset.num_classes
@@ -268,17 +255,23 @@ def run(ctx: Context, dataset: DatasetSpec, model: nn.Module) -> TrainedModel:
         ckpt = torch.load(best_ckpt, map_location=device, weights_only=False)
         model.load_state_dict(ckpt["model_state"])
     test_acc, test_per_cls = _evaluate(model, test_loader, device, num_classes)
+    test_preds, test_labels = collect_predictions(model, test_loader, device)
     ctx.save_scalar("test/acc", test_acc)
     for c, recall in enumerate(test_per_cls):
         ctx.save_scalar(f"test/recall_class_{c}", recall)
 
     ctx.save_json("history", history)
-    ctx.save_json("final", {
-        "best_epoch":     best_epoch,
-        "best_val_acc":   best_val_acc,
-        "test_acc":       test_acc,
-        "test_per_class": test_per_cls,
-    })
+    write_standard_artifacts(
+        ctx, history=history,
+        test_preds=test_preds, test_labels=test_labels,
+        num_classes=num_classes, class_names=dataset.class_names,
+        final_summary={
+            "best_epoch":     best_epoch,
+            "best_val_acc":   best_val_acc,
+            "test_acc":       test_acc,
+            "test_per_class": test_per_cls,
+        },
+    )
 
     logger.info(
         "empathbot_v1: complete. best_val_acc=%.4f@epoch%d  test_acc=%.4f",

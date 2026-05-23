@@ -23,7 +23,8 @@ from torch.utils.data import DataLoader, Dataset
 
 from pipeline.framework.context import Context
 from pipeline.framework.specs import DatasetSpec, TrainedModel
-from pipeline.training.loop import auto_device
+from pipeline.training.loop import auto_device, collect_predictions, merge_cfg
+from pipeline.training.reporting import write_standard_artifacts
 
 from .augment import TRAIN_TF, VAL_TF
 
@@ -59,15 +60,6 @@ class _CsvDataset(Dataset):
         return self.transform(img), int(row["label"])
 
 
-def _config_overrides(ctx_cfg: dict[str, Any]) -> dict[str, Any]:
-    out = dict(CFG)
-    for k in ("epochs", "batch_size", "num_workers", "max_lr", "momentum",
-              "weight_decay", "early_stop", "min_delta"):
-        if k in ctx_cfg:
-            out[k] = ctx_cfg[k]
-    return out
-
-
 def _train_one_epoch(model, loader, criterion, optimizer, scheduler, device):
     """Verbatim from notebook cell 38 — scheduler steps **per batch**."""
     model.train()
@@ -101,7 +93,7 @@ def _eval(model, loader, criterion, device):
 
 
 def run(ctx: Context, dataset: DatasetSpec, model: nn.Module) -> TrainedModel:
-    cfg = _config_overrides(ctx.config.train_cfg)
+    cfg = merge_cfg(CFG, ctx.config.train_cfg)
     device = auto_device()
     model = model.to(device)
     num_classes = dataset.num_classes
@@ -171,13 +163,19 @@ def run(ctx: Context, dataset: DatasetSpec, model: nn.Module) -> TrainedModel:
         ck = torch.load(best_ckpt, map_location=device, weights_only=False)
         model.load_state_dict(ck["model_state_dict"])
     test_loss, test_acc = _eval(model, test_loader, criterion, device)
+    test_preds, test_labels = collect_predictions(model, test_loader, device)
     ctx.save_scalar("test/loss", test_loss)
     ctx.save_scalar("test/acc",  test_acc)
     ctx.save_json("history", history)
-    ctx.save_json("final", {
-        "best_epoch": best_epoch, "best_val_acc": best_val_acc,
-        "test_acc": test_acc, "test_loss": test_loss,
-    })
+    write_standard_artifacts(
+        ctx, history=history,
+        test_preds=test_preds, test_labels=test_labels,
+        num_classes=num_classes, class_names=dataset.class_names,
+        final_summary={
+            "best_epoch": best_epoch, "best_val_acc": best_val_acc,
+            "test_acc": test_acc, "test_loss": test_loss,
+        },
+    )
 
     logger.info("resnet18_fer_onecycle: complete. best_val=%.4f@%d test=%.4f",
                 best_val_acc, best_epoch, test_acc)

@@ -25,7 +25,8 @@ from torch.utils.data import DataLoader
 
 from pipeline.framework.context import Context
 from pipeline.framework.specs import DatasetSpec, TrainedModel
-from pipeline.training.loop import auto_device
+from pipeline.training.loop import auto_device, collect_predictions, merge_cfg
+from pipeline.training.reporting import write_standard_artifacts
 
 from .augment import HARD_LABEL_IDS
 from .data import EmpathBotDataset
@@ -51,16 +52,6 @@ CFG = dict(
     patience        = 8,
     num_workers     = 2,
 )
-
-
-def _config_overrides(ctx_cfg: dict[str, Any]) -> dict[str, Any]:
-    out = dict(CFG)
-    for k in ("epochs", "batch_size", "num_workers", "backbone_lr", "head_lr",
-              "weight_decay", "freeze_epochs", "warmup_epochs", "min_lr",
-              "label_smoothing", "mixup_alpha", "grad_clip", "patience"):
-        if k in ctx_cfg:
-            out[k] = ctx_cfg[k]
-    return out
 
 
 def _compute_class_weights(train_csv, num_classes: int) -> np.ndarray:
@@ -127,7 +118,7 @@ def _evaluate(model, loader, device, num_classes):
 
 
 def run(ctx: Context, dataset: DatasetSpec, model: nn.Module) -> TrainedModel:
-    cfg = _config_overrides(ctx.config.train_cfg)
+    cfg = merge_cfg(CFG, ctx.config.train_cfg)
     device = auto_device()
     model = model.to(device)
     num_classes = dataset.num_classes
@@ -220,12 +211,18 @@ def run(ctx: Context, dataset: DatasetSpec, model: nn.Module) -> TrainedModel:
         ck = torch.load(best_ckpt, map_location=device, weights_only=False)
         model.load_state_dict(ck["model_state"])
     test_acc, test_per_cls = _evaluate(model, test_loader, device, num_classes)
+    test_preds, test_labels = collect_predictions(model, test_loader, device)
     ctx.save_scalar("test/acc", test_acc)
     ctx.save_json("history", history)
-    ctx.save_json("final", {
-        "best_epoch": best_epoch, "best_val_acc": best_val,
-        "test_acc": test_acc, "test_per_class": test_per_cls,
-    })
+    write_standard_artifacts(
+        ctx, history=history,
+        test_preds=test_preds, test_labels=test_labels,
+        num_classes=num_classes, class_names=dataset.class_names,
+        final_summary={
+            "best_epoch": best_epoch, "best_val_acc": best_val,
+            "test_acc": test_acc, "test_per_class": test_per_cls,
+        },
+    )
 
     logger.info("empathbot_resnet18: complete. best_val=%.4f@%d test=%.4f",
                 best_val, best_epoch, test_acc)

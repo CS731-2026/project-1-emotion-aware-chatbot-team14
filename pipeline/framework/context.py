@@ -1,19 +1,7 @@
-"""The single arg every phase receives.
+"""Context — the single arg every phase receives.
 
-Context bundles three things every phase needs:
-  - the read-only Config
-  - the typed Store for phase-to-phase handoff
-  - artifact save methods (image / json / text / scalar / checkpoint)
-    that write into the run dir
-
-The run dir path is hard-coded to `output/run/<slug>__<timestamp>/` —
-phases can't override it, so every run lands in the same predictable
-tree. `output/` is gitignored, so nothing the pipeline writes leaks
-into version control.
-
-Context.create() is the only public constructor. It builds the run
-dir, writes a snapshot of config.yaml for reproducibility, opens the
-metrics jsonl handle, and returns a ready-to-use Context.
+Bundles read-only Config, typed Store, the imported dataset+model
+modules, and artifact save_* methods that write into the run dir.
 """
 
 from __future__ import annotations
@@ -40,11 +28,9 @@ class Context:
     config:           Config
     store:            Store
     run_dir:          Path
-    dataset_module:   ModuleType
-    model_module:     ModuleType
+    dataset_module:   ModuleType    # satisfies framework.protocols.DatasetModule
+    model_module:     ModuleType    # satisfies framework.protocols.ModelModule
     _metrics_fh:      IO[str] = field(repr=False)
-
-    # ---- construction ---------------------------------------------------
 
     @classmethod
     def create(
@@ -54,15 +40,8 @@ class Context:
         dataset_module: ModuleType,
         model_module:   ModuleType,
     ) -> "Context":
-        """Build the run dir under output/run/<slug>__<ts>/ and open the
-        metrics jsonl handle. If the slug+timestamp dir already exists
-        (two runs in the same second), append _v2/_v3/… so prior runs
-        aren't clobbered.
-
-        dataset_module + model_module are the Python modules registered
-        in pipeline/train.py. They're held here (not in the store) so
-        every phase reads them as ctx attributes — no string lookup.
-        """
+        # Build output/run/<slug>__<ts>/ — append _v2/v3/... on collision so
+        # two runs in the same second don't clobber each other.
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
         base = _OUTPUT_RUN_ROOT / f"{config.slug()}__{ts}"
         run_dir = base
@@ -73,77 +52,64 @@ class Context:
         (run_dir / "artifacts").mkdir(parents=True)
         (run_dir / "checkpoints").mkdir()
 
-        # Snapshot the resolved config — first thing in the dir.
+        # Snapshot the resolved config first — first thing in the dir.
         (run_dir / "config.yaml").write_text(yaml.safe_dump({
-            "dataset":    config.dataset,
-            "model":      config.model,
-            "config":     config.config,
+            "dataset":    config.dataset_name,
+            "model":      config.model_name,
+            "config":     config.config_name,
             "seed":       config.seed,
             "phases":     config.phases,
             "train_cfg":  config.train_cfg,
         }, sort_keys=False))
 
-        metrics_fh = (run_dir / "metrics.jsonl").open("a")
         return cls(
             config=config,
             store=Store(),
             run_dir=run_dir,
             dataset_module=dataset_module,
             model_module=model_module,
-            _metrics_fh=metrics_fh,
+            _metrics_fh=(run_dir / "metrics.jsonl").open("a"),
         )
 
     def close(self) -> None:
-        """Flush + close the metrics handle. The driver calls this."""
         self._metrics_fh.close()
 
-    # ---- artifact API ---------------------------------------------------
-    # All save_* methods return the destination Path so the caller can
-    # log it / hand it back in a result struct if it wants.
+    # ---- artifact API (all return the destination Path) -------------------
 
     def save_image(self, name: str, fig: Any) -> Path:
-        """Save a matplotlib Figure as PNG under artifacts/<name>.png.
-        Subdirectories in `name` are created automatically — e.g.
-        'epoch_3/predictions' → artifacts/epoch_3/predictions.png."""
+        # matplotlib Figure → artifacts/<name>.png. Subdirs in name are auto-created.
         dest = self._artifact_path(name, ".png")
         fig.savefig(dest, bbox_inches="tight", dpi=120)
         return dest
 
     def save_json(self, name: str, obj: Any) -> Path:
-        """Pretty-printed JSON under artifacts/<name>.json."""
         dest = self._artifact_path(name, ".json")
         dest.write_text(json.dumps(obj, indent=2, default=str))
         return dest
 
     def save_text(self, name: str, text: str) -> Path:
-        """Plain text under artifacts/<name>.txt (or whatever ext is in name)."""
         dest = self._artifact_path(name, ".txt")
         dest.write_text(text)
         return dest
 
     def save_scalar(self, name: str, value: float, step: int | None = None) -> None:
-        """Append one JSONL line to metrics.jsonl. Cheap; safe to call
-        every batch — the file grows linearly but is plain text and
-        easy to grep / pandas.read_json(lines=True)."""
-        row = {"name": name, "value": float(value)}
+        # One JSONL line → metrics.jsonl. Cheap; safe per-batch.
+        row: dict[str, Any] = {"name": name, "value": float(value)}
         if step is not None:
             row["step"] = step
         self._metrics_fh.write(json.dumps(row) + "\n")
         self._metrics_fh.flush()
 
     def save_checkpoint(self, name: str, state_dict: dict) -> Path:
-        """Torch state dict under checkpoints/<name>.pth. Torch is imported
-        lazily so the framework module itself stays import-time cheap."""
+        # → checkpoints/<name>.pth. Torch imported lazily to keep import-time cheap.
         import torch
         dest = self.run_dir / "checkpoints" / f"{name}.pth"
         torch.save(state_dict, dest)
         return dest
 
-    # ---- internals ------------------------------------------------------
-
     def _artifact_path(self, name: str, default_ext: str) -> Path:
-        """Resolve `name` against artifacts/, creating parent dirs and
-        adding `default_ext` if `name` has no extension."""
+        # Resolves name under artifacts/, auto-creates parent dirs, adds
+        # default_ext when name has no extension.
         rel = Path(name)
         if rel.suffix == "":
             rel = rel.with_suffix(default_ext)

@@ -1,16 +1,5 @@
-"""Phase functions.
-
-Composition file in the utility/state/composition taxonomy. Each
-phase has signature `(ctx: Context) -> None` and is registered in
-pipeline/driver.py's PHASES dict. Order of execution is set by the
-phase list on Context.config; the driver iterates it.
-
-What each phase does:
-
-  setup            seed RNGs, drop a breadcrumb
-  prepare_dataset  delegate to ctx.dataset_module.prepare(ctx) → DatasetSpec
-  train            build the model, train + eval, save checkpoint + TrainedModel
-"""
+"""Phase functions. Each has signature (ctx: Context) -> None and is
+registered in driver.py's PHASES dict; the driver iterates Context.config.phases."""
 
 from __future__ import annotations
 
@@ -24,11 +13,8 @@ from .framework.specs import DatasetSpec, TrainedModel
 logger = logging.getLogger(__name__)
 
 
-# ----------------------------------------------------------------------------
-
-
 def setup(ctx: Context) -> None:
-    """Seed RNGs and drop a breadcrumb in the run dir. Bookkeeping only."""
+    """Seed RNGs + drop a breadcrumb. Bookkeeping only."""
     seed = ctx.config.seed
     random.seed(seed)
     try:
@@ -48,17 +34,10 @@ def setup(ctx: Context) -> None:
     ctx.save_text("setup", f"slug: {ctx.config.slug()}\nseed: {seed}\n")
 
 
-# ----------------------------------------------------------------------------
-
-
 def prepare_dataset(ctx: Context) -> None:
-    """Delegate to the registered dataset module's prepare() function.
-
-    Each dataset module knows how to fetch its own source (Kaggle,
-    synthetic, local, …) and uses the helpers in pipeline.ingest to
-    walk, remap, split, and persist a DatasetSpec. The phase is just
-    glue — store the spec + drop a self-describing artifact.
-    """
+    """Delegate to ctx.dataset_module.prepare(ctx) — the USER's function in
+    pipeline/datasets/<name>/__init__.py."""
+    # ↓ user function — every dataset module exports this (see protocols.DatasetModule).
     spec = ctx.dataset_module.prepare(ctx)
     if not isinstance(spec, DatasetSpec):
         raise TypeError(
@@ -69,20 +48,15 @@ def prepare_dataset(ctx: Context) -> None:
     ctx.save_json("dataset_used", spec.to_manifest())
 
 
-# ----------------------------------------------------------------------------
-
-
 def train(ctx: Context) -> None:
-    """Delegate to the registered model module's train() function.
+    """Delegate to ctx.model_module.train(ctx, dataset) — the USER's function
+    in pipeline/models/<name>/__init__.py.
 
-    The model module owns its training loop — vanilla classifiers
-    typically call pipeline.training.standard.train_classifier; custom
-    architectures (multi-stage, paper-specific losses, GANs, etc.)
-    write their own loop directly here. The phase is just glue:
-    invoke train(), assert the return type, put the TrainedModel
-    in the store.
+    Two functions called `train` are involved: this one (framework phase)
+    vs. the user's train (the one whose contract the model tutorial documents).
     """
     ds = ctx.store.get(K.DATASET, DatasetSpec)
+    # ↓ user function — every model module exports this (see protocols.ModelModule).
     trained = ctx.model_module.train(ctx, ds)
     if not isinstance(trained, TrainedModel):
         raise TypeError(
