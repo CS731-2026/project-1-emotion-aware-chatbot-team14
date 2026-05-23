@@ -99,6 +99,32 @@ runs:
 
 Run with `make train` — done.
 
+### How `runs.yaml` names become function calls
+
+The names in `runs.yaml` are resolved via `importlib`. Each field
+imports a Python module from a fixed location; the framework then
+calls a fixed attribute on that module:
+
+```
+yaml field          module imported                      framework calls
+─────────────────   ────────────────────────────────     ──────────────────────────────
+dataset: my_data  → pipeline.datasets.my_data         → .prepare(ctx)  → DatasetSpec
+model:   my_model → pipeline.models.my_model          → .train(ctx, dataset)
+                                                          → TrainedModel
+config:  thorough → configs.thorough                  → reads .CONFIG (dict)
+                                                          and .NAME (slug)
+```
+
+So when you write a new model `my_model`:
+- The folder name `pipeline/models/my_model/` is what you put in `runs.yaml`
+- The function the framework will call is `pipeline.models.my_model.train`
+- That's the function the tutorial's `__init__.py` exports as `train` —
+  it's the contract between your code and the pipeline
+
+Same on the dataset side: write `pipeline/datasets/my_data/__init__.py`
+exporting `NAME`, `CLASS_NAMES`, and `prepare(ctx)`; reference it as
+`dataset: my_data` in `runs.yaml`.
+
 ## Break your model code down
 
 Your notebook is probably one long file. Your model **module** should

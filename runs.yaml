@@ -5,6 +5,22 @@
 # optional `train_cfg` lets you override hyperparameters for just that
 # run without forking a config.
 #
+# How each field resolves to a Python function or value:
+#
+#   field             →  module imported                  →  attribute used
+#   ────────────────     ─────────────────────────────       ────────────────────
+#   dataset: <name>   →  pipeline.datasets.<name>         →  .NAME, .CLASS_NAMES,
+#                                                            .prepare(ctx) -> DatasetSpec
+#   model:   <name>   →  pipeline.models.<name>           →  .train(ctx, dataset)
+#                                                            -> TrainedModel
+#   config:  <name>   →  configs.<name>                   →  .NAME, .CONFIG (dict)
+#
+# So a line like { dataset: fer2013, model: empathbot_final, config: thorough }
+# turns into roughly:
+#     spec    = pipeline.datasets.fer2013.prepare(ctx)
+#     trained = pipeline.models.empathbot_final.train(ctx, spec)
+#     # with ctx.config.train_cfg = configs.thorough.CONFIG | this row's train_cfg
+#
 # Hyperparameter resolution (deepest → shallowest):
 #   1. pipeline/models/<model>/train_loop.py::CFG  (notebook defaults)
 #   2. configs/<config>.py::CONFIG                  (cross-cutting preset)

@@ -4,17 +4,31 @@ tuples the driver expects.
 YAML schema:
 
     runs:
-      - dataset: <name>            # → pipeline.datasets.<name>
-        model:   <name>            # → pipeline.models.<name>
-        config:  <name>            # → configs.<name>          (CONFIG dict)
+      - dataset: <name>            # importlib → pipeline.datasets.<name>
+        model:   <name>            # importlib → pipeline.models.<name>
+        config:  <name>            # importlib → configs.<name>
         enabled: true              # optional, defaults to true
         train_cfg:                 # optional per-run override layer
           epochs: 5
           backbone_freeze_epochs: 3
 
+What each field's module is then required to expose:
+
+    field      module                            attribute used by the framework
+    ────────   ──────────────────────────────    ──────────────────────────────────
+    dataset    pipeline.datasets.<name>          NAME: str
+                                                 CLASS_NAMES: list[str]
+                                                 prepare(ctx) -> DatasetSpec
+    model      pipeline.models.<name>            train(ctx, dataset) -> TrainedModel
+                                                 (optionally: build(num_classes),
+                                                  PREPROCESS for the live service)
+    config     configs.<name>                    NAME: str
+                                                 CONFIG: dict[str, Any]
+
 The optional `train_cfg` is shallow-merged over the named config's
 CONFIG dict so a single run can tweak hyperparameters without forking
-a whole config file.
+a whole config file. When overrides are present the run dir slug gets
+a `+key1-key2` suffix so distinct variants don't collide.
 
 Errors are explicit — an unknown name or a missing required field
 raises with a clear message naming the offending run index.
