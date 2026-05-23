@@ -1,9 +1,62 @@
 # Migrating from notebooks → pipeline
 
 If you wrote one of the notebooks under `Notebooks/`, your training
-procedure has been ported into `pipeline/`. This is the short version
-of where it went, how to verify it still does what your notebook did,
-how to tweak it, and how to ship a trained model into the live app.
+procedure has been ported into `pipeline/`. This doc explains the
+mental model, where your notebook went, and how to keep iterating
+without ever opening Jupyter again.
+
+## The mental model — three functions
+
+Every training run in the pipeline is the composition of three things:
+
+```
+  dataset.prepare(ctx)  →  spec         (where do the images come from?)
+  model.train(ctx, spec)  →  trained    (what gets trained, how?)
+  config.CONFIG           →  hparams    (epochs, batch_size, lr, …)
+```
+
+Your notebook used to be *all three things in one file*. The pipeline
+splits them so they can be re-combined and shared:
+
+| You write | Lives at | What it exports |
+|---|---|---|
+| **A dataset function** | `pipeline/datasets/<name>/__init__.py` | `prepare(ctx) -> DatasetSpec` |
+| **A model function** | `pipeline/models/<name>/__init__.py` | `train(ctx, dataset) -> TrainedModel` |
+| **A config function** | `configs/<name>.py` | `CONFIG = {...}` dict |
+
+A "run" is just a YAML line that picks one of each:
+
+```yaml
+# runs.yaml
+runs:
+  - { dataset: fer2013, model: empathbot_final, config: thorough }
+```
+
+Run with `make train` — done.
+
+## Break your model code down
+
+Your notebook is probably one long file. Your model **module** should
+not be. The convention every existing model follows:
+
+```
+pipeline/models/<your_model>/
+  __init__.py     # 1. thin surface: exports build() + train()
+  model.py        # 2. nn.Module class — architecture only
+  augment.py      # 3. TRAIN_TF / VAL_TF transforms
+  data.py         # 4. Dataset class if it needs custom routing
+  loss.py         # 5. custom loss if any (FocalLoss, etc)
+  train_loop.py   # 6. CFG dict + run() that orchestrates training
+```
+
+Why split? Each file owns *one concern*. When a teammate later wants
+to swap an augmentation or tweak the loss without touching the
+training loop, they edit one small file instead of grepping a
+500-line notebook. Look at any existing model for the template:
+
+  - `pipeline/models/empathbot_final/` — full-featured port with all six files
+  - `pipeline/models/resnet18/` — simpler; no custom data.py or loss.py
+  - `pipeline/models/mlp/` — minimal; uses the shared classifier helper
 
 ## 1. Find your port
 
@@ -12,9 +65,9 @@ Notebooks → pipeline modules:
 | Your notebook | Lives now at |
 |---|---|
 | `1_dataset_pipeline.ipynb` | `pipeline/datasets/empath/` (sub-loaders: `affectnet.py`, `rafdb.py`, `sfew.py`, optional `face_crop.py`) |
-| `2_benchmark_resnet18.ipynb`, `2_benchmark_resnet18_colab.ipynb`, `2_colab_hf_datasets_resnet18.ipynb` | `pipeline/models/resnet18/` (same training procedure across all three) |
+| `2_benchmark_resnet18*.ipynb` (3 variants) | `pipeline/models/resnet18/` (same training procedure across all three) |
 | `2_emotion-recognition-resnet18.ipynb` | `pipeline/models/resnet18_fer_onecycle/` |
-| `3_benchmark_posterplus.ipynb` | `pipeline/models/posterplus/` (inference benchmark; expects published RAF-DB checkpoint at `output/models/posterv2_rafdb.pth`) |
+| `3_benchmark_posterplus.ipynb` | `pipeline/models/posterplus/` (inference benchmark; expects published RAF-DB checkpoint) |
 | `4_benchmark_ada_df.ipynb` | `pipeline/models/ada_df/` |
 | `5_final_empathbot_training.ipynb` | `pipeline/models/empathbot_v3/` |
 | `5_final_empathbot_training_v4.ipynb` | `pipeline/models/empathbot_final/` |
@@ -24,52 +77,60 @@ Notebooks → pipeline modules:
 
 Open the port's `__init__.py` — its docstring names the exact notebook
 cells each `.py` file was lifted from. The notebook is still the
-source of truth; if a tweak makes the port diverge from the notebook,
-update the notebook first then re-lift.
+source of truth; if a tweak makes the port diverge, update the
+notebook first then re-lift.
 
-## 2. Verify the port matches your notebook
-
-Each port preserves the *training procedure* (architecture,
-augmentations, loss, optimizer, scheduler, freeze schedule, MixUp gate,
-checkpoint envelope). If a hyperparameter looks wrong:
-
-```bash
-# show the CFG block your model uses
-grep -A 20 "^CFG =" pipeline/models/<your_model>/train_loop.py
-```
-
-Compare against the corresponding cell in your notebook (typically the
-"hyperparameters" cell + the optimizer/scheduler cell). The port's
-docstring at the top names the specific cells the values came from.
-
-The audit at PR #21 walks each notebook → port pair and flags
-discrepancies — read that first if something looks off.
-
-## 3. Run your port
+## 2. Run your port
 
 ```bash
 make install-training       # one-time: pip deps + git-weave sync + POSTER_V2 stage
-make train-list             # see what's declared
-make train                  # run every (dataset, model, config) triple
+make train-list             # see what's declared in runs.yaml
+make train                  # run every enabled entry
 ```
 
-To skip every run except yours, comment out everything else in
-`pipeline/train.py::RUNS`, or invoke a tighter subset inline:
+Run dirs land at `output/run/<dataset>__<model>__<config>__<ts>/`.
 
-```python
-python -c "
-import logging; logging.basicConfig(level=logging.INFO, format='%(message)s')
-import configs.thorough as cfg
-from pipeline.datasets import fer2013
-from pipeline.models import empathbot_v1
-from pipeline.driver import sweep
-sweep([(fer2013, empathbot_v1, cfg)], fail_fast=True)
-"
+## 3. Change what runs — edit `runs.yaml`, not Python
+
+`runs.yaml` at the repo root is the single answer to "what runs?". To
+skip a row, comment it out OR add `enabled: false`:
+
+```yaml
+runs:
+  - { dataset: synthetic_smoke, model: resnet18, config: fast }
+  # - { dataset: fer2013, model: empathbot_final, config: thorough }
+  - { dataset: fer2013, model: empathbot_v1, config: thorough, enabled: false }
 ```
 
-Run dir lands at `output/run/<dataset>__<model>__<config>__<ts>/`.
+To tweak a hyperparameter for **just one run** without forking a
+config, add a `train_cfg:` block:
 
-## 4. What your run produces
+```yaml
+runs:
+  - dataset: fer2013
+    model:   empathbot_final
+    config:  thorough
+    train_cfg:
+      backbone_freeze_epochs: 3
+      mixup_alpha: 0.3
+```
+
+The override layer is shallow-merged over the named config. Any key
+already present in the model's `CFG` is overridable — no need to
+register keys anywhere.
+
+## 4. Where hyperparameters live (three layers)
+
+| Layer | When to edit | File |
+|---|---|---|
+| **Model CFG** | Change the notebook defaults for everyone | `pipeline/models/<m>/train_loop.py` (top of file, `CFG = {...}`) |
+| **Named config** | Cross-cutting preset (fast vs thorough) | `configs/<name>.py` (`CONFIG = {...}`) |
+| **Per-run train_cfg** | Override for a single run | `runs.yaml` (`train_cfg:` block) |
+
+Resolution: model CFG → named config → train_cfg. Whichever is most
+specific wins.
+
+## 5. What a run produces
 
 Every run dir contains:
 
@@ -82,29 +143,15 @@ artifacts/
   dataset_used.json                  which CSVs the dataset module produced
   history.json                       per-epoch history
   final.json                         best_epoch, best_val, test_*
-  training_curves.png                train/val loss + acc (+ lr if logged)
+  training_curves.png                train/val loss + acc (+ lr)
   confusion_matrix.png               raw + row-normalised, side-by-side
   classification_report.txt          sklearn per-class P/R/F1
   per_class_metrics.json             same numbers, structured
 ```
 
-These are the artifacts your notebook's plots + reports produced. If
+These are the artifacts your notebook's final cells produced. If
 something's missing, the post-training step logged a warning — search
 the run's stdout for `reporting:`.
-
-## 5. Tweaking hyperparameters
-
-Three layers:
-
-| Where | When |
-|---|---|
-| `pipeline/models/<m>/train_loop.py::CFG` | Default values your notebook chose. Edit if the new defaults are better. |
-| `configs/{fast,baseline,thorough}.py` | Cross-cutting overrides (epochs, batch_size). Affect every model that uses that config. |
-| `ctx.config.train_cfg` (per run) | Per-run overrides — pass via a custom config or ad-hoc kwargs. |
-
-`_config_overrides()` at the top of each train_loop merges
-`ctx.config.train_cfg` over its `CFG` for a whitelist of keys —
-extend the whitelist if you need to make a new key configurable.
 
 ## 6. Datasets
 
@@ -114,7 +161,7 @@ Auto-downloadable:
 
 Local-only (set env vars):
 - `empath` — `EMPATH_AFFECTNET_DIR`, `EMPATH_RAFDB_DIR`, `EMPATH_SFEW_DIR`
-  + optional `EMPATH_FACE_CROP=1` to run the notebook 1 YOLO crop step in-line
+  + optional `EMPATH_FACE_CROP=1` to run the notebook 1 YOLO crop step inline
 - `kash` — `KASH_DATASET_DIR` (or place at `output/data/kash/raw/`)
   + optional `KASH_FACE_CROP=1`, `KASH_BLUR_FILTER=1`, `KASH_BLUR_THR=80.0`
 
@@ -149,13 +196,24 @@ EMOTION_MODEL_ID=my_empathbot
 Variants supported by the service: `placeholder`, `resnet18`,
 `empathbot`. Pass `VARIANT=resnet18` to override the inferred one.
 
+To share weights with the team without committing binaries:
+
+```bash
+make publish-model ID=my_empathbot NEW=1          # first time
+make publish-model ID=my_empathbot MESSAGE="..."  # subsequent versions
+make fetch-models                                  # other teammate pulls
+```
+
+Uses the Kaggle dataset slug in `KAGGLE_WEIGHTS_SLUG` (default
+`team14/empathbot-checkpoints`).
+
 ## 8. Test your deployed model in isolation
 
-Run `make dev`, then open <http://localhost:5173/emotion-test/>.
+`make dev`, then open <http://localhost:5173/emotion-test/>.
 
-It's a bare harness — just webcam → face crop → emotion classifier.
-No chat, no LLM, no transcripts. You can:
-- Watch the live emotion + confidence per frame
+A bare harness — webcam → face crop → emotion classifier. No chat, no
+LLM, no transcripts. You can:
+- Watch live emotion + confidence per frame
 - Preview the face crop the model is actually seeing
 - Flip `force_label` / `cycle_test_labels` / `log_predictions` from the
   sidebar to debug the path without restarting the service
@@ -163,30 +221,111 @@ No chat, no LLM, no transcripts. You can:
 
 The full app at `/` still works as normal.
 
-## 9. Adding a new model (not from a notebook)
+## 9. Adding a new model from scratch
 
-Mirror an existing folder:
+Mirror an existing folder, one file per concern (see § "Break your
+model code down" above):
 
 ```
 pipeline/models/<your_model>/
   __init__.py     # exports build(num_classes) + train(ctx, dataset)
-  model.py        # nn.Module definition
-  augment.py      # TRAIN_TF / VAL_TF
-  train_loop.py   # CFG + run(ctx, dataset, model)
+  model.py        # nn.Module subclass — architecture only
+  augment.py      # TRAIN_TF / VAL_TF transforms
+  train_loop.py   # CFG (hyperparameters) + run(ctx, dataset, model)
 ```
 
-Wire it into `pipeline/train.py::RUNS`. If your training procedure is
-generic (CE + AdamW), use `pipeline.training.standard.train_classifier`
-instead of writing a custom loop — see `pipeline/models/mlp/__init__.py`
-for the minimal pattern.
+Skeleton for the four files:
 
-End with a call to `pipeline.training.reporting.write_standard_artifacts`
-so your model emits the same artifact shape as everyone else's.
+```python
+# model.py
+import torch.nn as nn
+class MyModel(nn.Module):
+    def __init__(self, num_classes: int): ...
+    def forward(self, x): ...
+
+def build(num_classes: int) -> nn.Module:
+    return MyModel(num_classes=num_classes)
+```
+
+```python
+# augment.py
+import torchvision.transforms as T
+TRAIN_TF = T.Compose([T.Resize((224, 224)), T.RandomHorizontalFlip(),
+                      T.ToTensor(), T.Normalize(...)])
+VAL_TF   = T.Compose([T.Resize((224, 224)), T.ToTensor(), T.Normalize(...)])
+```
+
+```python
+# train_loop.py
+from pipeline.training.loop import auto_device, collect_predictions, merge_cfg
+from pipeline.training.reporting import write_standard_artifacts
+
+CFG = dict(epochs=40, batch_size=32, lr=1e-4, weight_decay=1e-4)
+
+def run(ctx, dataset, model):
+    cfg = merge_cfg(CFG, ctx.config.train_cfg)
+    device = auto_device()
+    # ... your training loop ...
+    # at the end:
+    test_preds, test_labels = collect_predictions(model, test_loader, device)
+    write_standard_artifacts(ctx, history=history,
+        test_preds=test_preds, test_labels=test_labels,
+        num_classes=dataset.num_classes, class_names=dataset.class_names,
+        final_summary={...})
+```
+
+```python
+# __init__.py
+from .model import build
+from .train_loop import run as _run
+
+def train(ctx, dataset):
+    return _run(ctx, dataset, model=build(dataset.num_classes))
+```
+
+Then add a line to `runs.yaml`:
+
+```yaml
+runs:
+  - { dataset: fer2013, model: my_model, config: thorough }
+```
+
+If your training procedure is generic (CE + AdamW), use
+`pipeline.training.standard.train_classifier` instead of writing
+`train_loop.py` — see `pipeline/models/mlp/__init__.py` for the
+minimal pattern (~30 lines total).
+
+## 10. Adding a new dataset
+
+```
+pipeline/datasets/<your_dataset>/
+  __init__.py     # NAME, CLASS_NAMES, prepare(ctx) -> DatasetSpec
+```
+
+`prepare()` returns a `DatasetSpec` (see `pipeline/framework/specs.py`)
+with three CSV paths (train/val/test), each row `path,label`. The
+shared `ingest` helpers (`download_kaggle`, `scan_imagefolder`,
+`apply_remap`, `carve_val`, `finalize_dataset`) handle the common
+patterns — see `pipeline/datasets/fer2013/__init__.py` for the simple
+case (Kaggle download + standard split).
+
+## 11. Adding a new config
+
+`configs/<name>.py` exporting `NAME` + `CONFIG`:
+
+```python
+NAME = "my_config"
+CONFIG = {
+    "epochs": 20,
+    "batch_size": 64,
+    # any key that exists in a model's CFG can go here and will
+    # override that model's default
+}
+```
 
 ## Questions
 
 - Audit of port fidelity: PR #21 description + the in-conversation audit
 - Pipeline architecture: `pipeline/framework/{store,config,context,specs}.py`
   + their docstrings
-- How a run dir is structured: this doc § 4
 - What live debug flags exist: `application/model_service/core/debug_flags.py`
