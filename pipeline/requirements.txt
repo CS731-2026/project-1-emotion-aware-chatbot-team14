@@ -9,6 +9,9 @@ pandas>=2.0.0
 Pillow>=10.0.0
 scikit-learn>=1.3.0
 PyYAML>=6.0
+python-dotenv>=1.0.0
+matplotlib>=3.7.0
+seaborn>=0.13.0
 
 # Architecture-specific:
 # timm — EfficientNet-B2 backbone for empathbot_v1, empathbot_final, ada_df

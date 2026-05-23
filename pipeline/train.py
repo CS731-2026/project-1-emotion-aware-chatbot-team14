@@ -17,6 +17,14 @@ import argparse
 import logging
 import sys
 
+from dotenv import load_dotenv
+
+# Load .env from cwd before any module touches os.environ — needed so
+# datasets/fer2013 picks up KAGGLE_USERNAME / KAGGLE_KEY (kaggle CLI
+# checks env vars before ~/.kaggle/kaggle.json), and so the EMPATH_* /
+# KASH_* opt-in flags can be set per-run from .env.
+load_dotenv()
+
 import configs.baseline as baseline_cfg
 import configs.fast as fast_cfg
 import configs.thorough as thorough_cfg
