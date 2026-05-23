@@ -5,6 +5,71 @@ procedure has been ported into `pipeline/`. This doc explains the
 mental model, where your notebook went, and how to keep iterating
 without ever opening Jupyter again.
 
+## Overview — the whole picture in one screen
+
+End-to-end lifecycle of a model on this project:
+
+```
+┌──────────────┐    ┌──────────────────┐    ┌────────────────┐    ┌──────────────┐    ┌────────────┐
+│  notebook    │ →  │  pipeline port   │ →  │  training run  │ →  │   deploy     │ →  │  live app  │
+│ (Notebooks/) │    │  (pipeline/)     │    │ (output/run/…) │    │  (models/)   │    │ (app/…)    │
+└──────────────┘    └──────────────────┘    └────────────────┘    └──────────────┘    └────────────┘
+   you wrote          we ported                make train          make deploy-model    make dev
+   prose + cells      modules + funcs          → checkpoints +     → registry entry     EMOTION_MODEL_ID
+                                                 plots + report      in models.yaml      in .env
+```
+
+Where each thing lives in the repo:
+
+| What | Where | Owned by |
+|---|---|---|
+| **Notebooks** (research, ground truth for ports) | `Notebooks/` | you |
+| **Pipeline ports** (your training procedure as code) | `pipeline/models/<m>/` `pipeline/datasets/<d>/` | you |
+| **Hyperparameter presets** (fast/baseline/thorough) | `configs/<c>.py` | shared |
+| **What to actually run** | `runs.yaml` (repo root) | shared |
+| **Run output** (checkpoints, metrics, plots) | `output/run/<slug>__<ts>/` | generated, gitignored |
+| **Deployed checkpoints** | `models/<id>/` | generated, gitignored |
+| **Live app's model registry** | `application/model_service/models.yaml` | `make deploy-model` writes it |
+| **Live app surface** | `application/{frontend,backend,model_service}/` | shared |
+| **Bare emotion-bot test page** | `application/frontend/src/routes/emotion-test/` | shared |
+| **Pipeline framework** (orchestration internals) | `pipeline/framework/` | you don't touch |
+| **Shared training helpers** (losses, optimizers, augments, reporting) | `pipeline/training/` | extended occasionally |
+| **Vendored third-party repos** (POSTER_V2) | `vendor/<repo>/` | git-weave manages |
+
+The cycle you'll repeat every time you iterate on a model:
+
+```
+1.  edit pipeline/models/<m>/{model,augment,train_loop}.py
+2.  add or modify a line in runs.yaml
+3.  make train                             ← trains, writes output/run/<slug>__<ts>/
+4.  inspect artifacts/{training_curves,confusion_matrix}.png + classification_report.txt
+5.  make deploy-model RUN=LATEST ID=<id>   ← copies checkpoint + registers in models.yaml
+6.  EMOTION_MODEL_ID=<id> make dev         ← live app loads it
+7.  open http://localhost:5173/emotion-test/   ← isolated harness to verify behaviour
+8.  make publish-model ID=<id>             ← share weights with team via Kaggle (no git binaries)
+```
+
+Three pieces are intentionally out of your hair:
+- **`pipeline/framework/`** — Config, Context, DatasetSpec, the driver. The
+  contract these expose to your model/dataset functions is the only thing
+  you need; the internals are stable.
+- **`pipeline/training/loop.py`** — `auto_device`, `train_one_epoch`,
+  `evaluate`, `collect_predictions`, `merge_cfg`. Helpers your train_loop
+  composes with.
+- **`pipeline/training/reporting.py`** — `write_standard_artifacts(...)`.
+  Call this once at the end of your training and you get the same plots +
+  report your notebook produced.
+
+**You're probably reading this because…**
+
+- *"Where did my notebook go?"* → § 1 mapping table
+- *"How do I run my port?"* → § 2 (`make train`)
+- *"How do I tweak a hyperparameter without editing 5 files?"* → § 3 (runs.yaml `train_cfg:`) + § 4 (three layers)
+- *"How do I get my trained model into the chat app?"* → § 7 (deploy-model)
+- *"How do I test the model without the chat distracting me?"* → § 8 (/emotion-test/)
+- *"How do I add a model from scratch?"* → § 9 (skeleton)
+- *"How do I share weights without committing 200 MB binaries?"* → § 7 (publish-model / fetch-models)
+
 ## The mental model — three functions
 
 Every training run in the pipeline is the composition of three things:
