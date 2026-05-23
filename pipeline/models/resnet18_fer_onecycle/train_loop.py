@@ -23,7 +23,8 @@ from torch.utils.data import DataLoader, Dataset
 
 from pipeline.framework.context import Context
 from pipeline.framework.specs import DatasetSpec, TrainedModel
-from pipeline.training.loop import auto_device
+from pipeline.training.loop import auto_device, collect_predictions
+from pipeline.training.reporting import write_standard_artifacts
 
 from .augment import TRAIN_TF, VAL_TF
 
@@ -171,13 +172,19 @@ def run(ctx: Context, dataset: DatasetSpec, model: nn.Module) -> TrainedModel:
         ck = torch.load(best_ckpt, map_location=device, weights_only=False)
         model.load_state_dict(ck["model_state_dict"])
     test_loss, test_acc = _eval(model, test_loader, criterion, device)
+    test_preds, test_labels = collect_predictions(model, test_loader, device)
     ctx.save_scalar("test/loss", test_loss)
     ctx.save_scalar("test/acc",  test_acc)
     ctx.save_json("history", history)
-    ctx.save_json("final", {
-        "best_epoch": best_epoch, "best_val_acc": best_val_acc,
-        "test_acc": test_acc, "test_loss": test_loss,
-    })
+    write_standard_artifacts(
+        ctx, history=history,
+        test_preds=test_preds, test_labels=test_labels,
+        num_classes=num_classes, class_names=dataset.class_names,
+        final_summary={
+            "best_epoch": best_epoch, "best_val_acc": best_val_acc,
+            "test_acc": test_acc, "test_loss": test_loss,
+        },
+    )
 
     logger.info("resnet18_fer_onecycle: complete. best_val=%.4f@%d test=%.4f",
                 best_val_acc, best_epoch, test_acc)
