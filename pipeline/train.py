@@ -32,10 +32,13 @@ from pipeline.driver import sweep
 from pipeline.models import (
     ada_df,
     empathbot_final,
+    empathbot_resnet18,
     empathbot_v1,
+    empathbot_v3,
     mlp,
     posterplus,
     resnet18,
+    resnet18_fer_onecycle,
     tiny_cnn,
 )
 
@@ -48,12 +51,15 @@ RUNS = [
     # Fast, network-free (synthetic data), prove the pipeline + each
     # architecture wires up end-to-end. Heavy models (EfficientNet-B2 +
     # pretrained weights) still run in seconds at fast config (1 epoch).
-    (synthetic_smoke,       mlp,              fast_cfg),
-    (synthetic_smoke,       tiny_cnn,         fast_cfg),
-    (synthetic_smoke,       resnet18,         fast_cfg),
-    (synthetic_smoke,       ada_df,           fast_cfg),
-    (synthetic_smoke,       empathbot_v1,     fast_cfg),
-    (synthetic_smoke,       empathbot_final,  fast_cfg),
+    (synthetic_smoke,       mlp,                     fast_cfg),
+    (synthetic_smoke,       tiny_cnn,                fast_cfg),
+    (synthetic_smoke,       resnet18,                fast_cfg),
+    (synthetic_smoke,       resnet18_fer_onecycle,   fast_cfg),
+    (synthetic_smoke,       ada_df,                  fast_cfg),
+    (synthetic_smoke,       empathbot_v1,            fast_cfg),
+    (synthetic_smoke,       empathbot_v3,            fast_cfg),
+    (synthetic_smoke,       empathbot_resnet18,      fast_cfg),
+    (synthetic_smoke,       empathbot_final,         fast_cfg),
 
     # ─── Class-imbalance exercise ────────────────────────────────────────
     # Validates class_weights: auto without needing Kaggle.
@@ -63,11 +69,14 @@ RUNS = [
     # Comment out individual lines (or the whole block) if Kaggle isn't
     # set up locally — the smoke + imbalance runs above still cover the
     # pipeline plumbing.
-    (fer2013,               tiny_cnn,         baseline_cfg),
-    (fer2013,               resnet18,         thorough_cfg),
-    (fer2013,               ada_df,           thorough_cfg),
-    (fer2013,               empathbot_v1,     thorough_cfg),
-    (fer2013,               empathbot_final,  thorough_cfg),
+    (fer2013,               tiny_cnn,                baseline_cfg),
+    (fer2013,               resnet18,                thorough_cfg),
+    (fer2013,               resnet18_fer_onecycle,   thorough_cfg),
+    (fer2013,               ada_df,                  thorough_cfg),
+    (fer2013,               empathbot_v1,            thorough_cfg),
+    (fer2013,               empathbot_v3,            thorough_cfg),
+    (fer2013,               empathbot_resnet18,      thorough_cfg),
+    (fer2013,               empathbot_final,         thorough_cfg),
 
     # POSTER++ requires the POSTER_V2 repo cloned via `make init` (the
     # .thread file in pipeline/models/posterplus/ pulls it in).
