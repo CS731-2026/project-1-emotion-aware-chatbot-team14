@@ -10,6 +10,15 @@
 .env
 node_modules
 sandbox/student_taurajgreig/vendor/
+
+# git-weave vendors third-party repos under vendor/. The .thread files
+# in vendor/ ARE tracked; the cloned repos themselves aren't.
+vendor/*/
+
+# `make install-training` symlinks vendor/POSTER_V2/ here so the model's
+# Python imports resolve. The symlink target is recreated by the make
+# step, so don't commit it.
+pipeline/models/posterplus/POSTER_V2/
 .DS_Store
 __pycache__/
 *.pyc

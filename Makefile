@@ -1,6 +1,7 @@
 SHELL := /bin/bash
 
-.PHONY: dev dev-services dev-harness dev-backend dev-frontend install open kill crop-faces test-face-cropper
+.PHONY: dev dev-services dev-harness dev-backend dev-frontend install install-training open kill crop-faces test-face-cropper \
+        train train-list train-clean
 
 dev: kill
 	$(MAKE) -j3 --keep-going dev-harness dev-backend dev-frontend
@@ -48,3 +49,49 @@ crop-faces:
 
 test-face-cropper:
 	python face_cropper/test_face_cropper.py $(IMAGE)
+
+# ──────────────────────────────────────────────────────────────────────────
+# Training pipeline (v2). See TRAINING.md for the full layout.
+#
+# `make install-training`  pip install pipeline deps + git-weave sync
+#                          vendored repos + symlink POSTER_V2 into the
+#                          posterplus model dir so its imports resolve
+# `make train`             run every (dataset, model, config) triple in
+#                          pipeline/train.py's RUNS list
+# `make train-list`        print the runs that would execute, no training
+# `make train-clean`       wipe output/ — cached datasets + run dirs + checkpoints
+#
+# To skip a run, comment out its line in pipeline/train.py RUNS.
+# ──────────────────────────────────────────────────────────────────────────
+
+# Where git-weave clones POSTER_V2 (matches vendor/POSTER_V2.thread).
+# The model module imports from pipeline/models/posterplus/POSTER_V2/, which
+# is a symlink we stage below — keeping the cloned repo in vendor/ keeps
+# third-party code separated from our pipeline code.
+VENDOR_POSTER_V2 := vendor/POSTER_V2
+POSTER_V2_LINK   := pipeline/models/posterplus/POSTER_V2
+
+install-training:
+	pip install -r pipeline/requirements.txt
+	@echo "→ syncing git-weave vendored repos (POSTER_V2, whisper.cpp, …)"
+	npx --yes weave sync
+	@echo "→ staging $(VENDOR_POSTER_V2) → $(POSTER_V2_LINK)"
+	@if [ ! -d "$(VENDOR_POSTER_V2)" ]; then \
+		echo "✗ $(VENDOR_POSTER_V2) missing — weave sync did not clone it. Check vendor/POSTER_V2.thread."; \
+		exit 1; \
+	fi
+	rm -rf "$(POSTER_V2_LINK)"
+	ln -s "../../../$(VENDOR_POSTER_V2)" "$(POSTER_V2_LINK)"
+	@echo "✓ training pipeline ready. Run \`make train-list\` to see the declared runs."
+
+train:
+	python -m pipeline.train
+
+train-list:
+	@python -c "from pipeline.train import RUNS; \
+print(f'{len(RUNS)} run(s) declared in pipeline/train.py:'); \
+[print(f'  {d.NAME:24} x {m.__name__.rsplit(\".\",1)[-1]:14} x {c.NAME}') for (d,m,c) in RUNS]"
+
+train-clean:
+	rm -rf output/
+	@echo "wiped output/ (cached datasets + run dirs + checkpoints)"
