@@ -97,6 +97,11 @@ def main() -> int:
                          "every other team weight currently on Kaggle. Use the "
                          "default (no --id) to publish all local models.")
     ap.add_argument("--repo-root", default=".")
+    ap.add_argument("--yes", "-y", action="store_true",
+                    help="skip the interactive confirmation. Without this flag, "
+                         "publish prints the list of model ids about to be "
+                         "uploaded and waits for explicit y/N — guards against "
+                         "accidental pushes to the public Kaggle dataset.")
     args = ap.parse_args()
 
     repo_root = Path(args.repo_root).resolve()
@@ -121,6 +126,20 @@ def main() -> int:
         print(f"⚠  --id {args.id!r} publishes ONLY that model and removes "
               f"every other model from the Kaggle dataset. Re-run without "
               f"--id to publish all local models.", file=sys.stderr)
+
+    if not args.yes:
+        verb = "create new dataset" if args.new_dataset else "publish new version"
+        print()
+        print(f"About to {verb} on Kaggle ({args.slug}) containing:")
+        for i in ids:
+            print(f"    {i}/")
+        try:
+            reply = input("Proceed? [y/N] ").strip().lower()
+        except EOFError:
+            reply = ""
+        if reply not in {"y", "yes"}:
+            print("✗ aborted by user — nothing pushed.", file=sys.stderr)
+            return 1
 
     if args.new_dataset:
         rc = _kaggle(["datasets", "create", "-p", str(staged), "--dir-mode", "zip"])

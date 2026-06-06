@@ -32,9 +32,14 @@
 # See pipeline/MIGRATING_NOTEBOOKS.md for the full walkthrough.
 
 runs:
-  # ── Smoke tests ─────────────────────────────────────────────────────
-  # Fast, network-free (synthetic data), prove the pipeline + each
-  # architecture wires up end-to-end.
+  # ──────────────────────────────────────────────────────────────────────
+  # Ordered smallest → largest. `make train` runs them top-to-bottom, so
+  # the cheapest wiring smokes finish first and you see real signal
+  # within seconds. Heavy real-data rows are at the bottom.
+  # ──────────────────────────────────────────────────────────────────────
+
+  # ── Tier 1: synthetic smokes ────────────────────────────────────────
+  # ~5 sec per row. Network-free, validate every architecture wires up.
   - { dataset: synthetic_smoke,      model: mlp,                    config: fast }
   - { dataset: synthetic_smoke,      model: tiny_cnn,               config: fast }
   - { dataset: synthetic_smoke,      model: resnet18,               config: fast }
@@ -44,12 +49,29 @@ runs:
   - { dataset: synthetic_smoke,      model: empathbot_v3,           config: fast }
   - { dataset: synthetic_smoke,      model: empathbot_resnet18,     config: fast }
   - { dataset: synthetic_smoke,      model: empathbot_final,        config: fast }
-
-  # ── Class-imbalance exercise ────────────────────────────────────────
-  # Validates class_weights: auto without needing Kaggle.
   - { dataset: synthetic_imbalanced, model: tiny_cnn,               config: baseline }
 
-  # ── Real training on real data (requires Kaggle creds in .env) ──────
+  # ── Tier 2: empath smoke rung ───────────────────────────────────────
+  # ~30 sec / ~1 min on MPS. Smallest viable real-data run — validates
+  # the full empath load + remap + train + eval path. Note: first run
+  # triggers AffectNet + RAF-DB download (~5.8 GB + ~20k imgs) from
+  # HuggingFace into output/data/empath/raw/. Cached after.
+  - { dataset: empath_tiny,          model: tiny_cnn,               config: fast }
+  - { dataset: empath_tiny,          model: empathbot_final,        config: fast }
+
+  # ── Tier 3: empath dev rung ─────────────────────────────────────────
+  # ~10-20 min on MPS. Real model + reduced data; right scale for
+  # iterating on hyperparameters before committing to a prod run.
+  - { dataset: empath_small,         model: empathbot_final,        config: baseline }
+
+  # Single-source variant — useful when isolating "is this AffectNet's
+  # bug or RAF-DB's?", or when AffectNet hasn't downloaded yet.
+  # - { dataset: empath_rafdb_only,  model: empathbot_final,        config: baseline }
+
+  # ── Tier 4: FER2013 full benchmarks ─────────────────────────────────
+  # ~minutes (tiny_cnn) → ~hours (empathbot_final) on MPS, much faster
+  # on GPU. Requires Kaggle creds. Heavy rows — disable any you don't
+  # need to keep sweep wall-time bounded.
   - { dataset: fer2013,              model: tiny_cnn,               config: baseline }
   - { dataset: fer2013,              model: resnet18,               config: thorough }
   - { dataset: fer2013,              model: resnet18_fer_onecycle,  config: thorough }
@@ -58,6 +80,35 @@ runs:
   - { dataset: fer2013,              model: empathbot_v3,           config: thorough }
   - { dataset: fer2013,              model: empathbot_resnet18,     config: thorough }
   - { dataset: fer2013,              model: empathbot_final,        config: thorough }
+
+  # ── Tier 5: empath prod ─────────────────────────────────────────────
+  # The real benchmark. Data is face-cropped 224×224 via the always-on
+  # YOLO filter in pipeline/datasets/empath/{affectnet,rafdb}.py.
+
+  # v1: empathbot_final with ASAP-config (batch=64, 25 epochs, 4 workers).
+  # First prod baseline — collapsed onto "confusion + default to common
+  # classes" (per-class F1 ranged 0.00-0.92, mean 0.29). See empathbot_v2
+  # for the anti-class-imbalance follow-up.
+  - dataset: empath
+    model:   empathbot_final
+    config:  thorough
+    train_cfg:
+      batch_size:  64
+      num_workers: 4
+      epochs:      25
+
+  # v2: empathbot_v2 — same arch as empathbot_final, MixUp disabled +
+  # NEGATIVE-class weight bumped to address class-imbalance failures
+  # observed in v1. See pipeline/models/empathbot_v2/__init__.py for
+  # academic grounding. Bumped num_workers to 6 for slightly higher
+  # dataloader throughput.
+  - dataset: empath
+    model:   empathbot_v2
+    config:  thorough
+    train_cfg:
+      batch_size:  64
+      num_workers: 6
+      epochs:      25
 
   # ── Tutorial references (uncomment to run them once) ────────────────
   # pipeline/models/tutorial/ and pipeline/datasets/tutorial/ are the
@@ -93,8 +144,14 @@ runs:
   # kash needs $KASH_DATASET_DIR or output/data/kash/raw/ populated.
   # - { dataset: kash, model: tiny_cnn,     config: baseline }
   # - { dataset: kash, model: empathbot_v1, config: thorough }
-  #
-  # empath needs at least one of EMPATH_{AFFECTNET,RAFDB,SFEW}_DIR.
-  # - { dataset: empath, model: tiny_cnn,        config: baseline }
-  # - { dataset: empath, model: empathbot_v1,    config: thorough }
+
+  # (Empath rows moved up to Tier 2/3 so the global sweep is ordered
+  # smallest → largest. See top of file.)
+
+  # Single-source variant — useful when isolating "is this AffectNet's
+  # bug or RAF-DB's?", or when AffectNet hasn't downloaded yet.
+  # - { dataset: empath_rafdb_only, model: empathbot_final, config: baseline }
+
+  # Prod rung — the real benchmark. Hours on MPS, much faster on GPU.
+  # Disabled until smoke/dev rungs validate the new sweep config.
   # - { dataset: empath, model: empathbot_final, config: thorough }

@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 
 .PHONY: dev dev-services dev-harness dev-backend dev-frontend install install-training open kill crop-faces test-face-cropper \
-        train train-list train-clean deploy-model publish-model publish-models fetch-models compare new-model
+        train train-list train-clean deploy-model publish-model publish-models fetch-models compare evaluate-baseline prune-runs new-model
 
 dev: kill
 	$(MAKE) -j3 --keep-going dev-harness dev-backend dev-frontend
@@ -125,6 +125,34 @@ compare:
 		$(if $(FILTER),--filter "$(FILTER)") \
 		$(if $(SORT),--sort-by $(SORT)) \
 		$(if $(TOP),--top $(TOP))
+
+# Prune duplicate run dirs under output/run/. Keeps the newest run per
+# (dataset, model, config) combo; lists older ones for deletion. DRY-RUN
+# BY DEFAULT — pass APPLY=1 to actually delete. Never auto-runs.
+#   make prune-runs                    # preview (safe)
+#   make prune-runs APPLY=1            # actually delete
+#   make prune-runs FILTER=empath      # scope by substring
+#   make prune-runs KEEP=2 APPLY=1     # keep newest 2 per combo
+prune-runs:
+	@python -m pipeline.cli.prune_runs \
+		$(if $(APPLY),--apply) \
+		$(if $(FILTER),--filter "$(FILTER)") \
+		$(if $(KEEP),--keep $(KEEP))
+
+# Evaluate a hand-trained checkpoint that predates the eval phase
+# (models/empathbot/empath_final.pth and friends). Output lands at
+# output/eval/baseline__<id>/ and shows up alongside sweep runs in
+# `make compare`. Add new baselines by editing BASELINES in
+# pipeline/eval/baselines.py.
+#   make evaluate-baseline ID=empath_final
+#   make evaluate-baseline ID=empath_best_v1
+evaluate-baseline:
+	@if [ -z "$(ID)" ]; then \
+		echo "usage: make evaluate-baseline ID=<baseline-id>"; \
+		echo "       (one of: empath_final, empath_best_v1 — see pipeline/eval/baselines.py)"; \
+		exit 2; \
+	fi
+	python -m pipeline.eval.baselines --id "$(ID)"
 
 # ──────────────────────────────────────────────────────────────────────────
 # Deploy a trained checkpoint into the model_service.
