@@ -18,6 +18,11 @@ seaborn>=0.13.0
 # timm — EfficientNet-B2 backbone for empathbot_v1, empathbot_final, ada_df
 timm>=0.9.0
 
+# HuggingFace `datasets` — used by pipeline/datasets/empath/{affectnet,rafdb,sfew}.py
+# to auto-download the empath source datasets when their EMPATH_*_DIR env vars
+# are unset (cached under output/data/empath/raw/, gitignored).
+datasets>=2.14.0
+
 # Face crop / blur filter pre-steps (empath/face_crop.py + kash/quality_filter.py).
 # Both are opt-in via env vars (EMPATH_FACE_CROP, KASH_FACE_CROP, KASH_BLUR_FILTER);
 # remove these two lines if you'll never use the filters.

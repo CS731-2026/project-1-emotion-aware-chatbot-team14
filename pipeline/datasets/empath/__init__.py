@@ -14,10 +14,20 @@ independently when a source dataset's format drifts:
     rafdb.py       RAF-DB loader + label remap (notebook cell 13-18)
     sfew.py        SFEW loader + label remap (notebook cell 19-21, eval-only)
 
-Source data isn't bundled — each loader resolves a directory from an
-env var (EMPATH_AFFECTNET_DIR / EMPATH_RAFDB_DIR / EMPATH_SFEW_DIR)
-and fails loudly if not set. Place the team's processed (face-cropped)
-copies at those paths.
+Source data isn't bundled. Each loader resolves a directory in this
+order:
+
+  1. EMPATH_{AFFECTNET,RAFDB,SFEW}_DIR if set — use the team's
+     pre-cropped local copy at that path
+  2. Otherwise output/data/empath/raw/<source>/ (gitignored) —
+     auto-downloaded from HuggingFace + **face-cropped in-stream**
+     via the YOLO face detector. AffectNet and RAF-DB always succeed;
+     SFEW depends on community mirrors and is skipped gracefully if
+     none load (it's eval-only — training is unaffected).
+
+Face cropping is always-on for the download path (matches the team's
+notebook pipeline; gives training-distribution parity with the
+hand-trained baselines under models/empathbot/).
 
 The notebook also runs YOLO face detection + cropping (cells 24-26)
 before merging. By default we skip that step — set EMPATH_FACE_CROP=1
@@ -69,9 +79,13 @@ def prepare(ctx) -> DatasetSpec:
     # Collect available sources. Each loader returns a DataFrame with
     # columns ['path', 'label', 'split'] where label is the EmpathBot
     # class index and split is one of {'train', 'val', 'test'}.
-    do_face_crop = os.environ.get("EMPATH_FACE_CROP", "0").lower() in {"1", "true", "yes"}
-    crops_root = cache_dir / "crops"
-
+    #
+    # Face-cropping happens **inside** each per-source loader's
+    # _download_to() now — the YOLO face filter is mandatory and runs
+    # in-stream during the HF download. The previous opt-in
+    # EMPATH_FACE_CROP env var is gone (face crops are always-on,
+    # because the team's hand-trained baselines were trained on
+    # cropped data and we want training-distribution parity).
     parts: list[pd.DataFrame] = []
     for name, loader in [
         ("affectnet", affectnet.load),
@@ -80,8 +94,6 @@ def prepare(ctx) -> DatasetSpec:
     ]:
         try:
             df = loader()
-            if do_face_crop:
-                df = face_crop.crop_dataset(df, crops_root / name, name)
             df["dataset"] = name
             parts.append(df)
             logger.info("empath: loaded %s — %d rows", name, len(df))
