@@ -53,6 +53,10 @@ def main() -> int:
     ap.add_argument("--variant", default=None,
                     help="override inferred variant (one of placeholder|resnet18|empathbot)")
     ap.add_argument("--repo-root", default=".", help="repo root (default cwd)")
+    ap.add_argument("--force", action="store_true",
+                    help="overwrite an existing models/<id>/<checkpoint> instead "
+                         "of refusing. Without this flag, deploy refuses to "
+                         "clobber a checkpoint that already exists on disk.")
     args = ap.parse_args()
 
     repo_root = Path(args.repo_root).resolve()
@@ -86,6 +90,15 @@ def main() -> int:
     dest_dir = models_root / args.id
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest_ckpt = dest_dir / args.checkpoint
+    if dest_ckpt.exists() and not args.force:
+        print(
+            f"✗ refusing to overwrite existing checkpoint:\n"
+            f"    {dest_ckpt.relative_to(repo_root)}\n"
+            f"  Use a different --id (e.g. --id {args.id}_v2), or pass "
+            f"--force to overwrite.",
+            file=sys.stderr,
+        )
+        return 2
     shutil.copy2(src_ckpt, dest_ckpt)
     print(f"✓ copied {src_ckpt.relative_to(repo_root)} → "
           f"{dest_ckpt.relative_to(repo_root)}")

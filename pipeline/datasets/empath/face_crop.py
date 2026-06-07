@@ -37,13 +37,86 @@ DEFAULT_MULTI_FACE_THR = 0.10
 DEFAULT_CONF           = 0.4   # notebook cell 25 default
 
 
-def _yolo():
+def load_yolo():
     """Reuse FaceDetector's cached weights file by instantiating it
     (the download is hf_hub_download with resume — fast after first
-    call) and returning its underlying ultralytics.YOLO model."""
+    call) and returning its underlying ultralytics.YOLO model.
+
+    Public name so the in-stream cropping path (affectnet/rafdb
+    _download_to) can call it once outside the per-sample loop."""
     from face_cropper import FaceDetector  # type: ignore[attr-defined]
     fd = FaceDetector()
     return fd._model, fd.device
+
+
+# Backwards-compat alias for the existing crop_dataset path.
+_yolo = load_yolo
+
+
+def crop_pil(pil_img, yolo, device, *,
+             min_face_ratio: float = DEFAULT_MIN_FACE_RATIO,
+             pad_ratio:      float = DEFAULT_PAD_RATIO,
+             target_size:    int   = DEFAULT_TARGET_SIZE,
+             multi_face_thr: float = DEFAULT_MULTI_FACE_THR,
+             conf:           float = DEFAULT_CONF):
+    """In-memory variant of _filter_and_crop — takes a PIL image,
+    returns (cropped PIL image or None, reason).
+
+    Returns (PIL.Image, "ok") on success; (None, reason_str) otherwise
+    where reason is one of "no_face" / "face_too_small" / "multiple_faces"
+    / "empty_crop". Used by in-stream materialization so we never write
+    the raw image to disk just to feed it to YOLO.
+    """
+    import cv2
+    import numpy as np
+    from PIL import Image
+
+    # PIL → BGR numpy for cv2/YOLO consistency with the file-path path.
+    if pil_img.mode != "RGB":
+        pil_img = pil_img.convert("RGB")
+    arr = np.array(pil_img)
+    img_bgr = arr[:, :, ::-1].copy()                 # RGB → BGR
+
+    h, w = img_bgr.shape[:2]
+    img_area = float(h * w)
+    if img_area <= 0:
+        return None, "empty_crop"
+
+    results = yolo(img_bgr, verbose=False, conf=conf, device=device)
+    boxes_attr = results[0].boxes
+    if boxes_attr is None or len(boxes_attr) == 0:
+        return None, "no_face"
+
+    xyxy = boxes_attr.xyxy.cpu().numpy()
+    valid = []
+    for box in xyxy:
+        x1, y1, x2, y2 = (int(v) for v in box[:4])
+        ratio = ((x2 - x1) * (y2 - y1)) / img_area
+        if ratio >= min_face_ratio:
+            valid.append((x1, y1, x2, y2, ratio))
+
+    if not valid:
+        return None, "face_too_small"
+
+    valid.sort(key=lambda b: b[4], reverse=True)
+    if len(valid) > 1 and valid[1][4] > multi_face_thr:
+        return None, "multiple_faces"
+
+    x1, y1, x2, y2, _ = valid[0]
+    pad_x = int((x2 - x1) * pad_ratio)
+    pad_y = int((y2 - y1) * pad_ratio)
+    x1 = max(0, x1 - pad_x); y1 = max(0, y1 - pad_y)
+    x2 = min(w, x2 + pad_x); y2 = min(h, y2 + pad_y)
+
+    crop = img_bgr[y1:y2, x1:x2]
+    if crop.size == 0:
+        return None, "empty_crop"
+
+    resized = cv2.resize(crop, (target_size, target_size),
+                         interpolation=cv2.INTER_LANCZOS4)
+    # BGR → RGB → PIL for the caller.
+    rgb = resized[:, :, ::-1]
+    return Image.fromarray(rgb), "ok"
 
 
 def _filter_and_crop(img_path: str, out_path: str, yolo, device,

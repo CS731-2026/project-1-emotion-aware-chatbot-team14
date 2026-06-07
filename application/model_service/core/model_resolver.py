@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -38,16 +39,25 @@ def _kaggle_creds_present() -> bool:
     return cfg.exists()
 
 
-def _fetch_kaggle_weights(models_root: Path, slug: str) -> bool:
-    """Run `kaggle datasets download --unzip` into models/. Returns True
-    on success, False (with a logged warning) on any failure — the
-    caller decides whether to raise."""
-    models_root.mkdir(parents=True, exist_ok=True)
-    logger.info("model_resolver: fetching %s → %s", slug, models_root)
+def _fetch_specific_checkpoint(repo_root: Path, rel_path: str, slug: str) -> bool:
+    """Download the Kaggle weights dataset into a staging dir, then copy
+    *only* the requested checkpoint into models/. Returns True on
+    success, False (with a logged warning) on any failure.
+
+    Staging-first means a stray --force unzip into models/ can never
+    overwrite hand-trained checkpoints already on disk. We only copy
+    the one file the caller actually asked for — siblings under
+    models/<id>/ stay untouched."""
+    staging = repo_root / "output" / "kaggle_fetch_temp"
+    if staging.exists():
+        shutil.rmtree(staging)
+    staging.mkdir(parents=True)
+
+    logger.info("model_resolver: fetching %s → staging at %s", slug, staging)
     try:
         result = subprocess.run(
             ["kaggle", "datasets", "download", "-d", slug,
-             "-p", str(models_root), "--unzip", "--force"],
+             "-p", str(staging), "--unzip", "--force"],
             capture_output=True, text=True, timeout=300,
         )
     except FileNotFoundError:
@@ -61,6 +71,23 @@ def _fetch_kaggle_weights(models_root: Path, slug: str) -> bool:
         logger.warning("model_resolver: kaggle fetch exited %d. stderr: %s",
                        result.returncode, result.stderr.strip()[:500])
         return False
+
+    src = staging / rel_path
+    if not src.exists():
+        logger.warning("model_resolver: requested %s not present in fetched "
+                       "dataset (looked under %s)", rel_path, staging)
+        return False
+
+    dst = (repo_root / rel_path).resolve()
+    if dst.exists():
+        # Belt + braces — resolve_checkpoint() already returns early when
+        # dst exists, so we should never get here. Log loudly if we do.
+        logger.warning("model_resolver: refusing to overwrite existing %s "
+                       "(this branch shouldn't be reachable)", dst)
+        return False
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst)
+    logger.info("model_resolver: copied %s → %s", src, dst)
     return True
 
 
@@ -94,7 +121,7 @@ def resolve_checkpoint(rel_path: str, *, repo_root: Path,
             f"manually or add creds + retry."
         )
 
-    fetched = _fetch_kaggle_weights(repo_root / "models", slug)
+    fetched = _fetch_specific_checkpoint(repo_root, rel_path, slug)
     if fetched and abs_path.exists():
         logger.info("model_resolver: ✓ fetched from Kaggle, using %s", abs_path)
         return abs_path

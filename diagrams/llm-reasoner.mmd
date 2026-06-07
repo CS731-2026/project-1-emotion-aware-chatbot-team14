@@ -1,0 +1,132 @@
+flowchart LR
+    %% ──────────────────────────────────────────────────────────────────
+    %% Inputs gathered from elsewhere in the service before the reasoner
+    %% is invoked. Each lives in its own subsystem; the reasoner just
+    %% receives them as arguments to reason(...).
+    %% ──────────────────────────────────────────────────────────────────
+    subgraph INPUTS["External inputs"]
+        MSG["current_message<br/><i>str — typed by user</i>"]
+        HIST[("history<br/><i>profileStore — last N msgs</i>")]
+        EBUF[("EmotionBuffer<br/><i>face-based observations</i>")]
+        TBUF[("transcript_buffer<br/><i>STT segments</i>")]
+        SEV[("system_events<br/><i>form answers, segment summaries</i>")]
+        COND["Conductor<br/><i>Yarn state machine</i>"]
+        PERS["BASE_PERSONA<br/><i>module-level constant</i>"]
+    end
+
+    %% ──────────────────────────────────────────────────────────────────
+    %% A side-agent that turns raw EmotionBuffer observations into one
+    %% human-readable sentence the reasoner uses as a system message.
+    %% ──────────────────────────────────────────────────────────────────
+    subgraph ER_BOX["EmotionalReasoningAgent (separate module)"]
+        ER["analyse()"]
+        ECTX["emotional_context<br/><i>str</i>"]
+    end
+
+    %% ──────────────────────────────────────────────────────────────────
+    %% The four-stage pipeline inside LLMReasoningAgent.
+    %% Each stage produces one named artifact consumed by the next.
+    %% ──────────────────────────────────────────────────────────────────
+    subgraph RA["LLMReasoningAgent.reason()"]
+        direction TB
+        S1["1 ▸ collect_inputs()<br/><i>normalise raw args</i>"]
+        RI["ReasoningInputs<br/><i>dataclass(frozen)</i>"]
+        S2["2 ▸ derive_prompt_context()<br/><i>raw → structured prompt parts</i>"]
+        subgraph PC["PromptContext (dataclass)"]
+            SP["system_prompt<br/><i>BASE_PERSONA + intention + advance</i>"]
+            HM["history_messages<br/><i>windowed, last 10 user/assistant</i>"]
+            EM["emotional_message<br/><i>{role:system, content:…}</i>"]
+            TM["transcript_message<br/><i>compose_stream + conf remap</i>"]
+            FM["feedback_message<br/><i>None until Phase 4</i>"]
+        end
+        S3["3 ▸ assemble_messages()<br/><i>flatten to provider list</i>"]
+        PM["prompt_messages<br/><i>list&lt;Message&gt;: system / history / sys / sys / user</i>"]
+        S4["4 ▸ self._llm.chat(messages)"]
+        RAW["raw LLM text"]
+        EXTR["extract_emissions()<br/><i>strip &#91;&#91;advance&#93;&#93; markers</i>"]
+        OUT["ReasoningResult<br/><i>(reply, emissions)</i>"]
+    end
+
+    %% ──────────────────────────────────────────────────────────────────
+    %% Downstream consumers of the pipeline output.
+    %% ──────────────────────────────────────────────────────────────────
+    LLM["LLM provider<br/><i>OpenAI / Gemini / Anthropic / Ollama</i>"]
+    ROUTER["routers/chat.py<br/><i>returns reply to backend</i>"]
+    CONDOUT["Conductor reads emissions<br/><i>→ state transitions</i>"]
+
+    %% ──────────────────────────────────────────────────────────────────
+    %% EmotionalReasoningAgent: takes EmotionBuffer + transcript, emits one
+    %% prose sentence that becomes the reasoner's emotional_context input.
+    %% ──────────────────────────────────────────────────────────────────
+    EBUF --> ER
+    TBUF --> ER
+    ER --> ECTX
+
+    %% ──────────────────────────────────────────────────────────────────
+    %% Stage 1: collect_inputs normalises everything into a ReasoningInputs
+    %% dataclass. The conductor's intention + advance_instruction flow in here.
+    %% ──────────────────────────────────────────────────────────────────
+    MSG --> S1
+    ECTX --> S1
+    HIST --> S1
+    TBUF --> S1
+    SEV --> S1
+    COND -.->|"intention<br/>advance_instruction"| S1
+    S1 --> RI
+
+    %% ──────────────────────────────────────────────────────────────────
+    %% Stage 2: derive_prompt_context — main extension point for future
+    %% reasoning work (summarisation, COT scaffolding, retrieval, etc.).
+    %% Builds each field of PromptContext from raw inputs.
+    %% ──────────────────────────────────────────────────────────────────
+    RI --> S2
+    PERS -.-> SP
+    S2 --> SP
+    S2 --> HM
+    S2 --> EM
+    S2 --> TM
+    S2 --> FM
+
+    %% ──────────────────────────────────────────────────────────────────
+    %% Stage 3: assemble_messages — flatten PromptContext into the
+    %% provider-facing list[Message] in order:
+    %% [system_prompt] + history + [emotional?] + [transcript?] + [feedback?] + [user current]
+    %% ──────────────────────────────────────────────────────────────────
+    SP --> S3
+    HM --> S3
+    EM --> S3
+    TM --> S3
+    FM --> S3
+    MSG -.-> S3
+    S3 --> PM
+
+    %% ──────────────────────────────────────────────────────────────────
+    %% Stage 4: provider call + post-processing. The LLM is provider-agnostic
+    %% via the LLMProvider protocol. extract_emissions parses inline tool
+    %% markers like [[advance]] out of the raw text into structured emissions.
+    %% ──────────────────────────────────────────────────────────────────
+    PM --> S4
+    S4 --> LLM
+    LLM --> RAW
+    RAW --> EXTR
+    EXTR --> OUT
+
+    OUT -->|"reply (cleaned text)"| ROUTER
+    OUT -.->|"emissions[]"| CONDOUT
+
+    %% ──────────────────────────────────────────────────────────────────
+    %% Colour key for readers: buffers, ML/agent components, external services.
+    %% ──────────────────────────────────────────────────────────────────
+    classDef buffer fill:#fff4d6,stroke:#a67c00,color:#5a4500
+    classDef agent fill:#dde7ff,stroke:#3050a0,color:#142060
+    classDef stage fill:#e6f7e6,stroke:#3a8a3a,color:#1a4a1a
+    classDef artifact fill:#f4eaff,stroke:#704090,color:#301050
+    classDef external fill:#ffe1e1,stroke:#a04040,color:#5a1010
+    classDef constant fill:#f0f0f0,stroke:#606060,color:#202020
+
+    class HIST,EBUF,TBUF,SEV buffer
+    class ER,EXTR agent
+    class S1,S2,S3,S4 stage
+    class RI,SP,HM,EM,TM,FM,PM,RAW,OUT,ECTX artifact
+    class LLM external
+    class PERS,COND,MSG,ROUTER,CONDOUT constant

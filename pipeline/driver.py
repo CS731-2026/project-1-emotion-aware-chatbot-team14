@@ -37,8 +37,14 @@ PHASES: dict[str, PhaseFn] = {
     "setup":           phases.setup,
     "prepare_dataset": phases.prepare_dataset,
     "train":           phases.train,
-    # evaluate lands later; for now train does inline val/test eval
+    "evaluate":        phases.evaluate,
 }
+
+# Default phase list when a run doesn't specify one. evaluate runs after
+# train so the freshly-saved best checkpoint gets fed through the same
+# eval pipeline every other run uses — apples-to-apples leaderboard
+# results fall out automatically.
+DEFAULT_PHASES: list[str] = ["setup", "prepare_dataset", "train", "evaluate"]
 
 
 def run_one(
@@ -50,7 +56,7 @@ def run_one(
     phases_to_run: list[str] | None = None,
 ) -> Context:
     """Run one (dataset, model, config) combination end-to-end."""
-    phases_to_run = phases_to_run or ["setup", "prepare_dataset", "train"]
+    phases_to_run = phases_to_run or list(DEFAULT_PHASES)
     cfg = Config(
         dataset_name = dataset_module.NAME,
         model_name   = _short_module_name(model_module),
