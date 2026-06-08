@@ -70,7 +70,7 @@ def _save_training_curves(ctx, history: list[dict] | dict) -> None:
     """
     h = _coerce_history(history)
     if not h or "epoch" not in h:
-        logger.info("reporting: no epoch history — skipping training_curves.png")
+        logger.info("reporting: no epoch history, skipping training_curves.png")
         return
 
     _ensure_agg()
@@ -111,7 +111,7 @@ def _save_training_curves(ctx, history: list[dict] | dict) -> None:
         ax.set_xlabel("Epoch"); ax.set_ylabel("Learning rate"); ax.set_title("LR schedule")
         ax.set_yscale("log"); ax.grid(True, alpha=0.3)
 
-    fig.suptitle(f"{ctx.config.model} — Training Curves", fontsize=12, fontweight="bold")
+    fig.suptitle(f"{ctx.config.model}, Training Curves", fontsize=12, fontweight="bold")
     fig.tight_layout()
     ctx.save_image("training_curves", fig)
     plt.close(fig)
@@ -119,7 +119,7 @@ def _save_training_curves(ctx, history: list[dict] | dict) -> None:
 
 def _save_confusion_matrix(ctx, preds: np.ndarray, labels: np.ndarray,
                             num_classes: int, class_names: list[str]) -> np.ndarray:
-    """Two-panel heatmap (raw counts + row-normalised) — notebook 2 cell 26
+    """Two-panel heatmap (raw counts + row-normalised), notebook 2 cell 26
     layout. Returns the raw confusion matrix so the caller can include
     it in the JSON summary."""
     from sklearn.metrics import confusion_matrix
@@ -139,7 +139,7 @@ def _save_confusion_matrix(ctx, preds: np.ndarray, labels: np.ndarray,
         have_sns = False
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 5.5))
-    fig.suptitle(f"{ctx.config.model} — Confusion matrix",
+    fig.suptitle(f"{ctx.config.model}, Confusion matrix",
                  fontsize=12, fontweight="bold")
 
     for ax, data, title, fmt in [
@@ -222,7 +222,7 @@ def write_standard_artifacts(
     Returns the per-class metrics dict so the caller can include them
     in its own logging / TrainedModel result if it wants.
 
-    Failures in any sub-step are logged but don't propagate — a missing
+    Failures in any sub-step are logged but don't propagate, a missing
     matplotlib install shouldn't kill an otherwise-successful run.
     """
     preds_arr = np.asarray(list(test_preds), dtype=np.int64)

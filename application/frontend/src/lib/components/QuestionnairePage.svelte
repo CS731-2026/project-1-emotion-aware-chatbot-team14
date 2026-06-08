@@ -27,7 +27,7 @@
     spec: PageSpec;
     /**
      * Fired whenever the user picks a chip. `isLastAnswer` is true when
-     * this answer brings every question in the spec to a selected state —
+     * this answer brings every question in the spec to a selected state ,
      * the parent uses it to signal form_complete to the conductor.
      */
     onAnswer: (questionId: string, value: string, isLastAnswer: boolean) => void;
@@ -48,7 +48,7 @@
      * resets the prop to null so a duplicate text doesn't get processed
      * twice on rerender. */
     onInputConsumed?: () => void;
-    /** TTS handler injected by the parent — owned there so the parent's
+    /** TTS handler injected by the parent, owned there so the parent's
      * isSpeaking state flips before audio leaves the speaker, gating the
      * mic in time to avoid recording the TTS itself. */
     speakPrompt?: (text: string) => void;
@@ -97,7 +97,7 @@
       if (!spokenQuestionIds.has(q.id)) {
         readPrompt(q.prompt);
         spokenQuestionIds = new Set([...spokenQuestionIds, q.id]);
-        break;  // one new prompt per tick — don't stack utterances
+        break;  // one new prompt per tick, don't stack utterances
       }
     }
   });
@@ -127,7 +127,7 @@
    *   1. Exact (normalised) match against label or value
    *   2. Substring containment in either direction (text contains label,
    *      or label contains text)
-   * No exotic NLP — for a 4-chip multiple choice this is plenty and gives
+   * No exotic NLP, for a 4-chip multiple choice this is plenty and gives
    * predictable behaviour the user can reason about.
    */
   function matchChip(question: QuestionSpec, text: string): string | null {
@@ -184,7 +184,7 @@
 
 <div class="page" in:fly={{ y: 24, duration: 360, delay: 280, easing: cubicOut }}>
   <header class="header" in:fade={{ duration: 240, delay: 400 }}>
-    <div class="eyebrow">SCREEN 2 — QUESTIONNAIRE WITH EMOTION DETECTION</div>
+    <div class="eyebrow">SCREEN 2, QUESTIONNAIRE WITH EMOTION DETECTION</div>
     <div class="title-row">
       <div class="title-block">
         <h1>{spec.title}</h1>
@@ -219,7 +219,7 @@
       onSend={handleComposerSubmit}
       {isListening}
       {onMicToggle}
-      placeholder="Answer aloud, or type — chips also work"
+      placeholder="Answer aloud, or type, chips also work"
       {audioLevel}
       {locked}
     />

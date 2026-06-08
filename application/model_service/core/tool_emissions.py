@@ -10,7 +10,7 @@ dataclass + parser are deliberately set up to extend to:
   - markers with payloads: `[[record_fact: {"key": "..."}]]`
   - additional kinds: `[[suggest_check_in: feedback]]`,
     `[[note: "..."]]`, etc.
-without changing the conductor's interface — it always reads a list of
+without changing the conductor's interface, it always reads a list of
 ToolEmission(name, payload) values.
 
 When we eventually move to provider-native tool calling, the parser
@@ -31,7 +31,7 @@ class ToolEmission:
     payload: dict[str, Any] = field(default_factory=dict)
 
 
-# Today we only recognise [[advance]] — case-insensitive, optionally
+# Today we only recognise [[advance]], case-insensitive, optionally
 # surrounded by whitespace, last thing in the reply (own line preferred).
 # Extending to parametric markers is one more capture group + JSON parse.
 _ADVANCE_RE = re.compile(r"\n?\s*\[\[\s*advance\s*\]\]\s*$", re.IGNORECASE)

@@ -1,11 +1,11 @@
 """
-CS731 — Face Detector Module
+CS731, Face Detector Module
 ==============================
 Implements all four detectors compared in the notebook:
-  1. YOLOv8-face  (recommended — best speed/accuracy for real-time)
+  1. YOLOv8-face  (recommended, best speed/accuracy for real-time)
   2. RetinaFace   (skipped gracefully if TF dependency conflict exists)
   3. MediaPipe    (skipped gracefully if not installed)
-  4. Haar Cascade (CPU baseline — always available)
+  4. Haar Cascade (CPU baseline, always available)
 
 All detectors share the same interface:
     detector.detect(img_bgr) → list of {'bbox': [x1,y1,x2,y2], 'confidence': float}
@@ -81,7 +81,7 @@ class FaceDetector(ABC):
 
 class YOLOFaceDetector(FaceDetector):
     """
-    YOLOv8n-face — fine-tuned on WIDERFace.
+    YOLOv8n-face, fine-tuned on WIDERFace.
     Best speed-accuracy trade-off for real-time webcam use.
 
     Weights are auto-downloaded from:
@@ -128,7 +128,7 @@ class YOLOFaceDetector(FaceDetector):
 
 class RetinaFaceDetector(FaceDetector):
     """
-    RetinaFace — state-of-the-art anchor-based detector.
+    RetinaFace, state-of-the-art anchor-based detector.
     Requires tensorflow, which conflicts with newer Python versions.
     Skipped gracefully if unavailable.
     """
@@ -168,7 +168,7 @@ class RetinaFaceDetector(FaceDetector):
 
 class MediaPipeDetector(FaceDetector):
     """
-    MediaPipe BlazeFace — ultra-fast mobile-grade detector.
+    MediaPipe BlazeFace, ultra-fast mobile-grade detector.
     Works well for selfie-style inputs; lower IoU on academic crop datasets.
     Skipped gracefully if mediapipe is not installed.
     """
@@ -211,7 +211,7 @@ class MediaPipeDetector(FaceDetector):
 
 class HaarCascadeDetector(FaceDetector):
     """
-    OpenCV Haar Cascade — classical CPU baseline.
+    OpenCV Haar Cascade, classical CPU baseline.
     Always available (bundled with opencv-python).
     Good for frontal faces, weaker on angled or low-contrast images.
     """

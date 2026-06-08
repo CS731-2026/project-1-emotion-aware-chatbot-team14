@@ -8,7 +8,7 @@ timestamp and rendered with distinct syntaxes:
   event:   [t.t] {{kind: {…compact json…}}}
 
 Confidence tag rendering for speech mirrors what was in
-reasoning_agent before — it stays here so the LLM-prompt-assembly code
+reasoning_agent before, it stays here so the LLM-prompt-assembly code
 has one source of truth for stream rendering.
 """
 
@@ -22,7 +22,7 @@ from core.events import SystemEvent
 def _confidence_tag(confidence: float | None, remap: Any) -> str:
     """Format the (conf NN%) tag using the same remap the agent uses.
 
-    `remap` is the sigmoid function from reasoning_agent — passed in
+    `remap` is the sigmoid function from reasoning_agent, passed in
     rather than imported to avoid a circular dependency.
     """
     pct = remap(confidence)

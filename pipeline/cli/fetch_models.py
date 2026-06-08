@@ -44,7 +44,7 @@ def main() -> int:
                     help="overwrite existing models/<id>/ subdirs that conflict "
                          "with the downloaded dataset. Without this flag, fetch "
                          "downloads to a staging dir and refuses to clobber any "
-                         "id that's already on disk — your local checkpoints "
+                         "id that's already on disk, your local checkpoints "
                          "(e.g. models/empathbot/empath_final.pth) stay safe.")
     args = ap.parse_args()
 
@@ -87,7 +87,7 @@ def main() -> int:
         for i in conflicts:
             print(f"    models/{i}/", file=sys.stderr)
         print(f"  Downloaded copy is staged at "
-              f"{staging.relative_to(repo_root)}/ — move what you want by "
+              f"{staging.relative_to(repo_root)}/, move what you want by "
               f"hand, or re-run with --force to overwrite.", file=sys.stderr)
         return 2
 
@@ -97,7 +97,7 @@ def main() -> int:
         src = staging / i
         dst = models_root / i
         if dst.exists():
-            shutil.rmtree(dst)  # --force path only — guarded above
+            shutil.rmtree(dst)  # --force path only, guarded above
         shutil.move(str(src), str(dst))
         moved.append(i)
     print(f"✓ fetched {len(moved)} model(s) into "

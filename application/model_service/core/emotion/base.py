@@ -6,7 +6,7 @@ import numpy as np
 
 
 # EmpathBot 6-class schema. Source of truth: dataset/master_split.csv eb_label.
-# Index order matches the model's output logit order — do not reorder.
+# Index order matches the model's output logit order, do not reorder.
 EMOTIONS = [
     "neutral",        # 0
     "trust_relief",   # 1

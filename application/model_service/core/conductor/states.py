@@ -14,7 +14,7 @@ Full five-state forward walk (plus a terminal done):
   injected into the next state's transcript as a {{segment_summary}}
   event.
 
-State names are internal — the LLM never sees them; segment_summary
+State names are internal, the LLM never sees them; segment_summary
 events use the sequential segment_id_counter instead.
 """
 
@@ -25,12 +25,12 @@ from .state import State, StateContext, TickResult
 # ---------- form specs ----------
 #
 # Questions sourced from design_decision/gp_feedback_questions.html.
-# Scales (1–10, 1–5) are collapsed into three labelled tiers — the
+# Scales (1–10, 1–5) are collapsed into three labelled tiers, the
 # QuestionSpec chip model does not support numeric sliders.
 
 _QA_FORM_SPEC = PageSpec(
     title="About your appointment today",
-    subtitle="This won't take long — tap the answer that feels right.",
+    subtitle="This won't take long, tap the answer that feels right.",
     emotionAware=True,
     reveal="sequential",
     questions=[
@@ -86,7 +86,7 @@ _FEEDBACK_FORM_SPEC = PageSpec(
             id="ai_feeling",
             prompt="How did it make you feel knowing that a computer may have helped with your appointment?",
             choices=[
-                Choice(label="Reassured — more accurate", value="reassured", tone="positive"),
+                Choice(label="Reassured, more accurate", value="reassured", tone="positive"),
                 Choice(label="Fine, no strong feelings", value="fine"),
                 Choice(label="A little unsure", value="a_little_unsure", tone="concerning"),
                 Choice(label="Worried or uncomfortable", value="worried", tone="concerning"),
@@ -120,7 +120,7 @@ _FEEDBACK_FORM_SPEC = PageSpec(
                 Choice(label="A clearer explanation", value="clearer_explanation"),
                 Choice(label="More information about the technology", value="more_tech_info"),
                 Choice(label="More privacy", value="more_privacy"),
-                Choice(label="Nothing — it was fine", value="nothing_fine", tone="positive"),
+                Choice(label="Nothing, it was fine", value="nothing_fine", tone="positive"),
             ],
             allowFreeText=True,
         ),
@@ -157,20 +157,20 @@ QA_FORM = State(
         '  "doctor_explained": one of "yes_clearly" | "mostly" | "confusing" | "still_unsure" | null\n'
         '  "treatment_confidence": one of "very_confident" | "fairly_confident" | "not_confident" | "unsure_what_to_do" | null\n'
         '  "symptom_instructions": one of "yes" | "partly" | "no" | null\n'
-        '  "has_concern": boolean — true if any answer signals confusion or lack of confidence\n'
+        '  "has_concern": boolean, true if any answer signals confusion or lack of confidence\n'
         '  "notes": one-sentence free-form summary or null'
     ),
 )
 
 
 class PostQaYarn(State):
-    """The check-in follow-up yarn — three-phase prompt.
+    """The check-in follow-up yarn, three-phase prompt.
 
     Phases (keyed off `ctx.turn_in_state` inside the state):
       - 0 … 1  warm acknowledgement only (base intention_prompt)
       - 2      branching guidance: probe a bad experience, OR pivot to a
                soft ask for feedback
-      - 3 +    escalate — insist on feedback, warmly but explicitly. If
+      - 3 +    escalate, insist on feedback, warmly but explicitly. If
                the bad-experience probe is still live, frame the
                feedback as the way to make sure their experience is
                heard.
@@ -185,7 +185,7 @@ class PostQaYarn(State):
         "The patient has just answered a few questions about their GP "
         "appointment today. Their answers are visible to you as "
         "{{form_answer: …}} lines in the recent transcript. "
-        "Respond in plain, warm, everyday English — no medical or "
+        "Respond in plain, warm, everyday English, no medical or "
         "technical jargon. Keep your reply under three sentences. "
         "If their answers suggest confusion, worry, or lack of confidence "
         "about the visit or about AI being used, open with empathy and "
@@ -200,20 +200,20 @@ class PostQaYarn(State):
         "now, then take ONE of these two paths:\n"
         "\n"
         "  (A) If they seem confused about their diagnosis, worried about "
-        "AI or technology in their care, or uneasy about privacy — your "
+        "AI or technology in their care, or uneasy about privacy, your "
         "priority is to understand what specifically feels wrong. Ask one "
         "gentle, plain-English question. Do not move on until they have "
         "named their concern. Once they have, reassure them simply and "
         "directly, then invite them to share that concern as feedback so "
         "it can be acted on.\n"
         "\n"
-        "  (B) If they seem calm, satisfied, or neutral — invite them "
+        "  (B) If they seem calm, satisfied, or neutral, invite them "
         "gently to share how the appointment felt overall. Frame it as "
         "something that helps improve care for others ('it only takes a "
         "moment and it genuinely helps'). Don't push more than twice.\n"
         "\n"
         "In both paths, never use words like 'feedback form', 'survey', "
-        "'algorithm', or 'AI' — say 'computer' or 'technology' if needed."
+        "'algorithm', or 'AI', say 'computer' or 'technology' if needed."
     )
 
     _INSIST_GUIDANCE = (
@@ -228,7 +228,7 @@ class PostQaYarn(State):
     def tick(self, ctx: StateContext) -> TickResult:
         """Phase the intention by turn count.
 
-        Three phases — see class docstring. `should_advance` defers to
+        Three phases, see class docstring. `should_advance` defers to
         the base hard_advance lambda (turn cap / time cap); the soft
         [[advance]] emission path is handled by the conductor outside
         tick().
@@ -249,12 +249,12 @@ POST_QA_YARN = PostQaYarn(
     # still set it so the yarn-opener path (which reads intention_prompt
     # directly for its turn-0 read) sees the base text.
     intention_prompt=PostQaYarn._BASE_INTENTION,
-    # Safety net only — preferred exit is the [[advance]] emission below,
+    # Safety net only, preferred exit is the [[advance]] emission below,
     # fired by the LLM when it senses the user is ready to move on. The
     # turn / time caps stop a stuck conversation from trapping the user.
     hard_advance=lambda ctx: ctx.turn_in_state >= 24 or ctx.elapsed_in_state >= 900.0,
     advance_instruction=_advance(
-        "the patient has reached a natural pause — they sound settled, "
+        "the patient has reached a natural pause, they sound settled, "
         "their concern has been acknowledged, they've agreed to share "
         "more thoughts, or they've firmly said they're done"
     ),
@@ -264,8 +264,8 @@ POST_QA_YARN = PostQaYarn(
         "in the follow-up conversation after the appointment questions. Required fields:\n"
         '  "concerns_raised": list of short strings describing any worries '
         'the patient mentioned (may be empty)\n'
-        '  "ai_concern": boolean — true if the patient expressed worry about AI or technology\n'
-        '  "privacy_concern": boolean — true if the patient raised a data or privacy worry\n'
+        '  "ai_concern": boolean, true if the patient expressed worry about AI or technology\n'
+        '  "privacy_concern": boolean, true if the patient raised a data or privacy worry\n'
         '  "patient_seems_settled": boolean\n'
         '  "notes": one-sentence summary or null'
     ),
@@ -288,7 +288,7 @@ FEEDBACK_FORM = State(
         '  "overall_rating": one of "excellent" | "good" | "fair" | "poor" | null\n'
         '  "what_would_help": string or null\n'
         '  "open_text": any free-text the patient added or null\n'
-        '  "has_concern": boolean — true if any answer signals worry about AI, privacy, or a poor rating'
+        '  "has_concern": boolean, true if any answer signals worry about AI, privacy, or a poor rating'
     ),
 )
 
@@ -299,7 +299,7 @@ POST_FEEDBACK_YARN = State(
     intention_prompt=(
         "The patient has just answered questions about their appointment "
         "and about technology being used in their care. "
-        "Thank them briefly and warmly in plain English — no jargon. "
+        "Thank them briefly and warmly in plain English, no jargon. "
         "If their answers suggest they felt worried or unsure about AI "
         "or privacy, address that directly in one or two calm sentences "
         "before thanking them. Keep it under three sentences total. "
@@ -313,7 +313,7 @@ POST_FEEDBACK_YARN = State(
     late_guidance_after=1,
     late_guidance=(
         "The patient has had one turn. If they haven't raised a new "
-        "concern, ease gently toward a warm close — thank them, say "
+        "concern, ease gently toward a warm close, thank them, say "
         "their answers help improve care, and leave an opening for "
         "goodbye. Do not repeat reassurances already given. "
         "Never use words like 'algorithm', 'data', or 'AI system'."

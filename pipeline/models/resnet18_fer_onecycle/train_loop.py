@@ -1,7 +1,7 @@
-"""Training loop — ported from notebook cells 38, 44, 48.
+"""Training loop, ported from notebook cells 38, 44, 48.
 
 SGD(momentum=0.9, wd=1e-4) + OneCycleLR (scheduler.step() per batch, not
-per epoch — notebook's train_step calls it inside the batch loop).
+per epoch, notebook's train_step calls it inside the batch loop).
 CrossEntropyLoss (no class weights). 50 epochs, early-stop patience=10,
 min_delta=1e-4. Batch size 32.
 
@@ -61,7 +61,7 @@ class _CsvDataset(Dataset):
 
 
 def _train_one_epoch(model, loader, criterion, optimizer, scheduler, device):
-    """Verbatim from notebook cell 38 — scheduler steps **per batch**."""
+    """Verbatim from notebook cell 38, scheduler steps **per batch**."""
     model.train()
     total_loss = correct = total = 0
     for x, y in loader:

@@ -1,8 +1,8 @@
-"""Train + val transforms — verbatim from notebook 5_v4 cell 14.
+"""Train + val transforms, verbatim from notebook 5_v4 cell 14.
 
 Two train-time augmentation strengths:
   STD_TF   for non-NEGATIVE classes (mild)
-  NEG_TF   for "hard" classes (NEGATIVE_CLASSES) — stronger augment
+  NEG_TF   for "hard" classes (NEGATIVE_CLASSES), stronger augment
             with grayscale + affine + tighter jitter
 
 VAL_TF is bare resize + normalise.

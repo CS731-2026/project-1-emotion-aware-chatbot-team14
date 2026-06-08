@@ -1,11 +1,11 @@
 """
-EmpathBot — Q&A mode.
+EmpathBot, Q&A mode.
 
 The user asks questions in plain words about AI in their healthcare.
 Webcam runs in the background; if sustained distress is detected,
 the bot offers to re-explain more simply.
 
-Currently UI-only — the LLM call is stubbed via `mock_bot_reply`.
+Currently UI-only, the LLM call is stubbed via `mock_bot_reply`.
 Wire `utils.llm_router.get_reply` in when ready.
 """
 import streamlit as st
@@ -90,7 +90,7 @@ with st.form("ask_form", clear_on_submit=True):
         )
 
 if mic:
-    st.info("Microphone input coming soon — please type for now.")
+    st.info("Microphone input coming soon, please type for now.")
     # TODO: integrate browser Web Speech API via streamlit-mic-recorder
 
 if send and user_text.strip():
@@ -113,6 +113,6 @@ if send and user_text.strip():
 # ── End session ───────────────────────────────────────────────────────────────
 st.markdown("<div class='eb-spacer'></div>", unsafe_allow_html=True)
 if st.session_state["chat_history"]:
-    if st.button("I'm done — finish session", use_container_width=True):
+    if st.button("I'm done, finish session", use_container_width=True):
         st.session_state["chat_history"] = []
         st.switch_page("Home.py")

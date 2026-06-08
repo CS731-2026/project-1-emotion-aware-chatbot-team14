@@ -1,5 +1,5 @@
 <!--
-  /emotion-test/ — isolated emotion-bot harness.
+  /emotion-test/, isolated emotion-bot harness.
 
   Reuses the model_service's WS endpoint and the production face
   detector → emotion classifier path, but skips chat, profiles, LLM,
@@ -152,7 +152,7 @@
     }
   }
 
-  // Debug flag toggles — these hit the model_service over plain HTTP.
+  // Debug flag toggles, these hit the model_service over plain HTTP.
   let forceLabel = $state<Emotion | "">("");
   let cycleLabels = $state(false);
   let logPredictions = $state(false);
@@ -247,7 +247,7 @@
         <label style="display: block; margin: 0.4rem 0;">
           Force label:
           <select bind:value={forceLabel}>
-            <option value="">— off —</option>
+            <option value="">, off ,</option>
             {#each emotionsList as e}
               <option value={e}>{EMOTION_LABEL[e]}</option>
             {/each}

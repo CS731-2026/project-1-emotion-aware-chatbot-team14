@@ -11,7 +11,7 @@ _CANNED = {
     "scan": (
         "When the doctor uses AI to look at your scan, it's like a second pair "
         "of eyes that helps spot things faster. A real doctor still looks at "
-        "every scan and makes the final decision — the AI doesn't decide on its own."
+        "every scan and makes the final decision, the AI doesn't decide on its own."
     ),
     "data": (
         "Your health information is kept private. The AI only looks at what it "
@@ -19,7 +19,7 @@ _CANNED = {
         "see your records. You can ask your GP exactly what is stored, any time."
     ),
     "doctor": (
-        "Yes — a real doctor reviews everything. The AI is a tool that supports "
+        "Yes, a real doctor reviews everything. The AI is a tool that supports "
         "the doctor, like a calculator supports an accountant. It doesn't replace them."
     ),
     "decide": (
@@ -48,7 +48,7 @@ def mock_bot_reply(user_text: str, emotion: str | None = None) -> str:
     # If the webcam picked up sustained worry/sadness, add a gentle reassurance
     if emotion in {"sad", "fear", "angry"}:
         reply = (
-            "I can see this might feel a bit worrying — that's completely okay. "
+            "I can see this might feel a bit worrying, that's completely okay. "
             + reply
         )
     return reply

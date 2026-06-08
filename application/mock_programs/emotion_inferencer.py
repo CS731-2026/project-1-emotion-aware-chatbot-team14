@@ -1,5 +1,5 @@
 """
-CS731 — Real-Time Emotion Inferencer
+CS731, Real-Time Emotion Inferencer
 ======================================
 Wraps a trained checkpoint for single-image inference.
 Includes the EmotionBuffer (rolling window mode) used in both exemplar pipelines.

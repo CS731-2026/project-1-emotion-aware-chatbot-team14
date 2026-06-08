@@ -72,8 +72,8 @@ export function transcriptPreview(
     return liveTranscript.trim();
   }
   // Fallback: walk the recent entries for a real transcript. Skip every kind
-  // of placeholder — [whisper.cpp transcript filtered], [BLANK_AUDIO],
-  // [no transcript text], (sighs), etc. — not just the empty/no-text ones.
+  // of placeholder, [whisper.cpp transcript filtered], [BLANK_AUDIO],
+  // [no transcript text], (sighs), etc., not just the empty/no-text ones.
   const latestRealEntry = entries.find((entry) => isRealTranscript(entry.text));
   if (latestRealEntry) return latestRealEntry.text.trim();
 

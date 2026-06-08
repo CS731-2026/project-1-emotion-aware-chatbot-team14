@@ -21,7 +21,7 @@ html, body, [class*="css"] {
     background-color: #faf7f2;
 }
 
-/* Streamlit container width — keep narrow for readability */
+/* Streamlit container width, keep narrow for readability */
 .main .block-container {
     max-width: 760px;
     padding-top: 3rem;
@@ -36,7 +36,7 @@ h4 { font-size: 22px !important; font-weight: 600; color: #1a2a33; }
 
 p, li, label, span, div { font-size: 20px; line-height: 1.6; }
 
-/* ── Buttons — large tap targets ──────────────────────────────────────────── */
+/* ── Buttons, large tap targets ──────────────────────────────────────────── */
 .stButton > button {
     font-size: 22px !important;
     font-weight: 600 !important;
@@ -74,11 +74,11 @@ p, li, label, span, div { font-size: 20px; line-height: 1.6; }
     box-shadow: 0 0 0 3px rgba(15, 76, 92, 0.15) !important;
 }
 
-/* ── Checkboxes — bigger ─────────────────────────────────────────────────── */
+/* ── Checkboxes, bigger ─────────────────────────────────────────────────── */
 .stCheckbox > label { font-size: 20px !important; padding-left: 0.5rem; }
 .stCheckbox > label > div[data-baseweb="checkbox"] > div { transform: scale(1.4); }
 
-/* ── Container borders — soft cards ──────────────────────────────────────── */
+/* ── Container borders, soft cards ──────────────────────────────────────── */
 div[data-testid="stVerticalBlockBorderWrapper"] {
     background-color: #ffffff;
     border: 1px solid #e8dfd0 !important;

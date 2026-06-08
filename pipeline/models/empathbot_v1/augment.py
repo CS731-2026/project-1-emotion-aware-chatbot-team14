@@ -1,9 +1,9 @@
-"""Train + val transforms — verbatim from notebook 6b cell 7.
+"""Train + val transforms, verbatim from notebook 6b cell 7.
 
-BASE_AUG    geometric + mild colour jitter — default for most classes
-STRONG_AUG  more aggressive colour + grayscale — used for "hard" classes
+BASE_AUG    geometric + mild colour jitter, default for most classes
+STRONG_AUG  more aggressive colour + grayscale, used for "hard" classes
             (sadness, fear_anxiety, distrust per notebook's HARD_LABEL_IDS)
-VAL_TF      no augmentation — used at val / test time
+VAL_TF      no augmentation, used at val / test time
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ MEAN = [0.485, 0.456, 0.406]
 STD = [0.229, 0.224, 0.225]
 IMG_SIZE = 224
 
-# Notebook's HARD_LABEL_IDS — sadness=2, fear_anxiety=3, distrust=5.
+# Notebook's HARD_LABEL_IDS, sadness=2, fear_anxiety=3, distrust=5.
 # These classes get STRONG_AUG; everything else gets BASE_AUG.
 HARD_LABEL_IDS = {2, 3, 5}
 

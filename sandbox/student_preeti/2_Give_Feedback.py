@@ -1,5 +1,5 @@
 """
-EmpathBot — Feedback mode.
+EmpathBot, Feedback mode.
 
 Walks the user through 4 short questions about their visit. The webcam runs
 in the background; emotion labels are collected per-question via the rolling
@@ -66,7 +66,7 @@ with col_prog:
 
 # ── Webcam panel (small, top-right feel) ──────────────────────────────────────
 with st.expander("Your webcam (so I can see how you're feeling)", expanded=False):
-    webcam_panel()  # stub — will plug ResNet18 inferencer here
+    webcam_panel()  # stub, will plug ResNet18 inferencer here
 
 # ── Step: ask question or finish ──────────────────────────────────────────────
 if step < total:
@@ -123,7 +123,7 @@ else:
     st.markdown("## Thank you")
     st.markdown(
         "Your answers help the clinic understand how patients feel about "
-        "AI being used in their care. **A staff member will review the summary later** — "
+        "AI being used in their care. **A staff member will review the summary later**, "
         "your individual answers stay private."
     )
 

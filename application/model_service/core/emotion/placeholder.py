@@ -1,4 +1,4 @@
-"""Placeholder emotion model — returns a random emotion with random confidence.
+"""Placeholder emotion model, returns a random emotion with random confidence.
 
 No model loading. Used during development and as the default fallback until a
 real emotion recognition model is integrated.
@@ -23,7 +23,7 @@ class PlaceholderEmotionModel(EmotionModel):
         """Return a random emotion and confidence.
 
         Args:
-            face_bgr: Ignored — no inference is performed.
+            face_bgr: Ignored, no inference is performed.
 
         Returns:
             (emotion, confidence)

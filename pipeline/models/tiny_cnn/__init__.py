@@ -1,4 +1,4 @@
-"""Tiny 3-conv CNN — the simplest baseline. Trains in minutes on a
+"""Tiny 3-conv CNN, the simplest baseline. Trains in minutes on a
 laptop CPU. Useful as a "does the pipeline actually run?" reference
 before reaching for anything heavier.
 
@@ -18,7 +18,7 @@ from pipeline.framework.specs import DatasetSpec, TrainedModel
 from pipeline.training.standard import train_classifier
 
 
-# Structural part of the input pipeline — resize + normalize. The
+# Structural part of the input pipeline, resize + normalize. The
 # training loop composes augmentation on top of this for the train
 # split and uses it bare for val/test, so what the model "sees" stays
 # consistent across splits and across training/inference.
@@ -44,7 +44,7 @@ def build(num_classes: int) -> nn.Module:
 
 
 def train(ctx: Context, dataset: DatasetSpec) -> TrainedModel:
-    """Vanilla classifier — delegate to the shared helper."""
+    """Vanilla classifier, delegate to the shared helper."""
     return train_classifier(
         ctx, dataset,
         model=build(dataset.num_classes),

@@ -1,12 +1,12 @@
-"""EmpathBot final (v4) — faithful port of
+"""EmpathBot final (v4), faithful port of
 Notebooks/5_final_empathbot_training_v4.ipynb.
 
 Sibling to empathbot_v1 (notebook 6b). Same class name in both
-notebooks (`EmpathBotV1`) but different code paths — 6b uses timm;
+notebooks (`EmpathBotV1`) but different code paths, 6b uses timm;
 5_v4 uses torchvision with selectable backbone (efficientnet_b2 |
 resnet18) + manual SE for the resnet18 variant.
 
-Package layout — each file mirrors one section of the notebook:
+Package layout, each file mirrors one section of the notebook:
 
   __init__.py     pipeline surface (PREPROCESS + train)
   model.py        architecture (cell 16) + freeze/unfreeze methods (cell 22)

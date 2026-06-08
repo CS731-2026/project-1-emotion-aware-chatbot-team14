@@ -1,4 +1,4 @@
-"""Context — the single arg every phase receives.
+"""Context, the single arg every phase receives.
 
 Bundles read-only Config, typed Store, the imported dataset+model
 modules, and artifact save_* methods that write into the run dir.
@@ -40,7 +40,7 @@ class Context:
         dataset_module: ModuleType,
         model_module:   ModuleType,
     ) -> "Context":
-        # Build output/run/<slug>__<ts>/ — append _v2/v3/... on collision so
+        # Build output/run/<slug>__<ts>/, append _v2/v3/... on collision so
         # two runs in the same second don't clobber each other.
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
         base = _OUTPUT_RUN_ROOT / f"{config.slug()}__{ts}"
@@ -52,7 +52,7 @@ class Context:
         (run_dir / "artifacts").mkdir(parents=True)
         (run_dir / "checkpoints").mkdir()
 
-        # Snapshot the resolved config first — first thing in the dir.
+        # Snapshot the resolved config first, first thing in the dir.
         (run_dir / "config.yaml").write_text(yaml.safe_dump({
             "dataset":    config.dataset_name,
             "model":      config.model_name,

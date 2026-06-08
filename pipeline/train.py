@@ -6,7 +6,7 @@
     python -m pipeline.train -v                 # DEBUG-level logs
 
 runs.yaml is the single answer to "what runs?". Each entry names a
-dataset, model, and config — plus an optional `train_cfg:` block for
+dataset, model, and config, plus an optional `train_cfg:` block for
 per-run hyperparameter overrides. See pipeline/MIGRATING_NOTEBOOKS.md
 for the schema.
 """
@@ -19,7 +19,7 @@ import sys
 
 from dotenv import load_dotenv
 
-# Load .env from cwd before any module touches os.environ — needed so
+# Load .env from cwd before any module touches os.environ, needed so
 # datasets/fer2013 picks up KAGGLE_USERNAME / KAGGLE_KEY (kaggle CLI
 # checks env vars before ~/.kaggle/kaggle.json), and so the EMPATH_* /
 # KASH_* opt-in flags can be set per-run from .env.
@@ -47,7 +47,7 @@ def main() -> int:
     parser.add_argument("--runs", default="runs.yaml",
                         help="path to runs file (default: ./runs.yaml)")
     parser.add_argument("--run", default=None,
-                        help="case-insensitive substring filter — run only entries "
+                        help="case-insensitive substring filter, run only entries "
                              "whose dataset/model/config slug contains this string")
     parser.add_argument("--verbose", "-v", action="store_true",
                         help="DEBUG-level logs")

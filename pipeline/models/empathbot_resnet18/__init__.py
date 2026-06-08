@@ -1,4 +1,4 @@
-"""EmpathBot V1 (ResNet-18 backbone) — faithful port of
+"""EmpathBot V1 (ResNet-18 backbone), faithful port of
 Notebooks/6_empathbot_v1_resnet18.ipynb.
 
 Predecessor to the 6b (timm EfficientNet-B2) and 5_v4 (torchvision
@@ -6,12 +6,12 @@ EfficientNet-B2 with selectable backbone) variants. This one uses
 ResNet-18 with explicit SE blocks inserted after each residual stage,
 plus a 3-layer BN classifier head.
 
-Package layout — each file mirrors one notebook section:
+Package layout, each file mirrors one notebook section:
 
   __init__.py     pipeline surface (PREPROCESS + train)
   model.py        SEBlock + EmpathBotV1 architecture (cell 11)
   augment.py      BASE_AUG / STRONG_AUG / VAL_TF (cell 8)
-  data.py         EmpathBotDataset — per-class augment (cell 9 ish)
+  data.py         EmpathBotDataset, per-class augment (cell 9 ish)
   train_loop.py   AdamW split-LR + warmup+cosine LambdaLR + freeze
                   schedule + MixUp + label-smoothed weighted-CE
                   + early stop (cells 13 + 15)

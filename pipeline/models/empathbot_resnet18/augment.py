@@ -2,7 +2,7 @@
 
 Mirrors notebook 6b's augment.py but with the older notebook's
 slightly more aggressive jitter on the BASE variant. HARD_LABEL_IDS
-is the same set as 6b — {sadness=2, fear_anxiety=3, distrust=5}.
+is the same set as 6b, {sadness=2, fear_anxiety=3, distrust=5}.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""Architecture — verbatim from notebook 5 cell 16.
+"""Architecture, verbatim from notebook 5 cell 16.
 
 ResNet-18 backbone + single SqueezeExcitation block on the 512-channel
 features + 3-layer classifier (no batchnorm-flatten head). Notebook
@@ -14,7 +14,7 @@ from torchvision import models as tvm
 
 
 class SqueezeExcitation(nn.Module):
-    """Lightweight channel attention — verbatim from notebook 5 cell 16."""
+    """Lightweight channel attention, verbatim from notebook 5 cell 16."""
 
     def __init__(self, channels: int, reduction: int = 16) -> None:
         super().__init__()

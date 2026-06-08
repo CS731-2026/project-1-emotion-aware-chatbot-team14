@@ -35,9 +35,9 @@ def setup(ctx: Context) -> None:
 
 
 def prepare_dataset(ctx: Context) -> None:
-    """Delegate to ctx.dataset_module.prepare(ctx) — the USER's function in
+    """Delegate to ctx.dataset_module.prepare(ctx), the USER's function in
     pipeline/datasets/<name>/__init__.py."""
-    # ↓ user function — every dataset module exports this (see protocols.DatasetModule).
+    # ↓ user function, every dataset module exports this (see protocols.DatasetModule).
     spec = ctx.dataset_module.prepare(ctx)
     if not isinstance(spec, DatasetSpec):
         raise TypeError(
@@ -49,14 +49,14 @@ def prepare_dataset(ctx: Context) -> None:
 
 
 def train(ctx: Context) -> None:
-    """Delegate to ctx.model_module.train(ctx, dataset) — the USER's function
+    """Delegate to ctx.model_module.train(ctx, dataset), the USER's function
     in pipeline/models/<name>/__init__.py.
 
     Two functions called `train` are involved: this one (framework phase)
     vs. the user's train (the one whose contract the model tutorial documents).
     """
     ds = ctx.store.get(K.DATASET, DatasetSpec)
-    # ↓ user function — every model module exports this (see protocols.ModelModule).
+    # ↓ user function, every model module exports this (see protocols.ModelModule).
     trained = ctx.model_module.train(ctx, ds)
     if not isinstance(trained, TrainedModel):
         raise TypeError(
@@ -68,7 +68,7 @@ def train(ctx: Context) -> None:
 
 # Held-out eval set + the model's own test split. Override per-row in
 # runs.yaml via `train_cfg: { eval_datasets: [...] }` if a model needs
-# a different list (rare — keeping the set fixed is what makes the
+# a different list (rare, keeping the set fixed is what makes the
 # leaderboard fair).
 DEFAULT_EVAL_DATASETS = ["fer2013_holdout"]
 
@@ -81,7 +81,7 @@ def evaluate(ctx: Context) -> None:
     Writes one bundle per dataset to ``ctx.run_dir/eval/<dataset>/``:
       summary.json + per_class.json + confusion.json + confusion.png
 
-    Idempotent against missing pieces — a model module without
+    Idempotent against missing pieces, a model module without
     ``build()`` logs a warning and skips, missing eval datasets log and
     skip, an empty test split records ``acc=None`` instead of crashing.
     The training run still counts as successful.
@@ -100,7 +100,7 @@ def evaluate(ctx: Context) -> None:
     build_fn = getattr(ctx.model_module, "build", None)
     if build_fn is None:
         logger.warning(
-            "evaluate: %s has no build() — skipping eval phase. The model's "
+            "evaluate: %s has no build(), skipping eval phase. The model's "
             "train() must own a re-instantiable architecture for eval to "
             "reload the checkpoint without retraining.",
             ctx.model_module.__name__,
@@ -110,7 +110,7 @@ def evaluate(ctx: Context) -> None:
     preprocess = getattr(ctx.model_module, "PREPROCESS", None)
     if preprocess is None:
         logger.warning(
-            "evaluate: %s has no PREPROCESS — skipping eval. Models that "
+            "evaluate: %s has no PREPROCESS, skipping eval. Models that "
             "want eval must export the inference-time transform.",
             ctx.model_module.__name__,
         )
@@ -160,7 +160,7 @@ def evaluate(ctx: Context) -> None:
         else:
             try:
                 spec = load_eval_dataset(name, ctx)
-            except Exception:  # noqa: BLE001 — log and skip; don't fail the run
+            except Exception:  # noqa: BLE001, log and skip; don't fail the run
                 logger.exception("evaluate: skipping %s (load failed)", name)
                 continue
 
@@ -192,7 +192,7 @@ def evaluate(ctx: Context) -> None:
             "n_samples":        metrics["n_samples"],
         })
         acc = metrics["acc"]
-        logger.info("evaluate: %s — acc=%.4f macro_f1=%.4f → %s",
+        logger.info("evaluate: %s, acc=%.4f macro_f1=%.4f → %s",
                     name,
                     -1.0 if acc is None else acc,
                     metrics["macro_f1"] or 0.0,

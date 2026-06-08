@@ -1,4 +1,4 @@
-"""Training loop — ported from notebook 6b cells 13 + 15.
+"""Training loop, ported from notebook 6b cells 13 + 15.
 
 Reproduces the notebook's training discipline as closely as the
 pipeline contract allows:
@@ -13,7 +13,7 @@ pipeline contract allows:
   - FocalLoss(class_weights, gamma, label_smoothing)
   - Early stopping on val_acc with CFG['patience']
   - Best-checkpoint save in the notebook's envelope format
-    (model_state, val_acc, per_cls_recall, class_names, cfg) — same
+    (model_state, val_acc, per_cls_recall, class_names, cfg), same
     shape that application/model_service/core/emotion/empathbot.py
     knows how to load.
 
@@ -135,7 +135,7 @@ def _train_epoch(model: nn.Module, loader: DataLoader, optimizer, scheduler,
 def _evaluate(model: nn.Module, loader: DataLoader, device,
               num_classes: int) -> tuple[float, list[float]]:
     """Returns (overall_acc, per_class_recall). Simplified vs the
-    notebook's TTA-capable evaluator — same per-class recall via
+    notebook's TTA-capable evaluator, same per-class recall via
     confusion matrix."""
     model.eval()
     preds_all, labels_all = [], []
@@ -234,7 +234,7 @@ def run(ctx: Context, dataset: DatasetSpec, model: nn.Module) -> TrainedModel:
             best_val_acc = val_acc
             best_epoch = epoch
             patience_cnt = 0
-            # Notebook's checkpoint envelope — model_service can load this.
+            # Notebook's checkpoint envelope, model_service can load this.
             ctx.save_checkpoint("best", {
                 "epoch":          epoch,
                 "model_state":    model.state_dict(),

@@ -1,8 +1,8 @@
-"""EmpathBot V4 architecture — ported verbatim from notebook 5 cell 16.
+"""EmpathBot V4 architecture, ported verbatim from notebook 5 cell 16.
 
 Same architecture as the notebook; selectable backbone (efficientnet_b2
 or resnet18). For resnet18 the notebook builds a manual SE attention
-block on top of the backbone — efficientnet_b2 already has SE built in
+block on top of the backbone, efficientnet_b2 already has SE built in
 so it gets nn.Identity() in that slot.
 """
 
@@ -78,7 +78,7 @@ class EmpathBotV1(nn.Module):
 
 
 def build(num_classes: int) -> nn.Module:
-    """Default to the EfficientNet-B2 variant — the notebook's primary recommendation."""
+    """Default to the EfficientNet-B2 variant, the notebook's primary recommendation."""
     return EmpathBotV1(
         backbone="efficientnet_b2",
         num_classes=num_classes,

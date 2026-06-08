@@ -1,6 +1,6 @@
 """State machine primitives for the session conductor.
 
-A State represents one logical moment in the session flow — running a
+A State represents one logical moment in the session flow, running a
 form, an open-chat yarn after a form, a wrap-up exchange, etc. The
 conductor walks states forward in order; the LLM sees the prompt the
 state's `tick()` returns but never the state's name or any transition
@@ -15,7 +15,7 @@ state can:
     whether to hand off, instead of leaning entirely on the LLM to
     reason its way through phases
 
-The base class still covers the common scalar-field case —
+The base class still covers the common scalar-field case ,
 `State(...)` with kwargs works for any state whose logic is just
 "static prompt, advance on a lambda".
 """
@@ -37,7 +37,7 @@ class StateContext:
 
     Note: `advance_emission` is *not* on this ctx. The LLM's `[[advance]]`
     marker is processed by the conductor's separate
-    `handle_emission_advance()` method, not by tick — so a tick can't
+    `handle_emission_advance()` method, not by tick, so a tick can't
     accidentally fire twice per turn.
     """
 
@@ -53,7 +53,7 @@ class TickResult:
     `intention` is the system-prompt text the LLM should see this turn.
     `advance` signals the conductor to hand off to the next state.
     A state can drive a transition purely deterministically by returning
-    `advance=True` from tick — no LLM `[[advance]]` emission required.
+    `advance=True` from tick, no LLM `[[advance]]` emission required.
     """
 
     intention: str
@@ -70,7 +70,7 @@ def _never(_: StateContext) -> bool:
 class State:
     """One node in the session state machine.
 
-    `name` is internal-only — used by the conductor, JSONL persistence,
+    `name` is internal-only, used by the conductor, JSONL persistence,
     and the debug dashboard. It is never sent to the LLM.
 
     `spec` is the check-in form the frontend mounts when kind == "form".
@@ -112,7 +112,7 @@ class State:
         self.late_guidance_after = late_guidance_after
 
     def tick(self, ctx: StateContext) -> TickResult:
-        """Default tick — wraps the scalar-field behaviour.
+        """Default tick, wraps the scalar-field behaviour.
 
         Returns the base intention (plus late_guidance once
         `ctx.turn_in_state >= late_guidance_after`) and advances when

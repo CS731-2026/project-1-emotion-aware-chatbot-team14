@@ -6,7 +6,7 @@ Four files per (model, dataset) pair:
   confusion.json    raw NxN matrix + class_names (for downstream tooling)
   confusion.png     row-normalised heatmap (for the report)
 
-The PNG is best-effort — a missing matplotlib install logs a warning
+The PNG is best-effort, a missing matplotlib install logs a warning
 and skips, but the JSON artifacts always land. summary.json is the file
 `make compare` reads, so it's the most important one to guarantee.
 """
@@ -29,7 +29,7 @@ def write_eval_artifacts(
 ) -> None:
     """Write the four-file bundle into `out_dir`.
 
-    `meta` (optional) is merged into summary.json — used to record
+    `meta` (optional) is merged into summary.json, used to record
     which checkpoint / dataset / timestamp this eval came from.
     """
     out_dir = Path(out_dir)
@@ -54,11 +54,11 @@ def write_eval_artifacts(
         "class_names":      metrics["class_names"],
     }, indent=2))
 
-    # PNG is best-effort — eval still counts as "done" if matplotlib
+    # PNG is best-effort, eval still counts as "done" if matplotlib
     # isn't installed or the headless backend fails.
     try:
         _save_confusion_png(metrics, out_dir / "confusion.png")
-    except Exception as e:  # noqa: BLE001 — best-effort artifact
+    except Exception as e:  # noqa: BLE001, best-effort artifact
         logger.warning("eval: confusion.png skipped (%s)", e)
 
 

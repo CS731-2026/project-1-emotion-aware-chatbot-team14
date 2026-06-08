@@ -1,12 +1,12 @@
 """Prune old run dirs under output/run/, keeping the newest per (dataset, model, config).
 
-Run history accumulates across iteration — every `make train` produces a
+Run history accumulates across iteration, every `make train` produces a
 new timestamped run dir, and rerunning the same (dataset, model, config)
 combo many times leaves the disk full of redundant checkpoints. This CLI
 groups runs by their slug (everything before the trailing __<timestamp>),
 keeps the newest run per group, and offers to delete the older ones.
 
-**Dry-run by default** — invoking without --apply just lists what would
+**Dry-run by default**, invoking without --apply just lists what would
 be deleted (size + count). Pass --apply to actually delete. Never runs
 automatically; you must invoke it manually.
 
@@ -20,7 +20,7 @@ Usage:
     python -m pipeline.cli.prune_runs --filter empath  # only consider matching runs
 
 What's safe:
-  * Each run dir is independent — checkpoints, artifacts, eval bundles all
+  * Each run dir is independent, checkpoints, artifacts, eval bundles all
     live inside it. Deleting a run dir loses *only* that run's results,
     nothing shared.
   * The newest run per combo always survives (default --keep 1).
@@ -86,7 +86,7 @@ def main() -> int:
 
     root = Path(args.root)
     if not root.is_dir():
-        print(f"✗ {root} does not exist — nothing to prune.", file=sys.stderr)
+        print(f"✗ {root} does not exist, nothing to prune.", file=sys.stderr)
         return 1
     if args.keep < 1:
         print(f"✗ --keep must be ≥ 1 (got {args.keep})", file=sys.stderr)
@@ -102,7 +102,7 @@ def main() -> int:
             continue
         combo, ts = _parse_slug(d.name)
         if not ts:
-            # Doesn't match the expected <slug>__<ts> shape — leave it alone
+            # Doesn't match the expected <slug>__<ts> shape, leave it alone
             # rather than risk deleting something we don't understand.
             continue
         groups[combo].append((ts, d))
@@ -125,7 +125,7 @@ def main() -> int:
         to_delete.extend(p for _, p in drop)
 
     if not to_delete:
-        print(f"nothing to prune — every combo already has ≤ {args.keep} run(s)")
+        print(f"nothing to prune, every combo already has ≤ {args.keep} run(s)")
         return 0
 
     # Group output for readability.
@@ -135,7 +135,7 @@ def main() -> int:
         by_combo[combo].append(d)
 
     total_bytes = 0
-    print(f"{'DELETING' if args.apply else 'DRY-RUN — would delete'} "
+    print(f"{'DELETING' if args.apply else 'DRY-RUN, would delete'} "
           f"{len(to_delete)} run dir(s) across {len(by_combo)} combo(s) "
           f"(keep newest {args.keep} per combo):")
     print()
@@ -150,7 +150,7 @@ def main() -> int:
 
     if not args.apply:
         print()
-        print("DRY-RUN — no files were touched. Re-run with --apply to delete:")
+        print("DRY-RUN, no files were touched. Re-run with --apply to delete:")
         print(f"    make prune-runs APPLY=1"
               + (f"  FILTER={args.filter}" if args.filter else "")
               + (f"  KEEP={args.keep}"     if args.keep != 1 else ""))

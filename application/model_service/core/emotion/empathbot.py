@@ -87,7 +87,7 @@ def _build_empathbot(num_classes: int, backbone: str, use_timm: bool):
 
 
 class EmpathBotEmotionModel(EmotionModel):
-    """EmpathBotV1 inference wrapper — loads a notebook-6b-style checkpoint."""
+    """EmpathBotV1 inference wrapper, loads a notebook-6b-style checkpoint."""
 
     def __init__(self, checkpoint_path: str, device: str | None = None) -> None:
         import torch
@@ -107,7 +107,7 @@ class EmpathBotEmotionModel(EmotionModel):
 
         ckpt = torch.load(ckpt_path, map_location=self._device, weights_only=False)
 
-        # Schema assertion — model is the source of truth.
+        # Schema assertion, model is the source of truth.
         ckpt_classes = ckpt.get("class_names")
         if ckpt_classes is None:
             raise ValueError(

@@ -2,7 +2,7 @@
 
 Every trained model gets fed through the same evaluation: same test
 sets, same metrics, same artifacts. Apples-to-apples comparison falls
-out of that — `make compare` then ranks runs against the same yardstick.
+out of that, `make compare` then ranks runs against the same yardstick.
 
 Public surface:
   compute_eval(model, loader, device, num_classes, class_names) -> metrics dict

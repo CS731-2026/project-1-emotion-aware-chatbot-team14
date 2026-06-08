@@ -29,7 +29,7 @@ def _llm_api_key_for(provider: str) -> str | None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """FastAPI lifespan handler — loads all ML components once at startup.
+    """FastAPI lifespan handler, loads all ML components once at startup.
 
     Each component (face detector, STT, emotion model, LLM) is loaded
     independently so a missing dependency only disables that component;
@@ -57,7 +57,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.warning("STT not loaded: %s", e)
 
-    # Emotion model — ONLY invoked in ws/handler.py:pick_emotion().
+    # Emotion model, ONLY invoked in ws/handler.py:pick_emotion().
     # Model selection is driven by EMOTION_MODEL_ID + models.yaml (preferred)
     # or EMOTION_VARIANT + EMOTION_CHECKPOINT_PATH (legacy fallback).
     # Debug behaviour (cycle/force/log) lives in core/debug_flags.py.
@@ -89,7 +89,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     fd = hri.face_detector
     logger.info(
-        "Startup summary — face_detector=%s (device=%s) | emotion_model=%s "
+        "Startup summary, face_detector=%s (device=%s) | emotion_model=%s "
         "(model_id=%s, variant=%s) | emotion_debug=%s | stt=%s | llm=%s",
         fd is not None,
         fd.device if fd is not None else "none",

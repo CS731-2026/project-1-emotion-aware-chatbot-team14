@@ -24,7 +24,7 @@ _MAX_TRANSCRIPT_SEGMENTS = 20
 # are algorithm thresholds that change with our STT engine + acoustic setup,
 # not per-environment values. Tune in code; commit the result.
 #
-# Short clips are more often misheard noise — we hold them to a higher
+# Short clips are more often misheard noise, we hold them to a higher
 # confidence bar than sustained speech. Long clips use config.STT_MIN_CONFIDENCE
 # (kept in config.py because the reasoning agent also uses it to compute the
 # percent-above-threshold value it shows the LLM).
@@ -70,7 +70,7 @@ def _passes_transcript_filter(
     Rules, in order:
     1. Reject empty transcripts.
     2. Reject placeholder/non-speech tags like [BLANK_AUDIO] or (sighs).
-       This check runs regardless of confidence — whisper happily assigns
+       This check runs regardless of confidence, whisper happily assigns
        high confidence to these even when there was no real speech.
     3. Confidence gate, scaled by clip duration:
          - long clips (>= 1.5s) get a lenient threshold (STT_MIN_CONFIDENCE)
@@ -83,7 +83,7 @@ def _passes_transcript_filter(
     if not cleaned:
         return False, "empty transcript"
 
-    # Always reject non-speech tags first — they slip through high-confidence
+    # Always reject non-speech tags first, they slip through high-confidence
     # gates because whisper is "confident" the token *is* [BLANK_AUDIO].
     if _looks_like_placeholder_token(cleaned):
         return False, "placeholder transcript token"
@@ -99,7 +99,7 @@ def _passes_transcript_filter(
             )
         return True, None
 
-    # No confidence available — use the legacy text-quality heuristic.
+    # No confidence available, use the legacy text-quality heuristic.
     if not _looks_like_speech(cleaned):
         return False, "transcript failed quality gate (no confidence available)"
     return True, None

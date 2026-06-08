@@ -8,7 +8,7 @@ from dataclasses import dataclass
 class EmotionObservation:
     emotion: str
     confidence: float
-    timestamp: float  # unix seconds — from frontend capture time
+    timestamp: float  # unix seconds, from frontend capture time
 
 
 class EmotionBuffer:

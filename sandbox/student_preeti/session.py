@@ -21,7 +21,7 @@ def init_session() -> None:
         # Feedback mode
         "feedback_step": 0,            # current question index
         "feedback_answers": [],        # list[{"q": str, "a": str, "stated": str, "facial": dict, "mismatch": bool}]
-        # Emotion buffer (rolling) — populated by the webcam callback
+        # Emotion buffer (rolling), populated by the webcam callback
         "emotion_window": [],          # recent emotion labels
     }
     for k, v in defaults.items():

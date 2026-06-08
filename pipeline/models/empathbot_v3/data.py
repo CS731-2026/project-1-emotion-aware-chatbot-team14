@@ -1,4 +1,4 @@
-"""EmpathBotDataset — same NEG/STD routing as empathbot_final."""
+"""EmpathBotDataset, same NEG/STD routing as empathbot_final."""
 
 from __future__ import annotations
 

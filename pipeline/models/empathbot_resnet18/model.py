@@ -1,4 +1,4 @@
-"""Architecture — verbatim from notebook 6 cell 11.
+"""Architecture, verbatim from notebook 6 cell 11.
 
 SEBlock (Squeeze-and-Excitation channel attention) + EmpathBotV1 with
 ResNet-18 backbone, SE block after each residual stage, 3-layer BN head.
@@ -48,7 +48,7 @@ def _make_head(in_features: int, num_classes: int) -> nn.Sequential:
 
 class EmpathBotV1(nn.Module):
     """ResNet-18 + SE attention after each residual stage + BN head.
-    Selectable backbone — efficientnet_b0 supported as in the notebook."""
+    Selectable backbone, efficientnet_b0 supported as in the notebook."""
 
     _FEAT_DIMS = {"resnet18": 512, "efficientnet_b0": 1280}
 

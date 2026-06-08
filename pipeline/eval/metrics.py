@@ -1,4 +1,4 @@
-"""Eval-phase metrics — single function: model + loader → metrics dict.
+"""Eval-phase metrics, single function: model + loader → metrics dict.
 
 The dict is the contract every eval artifact downstream consumes:
   summary.json gets (acc, macro_f1, weighted_f1, n_samples)
@@ -25,7 +25,7 @@ from pipeline.training.loop import collect_predictions
 def compute_eval(
     model: nn.Module,
     loader: DataLoader,
-    device: Any,                       # torch.device — annotated Any to avoid stub friction
+    device: Any,                       # torch.device, annotated Any to avoid stub friction
     *,
     num_classes: int,
     class_names: list[str],
@@ -36,7 +36,7 @@ def compute_eval(
     confusion_matrix). Heavy imports stay out of import-time cost.
 
     Reuses pipeline.training.loop.collect_predictions so the eval and
-    training paths walk the test loader the same way — no surprise
+    training paths walk the test loader the same way, no surprise
     drift between "what the train phase reported as test_acc" and what
     a follow-up eval phase reports.
     """
@@ -51,7 +51,7 @@ def compute_eval(
     n = int(labels.size)
 
     if n == 0:
-        # Empty test split — make the failure obvious in the artifact
+        # Empty test split, make the failure obvious in the artifact
         # without crashing the whole eval pass.
         return {
             "n_samples": 0,

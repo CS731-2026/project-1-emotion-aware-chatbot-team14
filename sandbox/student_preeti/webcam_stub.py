@@ -19,7 +19,7 @@ EMOTIONS = ["happy", "neutral", "surprise", "sad", "angry", "disgust", "fear"]
 def webcam_panel() -> None:
     """Stub UI for the webcam pane."""
     st.markdown(
-        "**Webcam stub** — replace with `streamlit-webrtc` + ResNet18 inferencer.  \n"
+        "**Webcam stub**, replace with `streamlit-webrtc` + ResNet18 inferencer.  \n"
         "For testing, set the emotion that the (future) model would currently report:"
     )
 

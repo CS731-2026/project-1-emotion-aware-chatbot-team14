@@ -31,7 +31,7 @@ type BrowserVadCallbacks = {
  *   - silence holdoff exceeds SILENCE_HOLDOFF_MS   → finalise + send
  *
  * Because capture is continuous, when an utterance starts we already have
- * PRE_ROLL_MS of audio in the buffer — we don't miss the first word.
+ * PRE_ROLL_MS of audio in the buffer, we don't miss the first word.
  */
 export class BrowserVadController {
   private audioContext: AudioContext | null = null;
@@ -44,7 +44,7 @@ export class BrowserVadController {
   // Rolling RMS history matching `frames`.
   private levels: number[] = [];
 
-  // When true, onFrame returns immediately — no detection, no sending.
+  // When true, onFrame returns immediately, no detection, no sending.
   // Used by the page to gate recording while the assistant is generating
   // its yarn-opener reply.
   private paused = false;
@@ -158,7 +158,7 @@ export class BrowserVadController {
     this.callbacks.onVadState("Listening");
   }
 
-  /** Pause utterance detection — RMS / level still reported so the UI can
+  /** Pause utterance detection, RMS / level still reported so the UI can
    * show "the user is trying to speak while the mic is gated". No frames
    * are kept and no utterances are ever finalised.
    */
@@ -191,7 +191,7 @@ export class BrowserVadController {
     this.callbacks.onAudioLevel(rms);
 
     // While paused, we still report the level so the page can flag "user
-    // is trying to speak while the assistant is replying" — but we never
+    // is trying to speak while the assistant is replying", but we never
     // commit utterances or grow the ring buffer.
     if (this.paused) return;
 

@@ -1,9 +1,9 @@
 """Scan output/run/ + output/eval/ and print a leaderboard.
 
 Reads two sources for every row:
-  - output/run/<slug>/artifacts/final.json + config.yaml — training metrics
-  - output/run/<slug>/eval/<dataset>/summary.json       — auto-eval after train
-  - output/eval/baseline__<id>/<dataset>/summary.json   — hand-trained baselines
+  - output/run/<slug>/artifacts/final.json + config.yaml, training metrics
+  - output/run/<slug>/eval/<dataset>/summary.json      , auto-eval after train
+  - output/eval/baseline__<id>/<dataset>/summary.json  , hand-trained baselines
 
 Columns include the in-distribution eval acc (the empath / fer2013 test
 split the model was trained on) AND the held-out OOD acc (fer2013_holdout
@@ -148,11 +148,11 @@ def _read_baseline(baseline_dir: Path) -> RunSummary | None:
             pass
 
     # Use baseline_id as dataset slot so its in_dist_acc() picks an entry
-    # gracefully — but baselines weren't trained on a specific empath split
+    # gracefully, but baselines weren't trained on a specific empath split
     # via this pipeline, so display them as "(baseline)" in the dataset column.
     return RunSummary(
         run_dir=baseline_dir, dataset="(baseline)", model=baseline_id,
-        config="—", timestamp=ts,
+        config=",", timestamp=ts,
         test_acc=None, val_acc=None, best_epoch=None, epochs=None,
         eval_acc=eval_acc, eval_macro_f1=eval_f1,
         is_baseline=True,
@@ -165,20 +165,20 @@ def _format_ts(ts: str) -> str:
         dt = datetime.strptime(ts, "%Y%m%d-%H%M%S")
         return dt.strftime("%m-%d %H:%M")
     except ValueError:
-        return ts[:11] if ts else "—"
+        return ts[:11] if ts else ","
 
 
 def _fmt_acc(v: float | None) -> str:
-    return f"{v*100:6.2f}%" if v is not None else "   —   "
+    return f"{v*100:6.2f}%" if v is not None else "  ,   "
 
 
 def _fmt_f1(v: float | None) -> str:
-    return f"{v:.3f}" if v is not None else "  —  "
+    return f"{v:.3f}" if v is not None else " ,  "
 
 
 def _fmt_gap(in_acc: float | None, ood_acc: float | None) -> str:
     if in_acc is None or ood_acc is None:
-        return "  —  "
+        return " ,  "
     delta = ood_acc - in_acc
     sign = "+" if delta >= 0 else ""
     return f"{sign}{delta*100:5.1f}%"
@@ -265,7 +265,7 @@ def main() -> int:
             f"{_fmt_acc(in_acc)}  {_fmt_acc(ood_acc)}  {_fmt_gap(in_acc, ood_acc)}  "
             f"{_fmt_f1(macro_f1):>8}  {_format_ts(r.timestamp)}"
         )
-    print(f"\n{len(rows)} row(s) shown — in_acc=in-distribution test acc; "
+    print(f"\n{len(rows)} row(s) shown, in_acc=in-distribution test acc; "
           f"ood_acc=held-out {ood}; gap=ood-in. sort={args.sort_by}")
     return 0
 

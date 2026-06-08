@@ -1,4 +1,4 @@
-"""FocalLoss — lifted verbatim from notebook 6b cell 11.
+"""FocalLoss, lifted verbatim from notebook 6b cell 11.
 
 Focal Loss (Lin et al. 2017) with class weighting and label smoothing.
   gamma=0 → standard CrossEntropy

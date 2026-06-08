@@ -1,4 +1,4 @@
-"""Training loop — ported from notebook 2 cells 4, 10, 14, 16.
+"""Training loop, ported from notebook 2 cells 4, 10, 14, 16.
 
 Adam (not AdamW), StepLR every 10 epochs ×0.5, weighted CE, early
 stopping with patience=10. Checkpoint envelope matches the notebook
@@ -42,7 +42,7 @@ CFG = dict(
 
 
 class _CsvDataset(Dataset):
-    """The notebook's EmpathBotDataset — skips missing files silently."""
+    """The notebook's EmpathBotDataset, skips missing files silently."""
 
     def __init__(self, csv_path, transform):
         df = pd.read_csv(csv_path)

@@ -17,7 +17,7 @@ export type ChatDebug = {
   emotional_context: string;
   transcript_lines: string[];
   prompt_messages: Array<{ role: string; content: string }>;
-  /** Conductor view — current state + facts. Populated when a session is active. */
+  /** Conductor view, current state + facts. Populated when a session is active. */
   session_state?: {
     state_name: string | null;
     surface: "chat" | "checkin" | "done";
@@ -30,15 +30,15 @@ export type ChatDebug = {
 
 /**
  * What the frontend should render. Returned by /chat as `view`. Backend
- * (the session conductor) is the source of truth — the frontend is a
+ * (the session conductor) is the source of truth, the frontend is a
  * dumb mirror.
  */
 export type ChatView = {
   surface: "chat" | "checkin" | "done";
   /** Form to mount when surface === "checkin". Backend's Pydantic mirror. */
   spec?: PageSpec | null;
-  intention?: string | null;       // debug-only — never shown to the user
-  state_name?: string | null;       // debug-only — internal state id
+  intention?: string | null;       // debug-only, never shown to the user
+  state_name?: string | null;       // debug-only, internal state id
 };
 
 export const api = {

@@ -3,7 +3,7 @@
 Uploads `models/*/` (subdir per model id) as a single Kaggle dataset
 so a teammate's `make fetch-models` pulls every model the team has
 deployed. The dataset version always reflects the team's full
-canonical weights — no "I published v1 but you uploaded v2 and now
+canonical weights, no "I published v1 but you uploaded v2 and now
 my model's gone" surprises.
 
 Usage:
@@ -14,7 +14,7 @@ Auth via KAGGLE_USERNAME / KAGGLE_KEY in .env or ~/.kaggle/kaggle.json
 (same as fer2013 download). Slug from KAGGLE_WEIGHTS_SLUG env var,
 else falls back to a sensible default.
 
-The legacy `--id <id>` flag still works but is discouraged — it
+The legacy `--id <id>` flag still works but is discouraged, it
 publishes just one model and clobbers the dataset to contain only
 that, deleting every other team weight from Kaggle. Use the default
 (no --id) instead.
@@ -93,14 +93,14 @@ def main() -> int:
     ap.add_argument("--new-dataset", action="store_true",
                     help="first-time publish: kaggle datasets create instead of version")
     ap.add_argument("--id", default=None,
-                    help="DISCOURAGED — publish only one model id, clobbering "
+                    help="DISCOURAGED, publish only one model id, clobbering "
                          "every other team weight currently on Kaggle. Use the "
                          "default (no --id) to publish all local models.")
     ap.add_argument("--repo-root", default=".")
     ap.add_argument("--yes", "-y", action="store_true",
                     help="skip the interactive confirmation. Without this flag, "
                          "publish prints the list of model ids about to be "
-                         "uploaded and waits for explicit y/N — guards against "
+                         "uploaded and waits for explicit y/N, guards against "
                          "accidental pushes to the public Kaggle dataset.")
     args = ap.parse_args()
 
@@ -112,8 +112,8 @@ def main() -> int:
         return 2
 
     work_dir = repo_root / "output" / "kaggle_upload"
-    title = f"empathbot-checkpoints — {args.id}" if args.id \
-            else "empathbot-checkpoints — team weights"
+    title = f"empathbot-checkpoints, {args.id}" if args.id \
+            else "empathbot-checkpoints, team weights"
     staged, ids = _stage(models_root, work_dir, args.slug, title, args.id)
     if not ids:
         scope = f"id={args.id!r}" if args.id else "any model id"
@@ -138,7 +138,7 @@ def main() -> int:
         except EOFError:
             reply = ""
         if reply not in {"y", "yes"}:
-            print("✗ aborted by user — nothing pushed.", file=sys.stderr)
+            print("✗ aborted by user, nothing pushed.", file=sys.stderr)
             return 1
 
     if args.new_dataset:

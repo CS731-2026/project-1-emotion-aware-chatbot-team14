@@ -9,8 +9,8 @@ Speech is rendered as plain text. System events render as
 `[t.t] {{kind: payload_json}}` so the LLM can recognise them as
 observations from other systems, not things the user said.
 
-System events also give non-LLM consumers — staff dashboard,
-analytics, replay tools — a structured log they can `grep` over.
+System events also give non-LLM consumers, staff dashboard,
+analytics, replay tools, a structured log they can `grep` over.
 """
 
 from __future__ import annotations

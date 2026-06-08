@@ -1,8 +1,8 @@
-"""EmpathBotV1 architecture — ported verbatim from notebook 6b cell 9.
+"""EmpathBotV1 architecture, ported verbatim from notebook 6b cell 9.
 
 The notebook is the source of truth: any tweak here should also be
 made in `Notebooks/6b_empathbot_v1_improvements.ipynb` to keep the
-two in sync. Notebook does not import this module — porting goes
+two in sync. Notebook does not import this module, porting goes
 notebook → here, never the other way.
 """
 
@@ -60,7 +60,7 @@ class EmpathBotV1(nn.Module):
             x = self.pool(self.encoder(x)).flatten(1)
         return self.head(x)
 
-    # Notebook-side helpers preserved verbatim — split-LR optimizer setup
+    # Notebook-side helpers preserved verbatim, split-LR optimizer setup
     # uses these when the train phase eventually wires it up.
     def backbone_params(self):
         return list(self.encoder.parameters())
@@ -70,7 +70,7 @@ class EmpathBotV1(nn.Module):
 
 
 def build(num_classes: int) -> nn.Module:
-    """The pipeline-side constructor — fixed backbone choice (timm +
+    """The pipeline-side constructor, fixed backbone choice (timm +
     pretrained efficientnet_b2) to match notebook defaults. Override
     via a custom train() in a sibling model file if you need to vary."""
     return EmpathBotV1(

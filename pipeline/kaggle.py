@@ -1,4 +1,4 @@
-"""Kaggle utility surface — one import, every Kaggle-touching operation.
+"""Kaggle utility surface, one import, every Kaggle-touching operation.
 
 Wraps the `kaggle` CLI so notebooks, dataset modules, and ad-hoc
 scripts can call into Kaggle without each one re-implementing the
@@ -13,9 +13,9 @@ Functions:
   fetch_models(dest=models/, slug=…)   pull team weights dataset
   publish_models(models_dir, …)        push every models/<id>/ to one Kaggle version
   dataset_exists(slug)                 quick check before publish/create
-  creds_present()                      bool — used to gate auto-fetch attempts
+  creds_present()                      bool, used to gate auto-fetch attempts
 
-Most teammates don't need this directly — `make fetch-models`,
+Most teammates don't need this directly, `make fetch-models`,
 `make publish-models`, and the model service's auto-fetch all wrap
 these. Import directly only if you need Kaggle ops from a notebook
 or a custom dataset module.
@@ -117,7 +117,7 @@ def dataset_exists(slug: str) -> bool:
 
 def fetch_models(dest: Path | str = "models",
                   slug: str = DEFAULT_WEIGHTS_SLUG) -> Path:
-    """Convenience wrapper — pull the team weights dataset into models/.
+    """Convenience wrapper, pull the team weights dataset into models/.
     Equivalent to `make fetch-models`."""
     return download_dataset(slug, dest, unzip=True, force=True)
 
@@ -145,7 +145,7 @@ def publish_models(models_dir: Path | str = "models", *,
     actually included.
 
     `include_only=[...]` restricts to specific ids (rarely useful since
-    Kaggle datasets are atomic — see the script docstring for why
+    Kaggle datasets are atomic, see the script docstring for why
     publishing one model at a time is discouraged).
     """
     if not creds_present():
@@ -156,7 +156,7 @@ def publish_models(models_dir: Path | str = "models", *,
 
     src = Path(models_dir)
     if not src.is_dir():
-        raise FileNotFoundError(f"{src} not found — nothing to publish")
+        raise FileNotFoundError(f"{src} not found, nothing to publish")
 
     stage = Path(stage_dir)
     stage.mkdir(parents=True, exist_ok=True)
@@ -178,7 +178,7 @@ def publish_models(models_dir: Path | str = "models", *,
     if not ids:
         raise FileNotFoundError(f"no model subdirs under {src} matched")
 
-    title = f"empathbot-checkpoints — {len(ids)} model(s)"
+    title = f"empathbot-checkpoints, {len(ids)} model(s)"
     _write_metadata(stage, slug, title)
     logger.info("kaggle: %s %d model(s) → %s",
                 "creating" if new_dataset else "versioning", len(ids), slug)

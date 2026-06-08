@@ -19,7 +19,7 @@ class Config:
         # <dataset>__<model>__<config>; Context.create appends a timestamp.
         return f"{self.dataset_name}__{self.model_name}__{self.config_name}"
 
-    # Back-compat shims — older call sites use ctx.config.dataset / .model / .config.
+    # Back-compat shims, older call sites use ctx.config.dataset / .model / .config.
     # Drop these once all model train_loops migrate to the *_name fields.
     @property
     def dataset(self) -> str:    return self.dataset_name

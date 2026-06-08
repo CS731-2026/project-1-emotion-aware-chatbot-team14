@@ -26,7 +26,7 @@ from face_cropper import FaceDetector, crop_face  # noqa: E402
 
 def _check_load() -> None:
     det = FaceDetector()
-    print(f"[OK] detector loaded — device={det.device}, threshold={det.CONF_THRESHOLD}")
+    print(f"[OK] detector loaded, device={det.device}, threshold={det.CONF_THRESHOLD}")
 
 
 def _check_no_face_on_noise() -> None:

@@ -1,5 +1,5 @@
 """
-CS731 — Chatbot Module
+CS731, Chatbot Module
 ========================
 Implements:
   1. OpenAI chatbot with emotion-aware system prompt (Group 15 style)
@@ -38,7 +38,7 @@ except ImportError:
     print('[WARN] openai not installed. Run: pip install openai')
 
 
-# ── System prompts (from Group 15 report — two iterations) ───────────────────
+# ── System prompts (from Group 15 report, two iterations) ───────────────────
 
 SYSTEM_PROMPT_V1 = """You are Frienderly, a chatbot designed to be a warm, understanding companion \
 for elderly users. You speak as if you are their long-time friend: casual, kind, and thoughtful \
@@ -48,13 +48,13 @@ your tone and content. Your responses should be emotionally aware and supportive
 from what the user says. Maintain a friendly, conversational style that feels authentic and familiar."""
 
 SYSTEM_PROMPT_V2 = """You are Frienderly, a chatbot designed to be a warm, understanding companion \
-for elderly users. You speak like an old friend—casual, kind, and thoughtful, without being overly \
+for elderly users. You speak like an old friend,casual, kind, and thoughtful, without being overly \
 sentimental or formal. When a user message includes a note like '[user is feeling happy]' or \
 '[user is feeling sad]', don't reference the emotion directly. Instead, let it gently shape the tone \
 and content of your response. Keep your style emotionally aware and supportive, as if you're just \
 having a natural conversation. Break up longer replies into separate messages with line breaks, like \
 in real texting, to make your messages feel more relaxed and human. Sound warm, friendly, and \
-familiar—like someone they've known and trusted for years. Do NOT say I'm all ears!"""
+familiar,like someone they've known and trusted for years. Do NOT say I'm all ears!"""
 
 # Default to the refined prompt (v2)
 DEFAULT_SYSTEM_PROMPT = SYSTEM_PROMPT_V2
@@ -64,19 +64,19 @@ DEFAULT_SYSTEM_PROMPT = SYSTEM_PROMPT_V2
 LLM_CONFIGS = {
     'o4-mini': {
         'model_id':    'o4-mini',
-        'description': 'Affordable reasoning model — high efficiency, very low cost',
+        'description': 'Affordable reasoning model, high efficiency, very low cost',
         'max_tokens':  500,
         'temperature': 1,
     },
     'gpt-4o': {
         'model_id':    'gpt-4o',
-        'description': 'Fast, intelligent, flexible — high efficiency, moderate cost',
+        'description': 'Fast, intelligent, flexible, high efficiency, moderate cost',
         'max_tokens':  500,
         'temperature': 1,
     },
     'o3': {
         'model_id':    'o3',
-        'description': 'Most powerful reasoning — very high helpfulness, low cost',
+        'description': 'Most powerful reasoning, very high helpfulness, low cost',
         'max_tokens':  500,
         'temperature': 1,
     },
@@ -264,7 +264,7 @@ def compare_llms(
                         response='', latency_s=0, tokens_in=0,
                         tokens_out=0, cost_usd=0, error=str(e)
                     )
-                    print(f'  ✗ {model_name} temp={temp}: ERROR — {e}')
+                    print(f'  ✗ {model_name} temp={temp}: ERROR, {e}')
 
                 results.append(result)
 

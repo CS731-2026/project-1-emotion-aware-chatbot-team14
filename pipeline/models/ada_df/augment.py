@@ -1,4 +1,4 @@
-"""Train + val transforms — verbatim from notebook 4 cell 11."""
+"""Train + val transforms, verbatim from notebook 4 cell 11."""
 
 from __future__ import annotations
 

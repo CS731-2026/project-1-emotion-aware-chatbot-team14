@@ -8,7 +8,7 @@ from .base import LLMProvider, Message
 
 
 class OllamaProvider(LLMProvider):
-    """Ollama LLM provider — not yet implemented."""
+    """Ollama LLM provider, not yet implemented."""
 
     def __init__(self, model: str = "llama3", **kwargs: Any) -> None:
         self._model = model

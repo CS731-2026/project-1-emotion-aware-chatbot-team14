@@ -1,12 +1,12 @@
 """Resolve an eval-dataset name to a DatasetSpec.
 
-Mirrors how pipeline.runs_loader resolves training dataset names —
+Mirrors how pipeline.runs_loader resolves training dataset names ,
 importlib finds pipeline.datasets.<name> and calls its prepare(ctx).
 Kept separate so the eval phase doesn't pull in the rest of runs_loader's
 schema validation just to load one dataset.
 
 Eval datasets are expected to be test-only (no train/val splits). The
-fer2013_holdout module is the canonical example — it wraps fer2013 and
+fer2013_holdout module is the canonical example, it wraps fer2013 and
 drops the train+val splits before returning.
 """
 
@@ -25,7 +25,7 @@ def load_eval_dataset(name: str, ctx: "Context") -> DatasetSpec:
     """Import pipeline.datasets.<name> and run its prepare(ctx).
 
     Raises ImportError with a clear message if the module doesn't
-    exist — most likely cause is a typo in `eval_datasets:` in
+    exist, most likely cause is a typo in `eval_datasets:` in
     runs.yaml or in a default phase list.
     """
     try:

@@ -26,7 +26,7 @@ class EmotionalReasoningAgent:
 
     Placeholder implementation: uses statistics.mode over raw emotion labels and
     computes duration from the earliest-to-latest timestamp in the window.
-    Transcript segments are accepted but not yet used — incorporating verbal cues
+    Transcript segments are accepted but not yet used, incorporating verbal cues
     into the emotional context is a future prompt engineering decision.
     """
 
@@ -55,7 +55,7 @@ class EmotionalReasoningAgent:
         if not emotion_observations:
             return (
                 "No clear emotional signal was detected. "
-                "Respond with a warm, calm, and supportive tone — "
+                "Respond with a warm, calm, and supportive tone, "
                 "the patient may be tired or unfamiliar with the technology."
             )
 
@@ -81,7 +81,7 @@ class EmotionalReasoningAgent:
         lines.append(
             "Respond with genuine empathy calibrated to these cues. "
             "If the patient appears anxious, confused, or guarded, "
-            "validate their feeling first — one warm sentence — before "
+            "validate their feeling first, one warm sentence, before "
             "any explanation or reassurance. "
             "Never mention the webcam, emotion detection, or any internal signal."
         )
@@ -91,9 +91,9 @@ class EmotionalReasoningAgent:
         if mismatch:
             lines.append(
                 "MISMATCH DETECTED: The patient said they feel fine, but their face suggests otherwise. "
-                "Gently acknowledge this — e.g. 'It sounds like you're doing okay, though I want to make sure.' "
+                "Gently acknowledge this, e.g. 'It sounds like you're doing okay, though I want to make sure.' "
                 "Offer 2–3 simple options to help them feel at ease (taking their time, skipping a question, "
-                "or having something explained). Be warm and humble — never alarming or intrusive."
+                "or having something explained). Be warm and humble, never alarming or intrusive."
             )
 
         return " ".join(lines)

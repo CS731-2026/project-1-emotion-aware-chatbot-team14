@@ -41,7 +41,7 @@ EMOTION_DEVICE                = os.getenv("EMOTION_DEVICE") or None  # None = au
 # DEBUG: cycle through EMOTIONS on a fixed timer; bypasses the model entirely.
 EMOTION_CYCLE_TEST_LABELS     = os.getenv("EMOTION_CYCLE_TEST_LABELS", "false").lower() == "true"
 EMOTION_CYCLE_INTERVAL_SECONDS = int(os.getenv("EMOTION_CYCLE_INTERVAL_SECONDS", "30"))
-# DEBUG: pin a specific label (must be in EMOTIONS) — overrides cycle + model.
+# DEBUG: pin a specific label (must be in EMOTIONS), overrides cycle + model.
 EMOTION_FORCE_LABEL           = os.getenv("EMOTION_FORCE_LABEL") or None
 # DEBUG: log every model prediction at INFO level.
 EMOTION_LOG_PREDICTIONS       = os.getenv("EMOTION_LOG_PREDICTIONS", "false").lower() == "true"

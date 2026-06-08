@@ -7,10 +7,10 @@ When the conductor transitions away from a state, the chat router calls
   - a reasoning agent capable of running a one-shot JSON-mode call
 
 The result is a dict that goes three places:
-  1. session.state_facts[<state name>] — in-memory mirror
-  2. an appended line in <profile>.session_facts.jsonl — durable record
+  1. session.state_facts[<state name>], in-memory mirror
+  2. an appended line in <profile>.session_facts.jsonl, durable record
   3. a SystemEvent of kind "segment_summary" injected into the
-     events buffer — visible to the LLM at the next prompt
+     events buffer, visible to the LLM at the next prompt
 
 Parse failures degrade gracefully: the returned dict carries `_raw`
 plus `_error`. Transition never blocks on extraction.

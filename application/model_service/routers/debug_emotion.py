@@ -1,11 +1,11 @@
-"""Debug router — runtime overrides for the emotion pipeline.
+"""Debug router, runtime overrides for the emotion pipeline.
 
 Powers the toggles on the frontend /emotion-test/ page (force a label,
 cycle test labels on a timer, log every prediction). Lets a developer
 iterate on the emotion path without restarting the service or editing
 .env between tests.
 
-All endpoints mutate core/debug_flags.py singletons in-place — same
+All endpoints mutate core/debug_flags.py singletons in-place, same
 flags the WS handler's pick_emotion() consults on every frame.
 """
 
@@ -30,7 +30,7 @@ _AllowedLabel = Literal[
 
 
 class DebugFlagPatch(BaseModel):
-    """All fields optional — only present fields are applied. Sending
+    """All fields optional, only present fields are applied. Sending
     `force_label: null` clears the pin; omitting it leaves the pin
     untouched."""
     force_label: _AllowedLabel | None = None

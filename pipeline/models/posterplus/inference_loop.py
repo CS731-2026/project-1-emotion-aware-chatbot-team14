@@ -1,4 +1,4 @@
-"""Faithful inference benchmark — ported from
+"""Faithful inference benchmark, ported from
 Notebooks/3_benchmark_posterplus.ipynb (cells 11, 13, 15, 21).
 
 The notebook is inference-only: it loads POSTER++'s published RAF-DB
@@ -72,7 +72,7 @@ def _resolve_checkpoint(cfg: dict[str, Any]) -> Path | None:
 
 
 def _load_checkpoint(model: nn.Module, ckpt_path: Path, device) -> None:
-    """Verbatim from notebook cell 11 — POSTER_V2 ckpts use several keys."""
+    """Verbatim from notebook cell 11, POSTER_V2 ckpts use several keys."""
     ck = torch.load(ckpt_path, map_location=device, weights_only=False)
     if isinstance(ck, dict):
         found = next((k for k in ("model_state_dict", "state_dict", "model")

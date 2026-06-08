@@ -32,7 +32,7 @@ class Store:
         if key not in self._data:
             raise KeyError(
                 f"store has no entry for {key!r}. "
-                f"available: {sorted(self._data.keys())} — "
+                f"available: {sorted(self._data.keys())}, "
                 f"did an earlier phase fail or get skipped?"
             )
         value = self._data[key]

@@ -1,6 +1,6 @@
 <!--
   SVELTE 5 QUICK REFERENCE
-  This file is intentionally outside src/routes/ — it is never built or served.
+  This file is intentionally outside src/routes/, it is never built or served.
   Use it as a local cheat sheet for Svelte 5 rune-based syntax.
 -->
 
@@ -10,7 +10,7 @@
   let count = $state(0);
   let name = $state("world");
 
-  // $state with objects — deep reactivity on class instances / plain objects
+  // $state with objects, deep reactivity on class instances / plain objects
   let user = $state({ name: "Alice", age: 30 });
 
   // ── $derived ─────────────────────────────────────────────────────────────
@@ -18,7 +18,7 @@
   let doubled = $derived(count * 2);
   let greeting = $derived(`Hello, ${name}!`);
 
-  // $derived.by — for multi-line derivations
+  // $derived.by, for multi-line derivations
   let summary = $derived.by(() => {
     const base = count * 2;
     return base > 10 ? "big" : "small";
@@ -33,14 +33,14 @@
     return () => console.log("cleanup");
   });
 
-  // $effect.pre — runs before the DOM updates (rarely needed)
+  // $effect.pre, runs before the DOM updates (rarely needed)
   $effect.pre(() => {
     console.log("before DOM update, count is:", count);
   });
 
   // ── $props ────────────────────────────────────────────────────────────────
   // Replaces `export let`. Only valid at the top level of a component.
-  // Shown here as a comment — $props() is used in child components, not here.
+  // Shown here as a comment, $props() is used in child components, not here.
   //
   //   let { label, onclick, variant = "primary" }: Props = $props();
 

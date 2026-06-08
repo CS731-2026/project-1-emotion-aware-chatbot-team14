@@ -5,7 +5,7 @@ Loads a torch state_dict produced by the team training pipeline
 and emits an EmpathBot label per face crop.
 
 Expected checkpoint shape: ResNet18 with the final fc replaced by
-Linear(in_features, len(EMOTIONS)). Pure state_dict — not a pickled module.
+Linear(in_features, len(EMOTIONS)). Pure state_dict, not a pickled module.
 """
 
 from __future__ import annotations

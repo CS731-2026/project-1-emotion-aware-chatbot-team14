@@ -1,4 +1,4 @@
-"""Pipeline driver — orchestrates phases and the sweep over runs.yaml entries.
+"""Pipeline driver, orchestrates phases and the sweep over runs.yaml entries.
 
 Call chain for one run:
 
@@ -42,7 +42,7 @@ PHASES: dict[str, PhaseFn] = {
 
 # Default phase list when a run doesn't specify one. evaluate runs after
 # train so the freshly-saved best checkpoint gets fed through the same
-# eval pipeline every other run uses — apples-to-apples leaderboard
+# eval pipeline every other run uses, apples-to-apples leaderboard
 # results fall out automatically.
 DEFAULT_PHASES: list[str] = ["setup", "prepare_dataset", "train", "evaluate"]
 
@@ -82,7 +82,7 @@ def run_one(
 def sweep(runs: Sequence[Run], *, seed: int = 42, fail_fast: bool = False) -> list[Context]:
     """Run each (dataset, model, config) triple in order.
 
-    A failing run is logged and the sweep continues — leaderboard reflects
+    A failing run is logged and the sweep continues, leaderboard reflects
     partial results. fail_fast=True flips to "stop on first failure".
     """
     logger.info("sweep: %d run(s) queued", len(runs))

@@ -1,5 +1,5 @@
 """
-CS731 — Emotion-Aware Chatbot: Terminal Application
+CS731, Emotion-Aware Chatbot: Terminal Application
 =====================================================
 Full end-to-end pipeline:
   1. Webcam captures frames in a background thread
@@ -110,7 +110,7 @@ class WebcamEmotionThread(threading.Thread):
                 smoothed = self.buffer.get_emotion() or 'detecting...'
                 cv2.putText(frame, f'Smoothed: {smoothed}', (10, 30),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-                cv2.imshow('CS731 — Emotion Detection (press Q to quit)', frame)
+                cv2.imshow('CS731, Emotion Detection (press Q to quit)', frame)
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord('q'):
                     self.stop_event.set()
@@ -165,7 +165,7 @@ def print_response(response: str, chatbot_name: str = 'Frienderly') -> None:
 
 def main(args):
     print('\n' + '='*60)
-    print('  CS731 — Emotion-Aware Chatbot')
+    print('  CS731, Emotion-Aware Chatbot')
     print('  Type "quit" to exit | "reset" to clear history')
     print('='*60)
 

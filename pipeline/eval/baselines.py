@@ -1,7 +1,7 @@
 """Evaluate an existing checkpoint that wasn't produced by a recent run.
 
 Used for the hand-trained `models/empathbot/empath_final.pth` and
-`empath_best_v1.pth` weights — they predate the eval phase, so they
+`empath_best_v1.pth` weights, they predate the eval phase, so they
 need a separate entry point that doesn't require a `output/run/<slug>/`
 context to live in.
 
@@ -9,7 +9,7 @@ Usage:
     python -m pipeline.eval.baselines --id empath_final
     python -m pipeline.eval.baselines --id empath_best_v1
 
-Output goes to ``output/eval/baseline__<id>/<dataset>/...`` — same
+Output goes to ``output/eval/baseline__<id>/<dataset>/...``, same
 artifact bundle as the training-phase eval, so ``make compare`` reads
 both transparently.
 
@@ -19,7 +19,7 @@ auto-eval-after-train pass produces for a new sweep run.
 
 Registry: BASELINES below maps each id → (checkpoint path relative to
 repo root, pipeline model module). To register a new baseline, add
-one row. Pulls from models.yaml are intentionally avoided — that
+one row. Pulls from models.yaml are intentionally avoided, that
 registry maps to *service* variants ("empathbot" / "resnet18"), but
 eval needs the pipeline model module that owns build() + PREPROCESS,
 which is finer-grained.
@@ -50,7 +50,7 @@ class BaselineSpec(NamedTuple):
 # here when a new baseline lands under models/.
 #
 # Both current baselines were trained from Notebooks/6b_empathbot_v1_improvements.ipynb
-# (the timm efficientnet_b2 variant) — their state-dict keys start with
+# (the timm efficientnet_b2 variant), their state-dict keys start with
 # `encoder.conv_stem.*`, matching pipeline.models.empathbot_v1. The
 # torchvision variant (pipeline.models.empathbot_final, ported from
 # Notebooks/5_final_empathbot_training_v4.ipynb) has different key
@@ -61,7 +61,7 @@ BASELINES: dict[str, BaselineSpec] = {
         pipeline_model="empathbot_v1",
     ),
     # empath_best_v1.pth: resnet18 backbone + manual SE; state-dict keys
-    # start with `stem.0.*` — 144 keys match pipeline.models.empathbot_resnet18.
+    # start with `stem.0.*`, 144 keys match pipeline.models.empathbot_resnet18.
     "empath_best_v1": BaselineSpec(
         checkpoint="models/empathbot/empath_best_v1.pth",
         pipeline_model="empathbot_resnet18",
@@ -73,9 +73,9 @@ DEFAULT_DATASETS = ["empath", "fer2013_holdout"]
 
 
 def _build_ctx_shim(repo_root: Path):
-    """Lightweight stand-in for pipeline.framework.Context — provides only
+    """Lightweight stand-in for pipeline.framework.Context, provides only
     what dataset prepare() functions actually use (logger access via
-    ctx.config — none of the empath/fer2013 loaders touch ctx, so we can
+    ctx.config, none of the empath/fer2013 loaders touch ctx, so we can
     pass a near-empty object). Returned object exposes a `.config` with a
     .train_cfg dict so dataset modules that probe it don't AttributeError.
     """
@@ -100,7 +100,7 @@ def _resolve_model_module(pipeline_model: str) -> ModuleType:
 
 
 # Hand-trained baselines and pipeline-trained runs use different
-# checkpoint envelopes — the notebooks saved `model_state` (singular),
+# checkpoint envelopes, the notebooks saved `model_state` (singular),
 # the pipeline saves `model_state_dict`. Probe both before falling back
 # to "assume the dict IS the state dict".
 _STATE_DICT_KEYS = ("model_state_dict", "model_state", "state_dict")
@@ -140,7 +140,7 @@ def evaluate_baseline(
         raise FileNotFoundError(
             f"baseline checkpoint missing: {ckpt_path}\n"
             f"  This baseline expects models/{spec.checkpoint.split('/', 1)[1]} "
-            f"to be on disk. Models live in the gitignored models/ tree — see "
+            f"to be on disk. Models live in the gitignored models/ tree, see "
             f"README.md → 'Switching to the real model' for where to drop it."
         )
 
@@ -151,7 +151,7 @@ def evaluate_baseline(
     if build_fn is None or preprocess is None:
         raise RuntimeError(
             f"pipeline.models.{pipeline_model_name} must export build() + "
-            f"PREPROCESS for baseline eval — got build={build_fn is not None} "
+            f"PREPROCESS for baseline eval, got build={build_fn is not None} "
             f"preprocess={preprocess is not None}"
         )
 
@@ -166,7 +166,7 @@ def evaluate_baseline(
     for name in requested:
         try:
             ds_spec = _load_dataset(name, ctx_shim)
-        except Exception:  # noqa: BLE001 — log and skip
+        except Exception:  # noqa: BLE001, log and skip
             logger.exception("baseline %s: skipping dataset %s (load failed)",
                              baseline_id, name)
             continue
@@ -178,7 +178,7 @@ def evaluate_baseline(
             continue
 
         # Build architecture sized to this dataset's class count, load
-        # weights once per dataset (cheap — checkpoint already in RAM
+        # weights once per dataset (cheap, checkpoint already in RAM
         # via torch.load below if we wanted to optimise, but the simple
         # path is easier to read).
         model = build_fn(ds_spec.num_classes).to(device)
@@ -202,7 +202,7 @@ def evaluate_baseline(
             "pipeline_model":   pipeline_model_name,
             "evaluated_at":     datetime.now().isoformat(timespec="seconds"),
         })
-        logger.info("baseline %s × %s — acc=%.4f macro_f1=%.4f → %s",
+        logger.info("baseline %s × %s, acc=%.4f macro_f1=%.4f → %s",
                     baseline_id, name,
                     -1.0 if metrics["acc"] is None else metrics["acc"],
                     metrics["macro_f1"] or 0.0,

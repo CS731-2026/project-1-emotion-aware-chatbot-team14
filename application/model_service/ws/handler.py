@@ -1,4 +1,4 @@
-"""WebSocket dispatcher — accepts connections and routes messages to typed handlers."""
+"""WebSocket dispatcher, accepts connections and routes messages to typed handlers."""
 
 import asyncio
 import json
@@ -49,7 +49,7 @@ def _error(websocket: WebSocket, message: str) -> Awaitable[None]:
 def _harness_status(hri: HRIAppState) -> dict[str, Any]:
     """Build the harness_status payload sent to the frontend on session_start.
 
-    Observability only — reports which components loaded. The emotion_model
+    Observability only, reports which components loaded. The emotion_model
     is never invoked here; invocation is in pick_emotion() below.
     """
     fd = hri.face_detector
@@ -83,13 +83,13 @@ def pick_emotion(
     """Invoke the emotion model or fall back to debug/neutral values.
 
     Priority (see core/debug_flags.py for the mutable runtime state):
-      1. ``force_label``      — pin a specific emotion (bypasses everything)
-      2. ``cycle_test_labels`` — step through EMOTIONS on a timer (bypasses model)
-      3. Real model           — face detected + model loaded
-      4. Neutral fallback     — no face / no model
+      1. ``force_label``     , pin a specific emotion (bypasses everything)
+      2. ``cycle_test_labels``, step through EMOTIONS on a timer (bypasses model)
+      3. Real model          , face detected + model loaded
+      4. Neutral fallback    , no face / no model
 
     emotion_model.predict() is the only model invocation point in the codebase.
-    Lives here (not in ws/video.py) because it owns the model call — video.py
+    Lives here (not in ws/video.py) because it owns the model call, video.py
     only prepares the face crop.
     """
     flags = debug_flags.emotion
@@ -203,7 +203,7 @@ def _make_handlers(
     the loop running, or False to signal a clean close.
 
     Using a dispatch table instead of if/elif means adding a new message type
-    is a single dict entry — no touching the main loop.
+    is a single dict entry, no touching the main loop.
     """
 
     async def on_session_start(msg: dict[str, Any]) -> bool:
@@ -219,7 +219,7 @@ def _make_handlers(
         await _send(websocket, {**_harness_status(hri), "profile_id": profile_id})
 
         # Push the conductor's starting view so the frontend mounts the
-        # correct surface (typically qa_form) immediately — without
+        # correct surface (typically qa_form) immediately, without
         # waiting for the user to type something first.
         current = session.conductor.current
         await _send(websocket, {
@@ -350,7 +350,7 @@ def _make_handlers(
                 # segment_summary event lands in session.system_events when
                 # the worker thread finishes. If the user speaks before
                 # then, the next yarn's LLM call just doesn't see the
-                # summary — acceptable, since the raw {{form_answer: …}}
+                # summary, acceptable, since the raw {{form_answer: …}}
                 # lines are still in the transcript.
                 await _send(websocket, {
                     "type": "view_update",
@@ -371,7 +371,7 @@ def _make_handlers(
                     ))
                 # If the new state is a yarn, kick off an LLM call to open
                 # the conversation using the intention the conductor just
-                # produced via the new state's tick() — passing it through
+                # produced via the new state's tick(), passing it through
                 # so subclasses can shape the opener via instance logic
                 # without having to mutate intention_prompt.
                 if decision.state.kind == "yarn" and decision.intention:

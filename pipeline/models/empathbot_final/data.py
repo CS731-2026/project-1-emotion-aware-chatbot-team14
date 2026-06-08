@@ -44,7 +44,7 @@ class EmpathBotDataset(Dataset):
         return tf(img), label
 
     def class_counts(self, num_classes: int) -> list[int]:
-        """Per-class sample count — used by compute_class_weights."""
+        """Per-class sample count, used by compute_class_weights."""
         counts = [0] * num_classes
         for _, row in self.df.iterrows():
             label = int(row["label"])

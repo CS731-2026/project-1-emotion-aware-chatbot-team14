@@ -1,6 +1,6 @@
 """Video frame utilities: JPEG decode, face detection, encoding.
 
-Pure frame-processing functions — no emotion logic, no WebSocket state.
+Pure frame-processing functions, no emotion logic, no WebSocket state.
 The caller (ws/handler.py:on_video_frame) composes these into the pipeline.
 """
 
@@ -33,7 +33,7 @@ class FrameDetectionResult:
 def encode_jpeg_b64(frame_bgr: np.ndarray) -> str | None:
     """JPEG-encode a BGR frame and return it as a base64 ASCII string.
 
-    Quality 70 — enough for debug display; reduces WS payload size.
+    Quality 70, enough for debug display; reduces WS payload size.
     Returns None if encoding fails.
     """
     import cv2

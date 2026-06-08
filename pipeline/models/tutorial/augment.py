@@ -1,6 +1,6 @@
 """TRAIN_TF (with augmentation) vs VAL_TF (deterministic).
 
-PREPROCESS = VAL_TF — re-exported from __init__.py so the live model
+PREPROCESS = VAL_TF, re-exported from __init__.py so the live model
 service uses the same eval transforms at inference (no train/serve drift).
 """
 
@@ -11,7 +11,7 @@ import torchvision.transforms as T
 
 IMG_SIZE = 224
 
-# REQUIRED for pretrained backbones — ImageNet stats.
+# REQUIRED for pretrained backbones, ImageNet stats.
 MEAN = [0.485, 0.456, 0.406]
 STD  = [0.229, 0.224, 0.225]
 

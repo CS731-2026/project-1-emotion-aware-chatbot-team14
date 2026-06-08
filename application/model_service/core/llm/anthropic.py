@@ -8,7 +8,7 @@ from .base import LLMProvider, Message
 
 
 class AnthropicProvider(LLMProvider):
-    """Anthropic LLM provider — not yet implemented."""
+    """Anthropic LLM provider, not yet implemented."""
 
     def __init__(self, model: str = "claude-3-5-haiku-latest", **kwargs: Any) -> None:
         self._model = model

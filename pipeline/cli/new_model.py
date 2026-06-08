@@ -2,13 +2,13 @@
 
 Two templates:
 
-  --template tutorial   (default) — copies pipeline/models/tutorial/ with
+  --template tutorial   (default), copies pipeline/models/tutorial/ with
                         names rewritten. Heavy comments throughout; the
                         right starting point when learning the framework
                         or when you want a working template you can
                         delete pieces from.
 
-  --template simple     30-line minimum using train_classifier — no
+  --template simple     30-line minimum using train_classifier, no
                         custom training loop, no per-model CFG. Use
                         when your training is "CE + AdamW, that's it".
 
@@ -18,7 +18,7 @@ Usage:
     python -m pipeline.cli.new_model my_model --template tutorial --force
 
 After generation, the script prints exact next-step commands. The
-tutorial template is the SOURCE OF TRUTH for the scaffolder — when
+tutorial template is the SOURCE OF TRUTH for the scaffolder, when
 the framework changes, update pipeline/models/tutorial/ and the
 scaffolder picks it up automatically.
 """
@@ -31,10 +31,10 @@ import sys
 from pathlib import Path
 
 
-# ── simple template (hardcoded — no equivalent reference module) ─────────
+# ── simple template (hardcoded, no equivalent reference module) ─────────
 
 SIMPLE_INIT = '''\
-"""{model_id} — simple classifier using the shared train_classifier helper.
+"""{model_id}, simple classifier using the shared train_classifier helper.
 
 For a custom training procedure (split-LR, freeze schedules, MixUp,
 focal loss, etc) scaffold with --template tutorial instead, or look at
@@ -115,7 +115,7 @@ PREPROCESS = T.Compose([
 # reads its files at runtime and rewrites the names. This way updating
 # the tutorial = updating the template, no drift.
 #
-# Substitution rules — applied IN ORDER, longest match first matters:
+# Substitution rules, applied IN ORDER, longest match first matters:
 #   "Tutorial"   → user's class name (UpperCamelCase, e.g. "MyModel")
 #   "tutorial"   → user's model id (snake_case, e.g. "my_model")
 #
@@ -219,10 +219,10 @@ def main() -> int:
     print(f"✓ scaffolded pipeline/models/{model_id}/ ({args.template} template)")
     print()
     print("Next:")
-    print(f"  1. read pipeline/models/{model_id}/__init__.py — it points at the other files")
-    print(f"  2. edit pipeline/models/{model_id}/model.py — your architecture")
+    print(f"  1. read pipeline/models/{model_id}/__init__.py, it points at the other files")
+    print(f"  2. edit pipeline/models/{model_id}/model.py, your architecture")
     if args.template == "tutorial":
-        print(f"  3. edit pipeline/models/{model_id}/train_loop.py CFG — hyperparameters")
+        print(f"  3. edit pipeline/models/{model_id}/train_loop.py CFG, hyperparameters")
     print("  4. add a line to runs.yaml:")
     print(f"       - {{ dataset: synthetic_smoke, model: {model_id}, config: fast }}")
     print(f"  5. make train RUN={model_id}")

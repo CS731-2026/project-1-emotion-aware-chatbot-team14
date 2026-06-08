@@ -1,4 +1,4 @@
-"""Fast — 1 epoch, no aug, small batch. The sweep smoke-test config:
+"""Fast, 1 epoch, no aug, small batch. The sweep smoke-test config:
 "did I just break the loop for any model/dataset?". Each cell
 finishes in seconds on a laptop.
 

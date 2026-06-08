@@ -22,7 +22,7 @@ from core.stt.base import TranscriptionService
 class HRIAppState:
     """All ML components loaded at startup; each field is None until loaded.
 
-    Component load failures are independent — a missing model sets only that
+    Component load failures are independent, a missing model sets only that
     field to None; the rest of the service continues to run.
     """
     face_detector: FaceDetector | None = None

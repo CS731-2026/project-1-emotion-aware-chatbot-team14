@@ -4,7 +4,7 @@ Reads a CSV with columns ('path', 'label'), loads the image with PIL,
 runs it through whatever transform the caller passes (augment + model
 PREPROCESS for train; PREPROCESS only for val/test).
 
-PIL's .convert("RGB") handles grayscale-on-disk transparently — FER2013
+PIL's .convert("RGB") handles grayscale-on-disk transparently, FER2013
 ships 1-channel images but our models all expect 3, and replicating
 the channel via PIL is cleaner than a torch transform.
 """

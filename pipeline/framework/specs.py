@@ -20,7 +20,7 @@ class DatasetSpec:
     source_md5:     str                  # hash of source dir; detects re-prep need
 
     def to_manifest(self) -> dict:
-        # JSON-safe — Paths → strings.
+        # JSON-safe, Paths → strings.
         d = asdict(self)
         d["cache_dir"] = str(self.cache_dir)
         d["splits"] = {k: str(v) for k, v in self.splits.items()}

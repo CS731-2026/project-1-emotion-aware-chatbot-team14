@@ -1,4 +1,4 @@
-"""Architecture — define the nn.Module + a build() factory. Nothing else."""
+"""Architecture, define the nn.Module + a build() factory. Nothing else."""
 
 from __future__ import annotations
 
@@ -27,5 +27,5 @@ class Tutorial(nn.Module):
 
 
 def build(num_classes: int) -> nn.Module:
-    # Fresh instance every call — never cache. Tests + deploy + sweep expect a clean module.
+    # Fresh instance every call, never cache. Tests + deploy + sweep expect a clean module.
     return Tutorial(num_classes=num_classes)

@@ -1,4 +1,4 @@
-"""Ada-DF equivalent architecture — ported verbatim from notebook 4.
+"""Ada-DF equivalent architecture, ported verbatim from notebook 4.
 
 EfficientNet-B2 backbone (with SE attention built into timm) +
 2-stage classifier head. The notebook treats this as a fallback for

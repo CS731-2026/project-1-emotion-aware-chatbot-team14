@@ -6,7 +6,7 @@ The shapes must stay aligned with:
   application/frontend/src/lib/conversation/sampleCheckIns.ts
 
 Only the PageSpec / QuestionSpec / Choice triplet is used by the
-conductor at present — overlay-style specs are still a debug-only
+conductor at present, overlay-style specs are still a debug-only
 construct on the frontend.
 """
 

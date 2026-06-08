@@ -1,4 +1,4 @@
-"""ResNet18 FER + OneCycleLR — faithful port of
+"""ResNet18 FER + OneCycleLR, faithful port of
 Notebooks/2_emotion-recognition-resnet18.ipynb.
 
 Distinct from pipeline/models/resnet18/ in three concrete ways:

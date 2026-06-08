@@ -3,7 +3,7 @@
 Utility category in the utility/state/composition taxonomy. The
 default training loop a model module delegates to when its setup is
 "build it, feed it batches of images, cross-entropy loss, optimizer
-of choice, save the best checkpoint" — i.e. most baselines.
+of choice, save the best checkpoint", i.e. most baselines.
 
 Custom architectures (multi-stage training, contrastive / GAN / RL
 losses, alternating optimizers, etc.) write their own train() in

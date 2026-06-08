@@ -1,4 +1,4 @@
-"""EmpathBot V1 — faithful port of Notebooks/6b_empathbot_v1_improvements.ipynb.
+"""EmpathBot V1, faithful port of Notebooks/6b_empathbot_v1_improvements.ipynb.
 
 The whole training procedure is lifted: FocalLoss with class weights +
 label smoothing, AdamW with split LR (backbone vs head), linear-
@@ -7,7 +7,7 @@ CFG['freeze_epochs'], gradient clipping, WeightedRandomSampler
 with 1.3x bias toward HARD_LABEL_IDS, early stopping on val_acc,
 checkpoint envelope matching what model_service expects.
 
-Package layout — each file mirrors one section of the notebook:
+Package layout, each file mirrors one section of the notebook:
 
   __init__.py     pipeline surface (PREPROCESS + train)
   model.py        architecture (notebook cell 9)

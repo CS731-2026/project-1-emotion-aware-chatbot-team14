@@ -118,7 +118,7 @@ export const SAMPLE_OVERLAY_STATIC: OverlaySpec = {
 export const SAMPLE_PAGE_SEQUENTIAL: PageSpec = {
   elevation: "page",
   title: "A few quick questions",
-  subtitle: "Take your time — there are no right or wrong answers.",
+  subtitle: "Take your time, there are no right or wrong answers.",
   emotionAware: true,
   reveal: "sequential",
   questions: [
@@ -144,10 +144,10 @@ export const SAMPLE_PAGE_SEQUENTIAL: PageSpec = {
       cannedReactionOn: {
         value: "I feel fine",
         alert:
-          'We noticed you selected "I feel fine" — but it seems you might have some concerns. ' +
+          'We noticed you selected "I feel fine", but it seems you might have some concerns. ' +
           "That's completely okay. Would you like us to explain what the AI actually did during your visit?",
         assistant:
-          "The AI helped your doctor by suggesting possible causes based on your symptoms — " +
+          "The AI helped your doctor by suggesting possible causes based on your symptoms, " +
           "your doctor made all the final decisions. You are always in control. " +
           "Would you like to know more, or ask a question?",
       },

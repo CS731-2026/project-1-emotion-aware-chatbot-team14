@@ -1,4 +1,4 @@
-"""Dataset ingest helpers — split out of phases.py so the phase
+"""Dataset ingest helpers, split out of phases.py so the phase
 function stays a thin orchestrator.
 
 Each helper does one thing and is independently testable:
@@ -46,10 +46,10 @@ def generate_synthetic(
 
     Each class gets `samples_per_class[name]` (or a flat int) images,
     drawn from a class-specific mean + noise so a model can actually
-    learn something meaningful — the smoke run validates "training
+    learn something meaningful, the smoke run validates "training
     drives loss down" not just "the wiring works".
 
-    Idempotent: if `dest` already has subdirs, returns immediately —
+    Idempotent: if `dest` already has subdirs, returns immediately ,
     the per-dataset md5 cache in prepare_dataset still picks up changes
     in image content if a teammate edits a generated file by hand.
     """
@@ -94,7 +94,7 @@ def download_kaggle(dataset_id: str, dest: Path) -> Path:
     / KAGGLE_KEY env vars). Raises FileNotFoundError with setup hints if
     the CLI isn't installed or credentials are missing.
 
-    Idempotent — if the archive already extracted under `dest` (presence
+    Idempotent, if the archive already extracted under `dest` (presence
     of any subdir is the cheap heuristic), returns immediately.
     """
     dest.mkdir(parents=True, exist_ok=True)
@@ -132,7 +132,7 @@ def download_kaggle(dataset_id: str, dest: Path) -> Path:
 def md5_of_dir(root: Path) -> str:
     """Stable hash of a directory's *file listing* (paths + sizes). Used
     by prepare_dataset to detect "source already prepped, skip the
-    whole remap+split pipeline" — content-hashing every byte of FER2013
+    whole remap+split pipeline", content-hashing every byte of FER2013
     on each run would be wasteful."""
     h = hashlib.md5()
     for p in sorted(root.rglob("*")):
@@ -152,7 +152,7 @@ def scan_imagefolder(folder: Path) -> pd.DataFrame:
             if img.suffix.lower() in _IMG_EXTS:
                 rows.append({"path": str(img.resolve()), "src_label": class_dir.name})
     if not rows:
-        raise FileNotFoundError(f"no images found under {folder} — wrong path?")
+        raise FileNotFoundError(f"no images found under {folder}, wrong path?")
     return pd.DataFrame(rows)
 
 
@@ -185,7 +185,7 @@ def apply_remap(
 
 
 def carve_val(train: pd.DataFrame, val_fraction: float, seed: int) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Random split — fraction `val_fraction` of `train` becomes val.
+    """Random split, fraction `val_fraction` of `train` becomes val.
     Stratification could land later; for FER2013's size this is fine."""
     shuffled = train.sample(frac=1.0, random_state=seed).reset_index(drop=True)
     n_val = int(len(shuffled) * val_fraction)
@@ -223,7 +223,7 @@ def try_load_cached(cache_dir: Path, source_dir: Path):
     changed; otherwise None. Lets a dataset module short-circuit the
     download+remap+split pipeline on warm re-runs.
 
-    Imported lazily inside dataset modules — `from pipeline import ingest`
+    Imported lazily inside dataset modules, `from pipeline import ingest`
     then `ingest.try_load_cached(...)`.
     """
     from .framework.specs import DatasetSpec
@@ -234,7 +234,7 @@ def try_load_cached(cache_dir: Path, source_dir: Path):
     if prior.source_md5 == md5_of_dir(source_dir):
         logger.info("dataset cache hit at %s", cache_dir)
         return prior
-    logger.info("dataset source md5 changed — re-prepping")
+    logger.info("dataset source md5 changed, re-prepping")
     return None
 
 
@@ -253,7 +253,7 @@ def finalize_dataset(
 ):
     """Walk source/<train|test>/<class>/*.png, remap, split, write CSVs,
     return the DatasetSpec and persist its manifest. The single shared
-    "everything after the fetch" pipeline — each dataset module just
+    "everything after the fetch" pipeline, each dataset module just
     fetches its source and calls this.
 
     `label_remap=None` is identity (every class_name maps to itself).
@@ -298,7 +298,7 @@ def finalize_dataset(
     )
     (cache_dir / "manifest.json").write_text(json.dumps(spec.to_manifest(), indent=2))
     logger.info(
-        "dataset %s ready — train=%d val=%d test=%d",
+        "dataset %s ready, train=%d val=%d test=%d",
         name, len(train_df), len(val_df), len(test_remapped),
     )
     return spec

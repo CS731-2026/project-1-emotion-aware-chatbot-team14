@@ -1,6 +1,6 @@
-"""Training loop — ported from notebook 6 cells 13 + 15.
+"""Training loop, ported from notebook 6 cells 13 + 15.
 
-Differs from empathbot_v1 (6b) — uses CrossEntropyLoss with label
+Differs from empathbot_v1 (6b), uses CrossEntropyLoss with label
 smoothing instead of FocalLoss, and MixUp alpha=0.2 (6b disables
 MixUp). Otherwise the schedule is the same: split-LR AdamW, linear-
 warmup + cosine LambdaLR, freeze the backbone for the first N epochs,

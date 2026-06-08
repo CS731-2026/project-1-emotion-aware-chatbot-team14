@@ -47,7 +47,7 @@
           autocomplete="current-password"
         />
         {#if passwordError}
-          <p class="gate-error">Incorrect password — please try again.</p>
+          <p class="gate-error">Incorrect password, please try again.</p>
         {/if}
         <button class="gate-btn" type="submit">Sign in →</button>
       </form>
@@ -119,7 +119,7 @@
               <div class="mismatch-icon warn">😟</div>
               <div class="mismatch-text">
                 <div class="mismatch-q">AI use during appointment <span class="tag tag-amber">mismatch</span></div>
-                <div class="mismatch-detail">Said "I feel fine" — emotion signal: anxious (score 0.28). LLM explanation triggered.</div>
+                <div class="mismatch-detail">Said "I feel fine", emotion signal: anxious (score 0.28). LLM explanation triggered.</div>
               </div>
               <div class="mismatch-time">2 hrs ago</div>
             </div>
@@ -127,7 +127,7 @@
               <div class="mismatch-icon warn">😟</div>
               <div class="mismatch-text">
                 <div class="mismatch-q">Data privacy concern <span class="tag tag-amber">mismatch</span></div>
-                <div class="mismatch-detail">Said "Very comfortable" — dwell time 14s, re-selected twice. Score: 0.31.</div>
+                <div class="mismatch-detail">Said "Very comfortable", dwell time 14s, re-selected twice. Score: 0.31.</div>
               </div>
               <div class="mismatch-time">5 hrs ago</div>
             </div>
@@ -135,7 +135,7 @@
               <div class="mismatch-icon ok">😊</div>
               <div class="mismatch-text">
                 <div class="mismatch-q">Doctor listened to me <span class="tag tag-teal">matched</span></div>
-                <div class="mismatch-detail">Said "Yes, completely" — emotion signal confirmed positive (score 0.84).</div>
+                <div class="mismatch-detail">Said "Yes, completely", emotion signal confirmed positive (score 0.84).</div>
               </div>
               <div class="mismatch-time">Yesterday</div>
             </div>
@@ -143,7 +143,7 @@
               <div class="mismatch-icon warn">😟</div>
               <div class="mismatch-text">
                 <div class="mismatch-q">AI making decisions for me <span class="tag tag-amber">mismatch</span></div>
-                <div class="mismatch-detail">Said "Mostly fine" — hesitation detected, follow-up question submitted.</div>
+                <div class="mismatch-detail">Said "Mostly fine", hesitation detected, follow-up question submitted.</div>
               </div>
               <div class="mismatch-time">Yesterday</div>
             </div>
@@ -152,7 +152,7 @@
 
         <div class="card">
           <div class="card-header">
-            <span class="card-title">Comfort with AI — breakdown</span>
+            <span class="card-title">Comfort with AI, breakdown</span>
           </div>
           <div class="bar-group">
             <div class="bar-row">
@@ -197,7 +197,7 @@
           </div>
           <div class="link-card">
             <div>
-              <div class="link-meta">Email link — Dr. Khan's patients</div>
+              <div class="link-meta">Email link, Dr. Khan's patients</div>
               <div class="link-url">empathy.check/r/dk-may26</div>
             </div>
             <div class="link-actions">
@@ -207,7 +207,7 @@
           </div>
           <div class="link-card">
             <div>
-              <div class="link-meta">Kiosk — waiting room device</div>
+              <div class="link-meta">Kiosk, waiting room device</div>
               <div class="link-url">empathy.check/r/kiosk-rv</div>
             </div>
             <div class="link-actions">

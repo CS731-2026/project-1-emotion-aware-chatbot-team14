@@ -1,10 +1,10 @@
-"""Session conductor — per-session state machine walker.
+"""Session conductor, per-session state machine walker.
 
 Holds a list of States and a pointer to the current one. Each user turn
 the chat router calls `observe(ctx)` once; the conductor invokes
 `state.tick(ctx)` exactly once on the current state and may transition.
 After the LLM has replied, if the reply carried `[[advance]]`, the
-router calls `handle_emission_advance()` — a separate entry that
+router calls `handle_emission_advance()`, a separate entry that
 transitions without re-ticking, so per-turn counters stay correct.
 
 The conductor returns a `ConductorDecision` carrying:
@@ -57,7 +57,7 @@ class Conductor:
         If the tick result says `advance` and we're not already on the
         last state, transition forward and tick the new state with a
         fresh ctx (turn_in_state=0). The intention returned is whichever
-        tick was last evaluated — either the current state's (no
+        tick was last evaluated, either the current state's (no
         transition) or the new state's (transition).
         """
         cur = self.current
@@ -88,7 +88,7 @@ class Conductor:
         Only fires a transition when the current state is a yarn that
         exposes an `advance_instruction` (i.e. the LLM was authorised
         to emit the marker). Does NOT call `tick()` on the current
-        state — that already happened pre-LLM. The new state's `tick`
+        state, that already happened pre-LLM. The new state's `tick`
         runs once with a fresh ctx.
 
         If no transition is possible (current is the last state, or

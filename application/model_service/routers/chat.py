@@ -84,11 +84,11 @@ def generate_yarn_opener(
     """Run the LLM once with no user message to produce a yarn-opening reply.
 
     Called right after the conductor transitions into a yarn state via a
-    form_complete event — there's no user chat turn to ride; we want the
+    form_complete event, there's no user chat turn to ride; we want the
     assistant to acknowledge the form answers and open the next phase.
 
     `intention` is the conductor's tick output for the new state's first
-    turn — passed in by the caller so subclass tick() logic shapes the
+    turn, passed in by the caller so subclass tick() logic shapes the
     opener.
 
     Returns the cleaned reply text, or None if the LLM agent isn't loaded
@@ -108,7 +108,7 @@ def generate_yarn_opener(
     current = session.conductor.current
     try:
         result = hri.llm_agent.reason(
-            "",  # no user input — the LLM is opening the yarn from the
+            "",  # no user input, the LLM is opening the yarn from the
                  # intention prompt + recent form_answer events
             emotional_context,
             [],
@@ -144,7 +144,7 @@ def _run_extraction_on_transition(
     cutoff = session.state_started_at
     slice_events = [e for e in session.system_events if e.t >= cutoff]
     slice_segments = [s for s in session.transcript_buffer if float(s.timestamp) >= cutoff]
-    # Strip the (conf NN%) tag from speech lines — fact extraction doesn't
+    # Strip the (conf NN%) tag from speech lines, fact extraction doesn't
     # benefit from per-line confidence, and rendering it with a different
     # remap than the main conversation would just create inconsistency.
     segment_slice = compose_stream(
@@ -183,7 +183,7 @@ async def _step_conductor(
     happen.
 
     `[[advance]]` emissions arrive AFTER the LLM call and are handled by
-    `_handle_advance_emission` below — they don't tick.
+    `_handle_advance_emission` below, they don't tick.
     """
     if session is None:
         return None, None, "chat", None, False
@@ -243,7 +243,7 @@ async def _handle_advance_emission(
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(body: ChatRequest, request: Request) -> ChatResponse:
-    """POST /api/v1/chat — generate an emotion-aware LLM reply.
+    """POST /api/v1/chat, generate an emotion-aware LLM reply.
 
     Reads the active WebSocket session's emotion buffer for the given profile,
     passes it through EmotionalReasoningAgent to produce a context string, then
@@ -255,7 +255,7 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
     emotion_observations = session.emotion_buffer.history() if session else []
 
     # Step 0a: walk the conductor with whatever pre-LLM signals we have.
-    # form_complete arrives over the WebSocket, never via /chat — so this
+    # form_complete arrives over the WebSocket, never via /chat, so this
     # pre-LLM observe just ticks the current state with form_completed=False.
     intention, state_name, surface, spec, _transitioned = await _step_conductor(
         session, form_completed=False, hri=hri,
@@ -264,7 +264,7 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
         session.conductor.current.advance_instruction if session else None
     )
 
-    # When the conductor is sitting in a form state the LLM stays silent —
+    # When the conductor is sitting in a form state the LLM stays silent ,
     # forms drive the surface; chip clicks are structured signals, not
     # things the LLM should react to with prose. A user typing or speaking
     # during a form still lands in transcript_buffer (for future yarn
@@ -301,7 +301,7 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
         )
 
         # Step 4: run the current LLM reasoning pipeline to produce a structured result.
-        # Offload to a worker thread — providers like ClaudeCodeProvider spawn a
+        # Offload to a worker thread, providers like ClaudeCodeProvider spawn a
         # subprocess and block; running them on the event loop stalls the WS
         # face-detection pipeline until the LLM returns.
         result = await asyncio.to_thread(
@@ -322,7 +322,7 @@ async def chat(body: ChatRequest, request: Request) -> ChatResponse:
 
     # Step 5: pick up any inline tool emissions from the reply (e.g.
     # [[advance]]) and ask the conductor to process the transition WITHOUT
-    # re-ticking the previous state — that would double-count the turn.
+    # re-ticking the previous state, that would double-count the turn.
     # The reply text has already had markers stripped.
     advance_emitted = any(e.name == "advance" for e in result.emissions)
     if advance_emitted:

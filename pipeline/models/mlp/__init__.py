@@ -1,7 +1,7 @@
-"""MLP baseline — the simplest classifier the pipeline can train.
+"""MLP baseline, the simplest classifier the pipeline can train.
 
 Flatten → 256 → 128 → num_classes. No convolutions, no inductive bias.
-Useful as a "is the dataset learnable at all?" floor — if MLP beats
+Useful as a "is the dataset learnable at all?" floor, if MLP beats
 chance, the pipeline is working; if a CNN can't beat MLP, something
 about the CNN setup is wrong.
 """

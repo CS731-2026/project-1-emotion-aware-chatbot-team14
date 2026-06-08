@@ -39,7 +39,7 @@ class ResolvedRun:
     """One run after name → module resolution. .as_tuple() = what sweep() takes."""
     dataset: ModuleType
     model:   ModuleType
-    config:  Any   # module or SimpleNamespace — has .NAME and .CONFIG
+    config:  Any   # module or SimpleNamespace, has .NAME and .CONFIG
 
     def as_tuple(self) -> tuple[ModuleType, ModuleType, Any]:
         return (self.dataset, self.model, self.config)
@@ -66,7 +66,7 @@ def _make_overridden_config(base_module: ModuleType, overrides: dict[str, Any],
     if not hasattr(base_module, "CONFIG"):
         raise ValueError(
             f"runs.yaml entry #{run_index}: config '{base_module.__name__}' "
-            "has no CONFIG dict — can't apply train_cfg overrides."
+            "has no CONFIG dict, can't apply train_cfg overrides."
         )
     merged = deepcopy(base_module.CONFIG)
     merged.update(overrides)

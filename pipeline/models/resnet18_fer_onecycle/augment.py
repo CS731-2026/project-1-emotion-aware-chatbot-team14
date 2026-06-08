@@ -1,4 +1,4 @@
-"""Transforms — verbatim from notebook cell 31.
+"""Transforms, verbatim from notebook cell 31.
 
 FER2013 is single-channel grayscale; Grayscale(3) repeats it across the
 3 ImageNet-normalised channels expected by ResNet-18. Resize(256) +

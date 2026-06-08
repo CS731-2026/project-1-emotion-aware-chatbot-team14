@@ -2,7 +2,7 @@
 gets composed in front of the model's PREPROCESS for the train split.
 
 Crucially, augmentation never includes normalization or resize-to-input
-— those are PREPROCESS's job. That keeps "what does the model see"
+, those are PREPROCESS's job. That keeps "what does the model see"
 unambiguous and lets the same augment work across models with different
 input sizes.
 """

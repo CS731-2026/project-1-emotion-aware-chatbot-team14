@@ -1,4 +1,4 @@
-"""Thorough — more epochs, strong augmentation, label smoothing,
+"""Thorough, more epochs, strong augmentation, label smoothing,
 weight decay. The "actually train a useful model" config; expect
 minutes to tens of minutes per run depending on model size.
 """

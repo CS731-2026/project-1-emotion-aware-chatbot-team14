@@ -1,4 +1,4 @@
-"""empathbot_v2 — empathbot_final architecture + anti-class-imbalance training.
+"""empathbot_v2, empathbot_final architecture + anti-class-imbalance training.
 
 Identical EfficientNet-B2 architecture to empathbot_final. Only the
 training recipe differs, to fix the class-imbalance failures we
@@ -16,7 +16,7 @@ The model collapsed onto "confusion + default to neutral/trust_relief".
 That's the textbook class-imbalance failure mode. Two CFG changes here
 target it directly:
 
-1. ``mixup_alpha: 0.2 → 0.0`` — disable MixUp augmentation.
+1. ``mixup_alpha: 0.2 → 0.0``, disable MixUp augmentation.
 
    MixUp (Zhang et al. 2018, arXiv:1710.09412) linearly interpolates
    pairs of (image, label) and trains on the mixed targets. The paper
@@ -27,15 +27,15 @@ target it directly:
    the model's targets toward the common class for the rare class. This
    is documented in the imbalanced-FER literature (e.g. Wang et al.
    2020, "Suppressing Uncertainties for Large-Scale Facial Expression
-   Recognition", CVPR 2020 — uses no MixUp; relies on class-balanced
+   Recognition", CVPR 2020, uses no MixUp; relies on class-balanced
    losses instead).
 
-2. ``neg_boost: 1.2 → 2.5`` — strengthen the NEGATIVE-class weight.
+2. ``neg_boost: 1.2 → 2.5``, strengthen the NEGATIVE-class weight.
 
    The pipeline's compute_class_weights starts from inverse frequency
    (1 / class_count, normalized) then multiplies by ``neg_boost`` for
    the classes listed in NEGATIVE_LABEL_IDS (sadness, fear_anxiety,
-   distrust). At 1.2× the boost wasn't strong enough — F1 on those
+   distrust). At 1.2× the boost wasn't strong enough, F1 on those
    three classes averaged 0.04. At 2.5× we're explicitly down-weighting
    the head's incentive to default to neutral/trust_relief when
    uncertain about the negative classes.
@@ -48,7 +48,7 @@ target it directly:
    the empath merge produces.
 
 Architecture (model.py, augment.py, data.py) is unchanged from
-empathbot_final — re-exports below. The only fresh code is this
+empathbot_final, re-exports below. The only fresh code is this
 docstring's worth of intent + a small ``CFG_OVERRIDES`` dict + a
 ``train()`` shim that layers the overrides under whatever runs.yaml
 passes via train_cfg.
@@ -71,7 +71,7 @@ __all__ = ["PREPROCESS", "build", "train", "CFG_OVERRIDES"]
 # Defaults that differ from empathbot_final. The per-run train_cfg in
 # runs.yaml stacks on top of these (user-row wins on conflict).
 #
-# `mixup_start_epoch: 999` is the actual MixUp disable — the inner
+# `mixup_start_epoch: 999` is the actual MixUp disable, the inner
 # train_loop gates MixUp via `epoch > mixup_start_epoch`, not via
 # `mixup_alpha`. Setting alpha=0 alone would still hit a Beta(0,0)
 # crash inside _mixup_batch. Pushing mixup_start_epoch past `epochs`

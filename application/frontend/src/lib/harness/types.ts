@@ -1,4 +1,4 @@
-// EmpathBot 6-class schema — must mirror application/model_service/core/emotion/base.py.
+// EmpathBot 6-class schema, must mirror application/model_service/core/emotion/base.py.
 export type Emotion =
   | "neutral"
   | "trust_relief"

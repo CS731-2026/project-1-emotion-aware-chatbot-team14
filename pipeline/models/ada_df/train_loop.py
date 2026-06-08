@@ -1,4 +1,4 @@
-"""Training loop — ported from notebook 4 cell 11.
+"""Training loop, ported from notebook 4 cell 11.
 
 AdamW + StepLR (×0.5 every 12 epochs) + plain CrossEntropy + early
 stop on train_acc (the notebook patterns on train_acc rather than
@@ -134,7 +134,7 @@ def run(ctx: Context, dataset: DatasetSpec, model: nn.Module) -> TrainedModel:
             epoch, cfg["epochs"], tr_loss, tr_acc, val_acc,
         )
 
-        # Notebook uses train_acc for best-checkpoint + patience — preserve.
+        # Notebook uses train_acc for best-checkpoint + patience, preserve.
         if tr_acc > best_train_acc:
             best_train_acc = tr_acc
             best_epoch = epoch

@@ -1,5 +1,5 @@
 """
-CS731 — Speech-to-Text Module
+CS731, Speech-to-Text Module
 ================================
 Uses FasterWhisper (Group 15's choice) for transcription.
 Records audio from microphone via sounddevice and saves as a temp WAV.
@@ -22,7 +22,7 @@ from pathlib import Path
 
 import numpy as np
 
-# Optional imports — handled gracefully
+# Optional imports, handled gracefully
 try:
     import sounddevice as sd
     SOUNDDEVICE_AVAILABLE = True
@@ -47,7 +47,7 @@ except ImportError:
 
 
 # ── Constants ─────────────────────────────────────────────────────────────────
-SAMPLE_RATE    = 16000    # Hz — Whisper expects 16 kHz
+SAMPLE_RATE    = 16000    # Hz, Whisper expects 16 kHz
 DEFAULT_DURATION = 5      # seconds
 WHISPER_MODEL  = 'base'   # 'tiny' | 'base' | 'small' | 'medium' | 'large-v3'
 

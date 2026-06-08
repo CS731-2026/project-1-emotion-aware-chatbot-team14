@@ -1,5 +1,5 @@
 """
-CS731 — Emotion Recognition Model Definitions
+CS731, Emotion Recognition Model Definitions
 ===============================================
 Builds all architectures compared in the project using the timm library.
 
@@ -67,7 +67,7 @@ def build_standard_model(model_name: str, num_classes: int,
     return model
 
 
-# ── ChatBox_V1 — custom multi-layer classifier ────────────────────────────────
+# ── ChatBox_V1, custom multi-layer classifier ────────────────────────────────
 
 class ChatBoxV1(nn.Module):
     """

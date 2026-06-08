@@ -87,7 +87,7 @@ def _to_bgr(image: ImageLike) -> np.ndarray:
             raise ValueError(f"Expected (H, W, 3) numpy image, got shape {image.shape}")
         return image
 
-    # PIL.Image — duck-typed to avoid hard PIL import for callers who don't use it.
+    # PIL.Image, duck-typed to avoid hard PIL import for callers who don't use it.
     if hasattr(image, "convert") and hasattr(image, "size"):
         rgb = np.array(image.convert("RGB"))
         return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)

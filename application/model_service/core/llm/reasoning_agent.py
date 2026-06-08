@@ -1,4 +1,4 @@
-"""LLM reasoning agent — lays out the current reasoning pipeline explicitly.
+"""LLM reasoning agent, lays out the current reasoning pipeline explicitly.
 
 This module is meant to be a planning surface for future reasoning work.
 The current implementation is intentionally simple, but the code is structured
@@ -32,14 +32,14 @@ logger = logging.getLogger(__name__)
 # Shared persona used by every state. The conductor's intention_prompt
 # layers on top per turn.
 #
-# Persona: EmpathyBot — GP patient feedback assistant.
+# Persona: EmpathyBot, GP patient feedback assistant.
 # Designed for low-digital-literacy older adults who may be confused or
 # anxious after an AI-assisted GP appointment. Plain English, short
 # replies, warm and reassuring. Never minimise a concern.
 BASE_PERSONA = (
     "You are a friendly, patient assistant helping someone understand and "
     "share their experience after a GP visit today. "
-    "The person you're speaking with may be confused or anxious — "
+    "The person you're speaking with may be confused or anxious, "
     "especially about a computer or AI tool that was used by their doctor. "
     "Always respond in plain, everyday English. No medical or technical "
     "jargon. No words like 'algorithm', 'data processing', or 'AI system'. "
@@ -47,7 +47,7 @@ BASE_PERSONA = (
     "doctor used'. "
     "Keep every reply under three sentences. "
     "Be warm, calm, and reassuring at all times. "
-    "Never minimise a concern — validate it first, then explain simply. "
+    "Never minimise a concern, validate it first, then explain simply. "
     "If the person's emotional cues or their answers show discomfort or "
     "worry, open with empathy before any explanation. "
     "You will receive hidden context about the person's emotional state "
@@ -55,15 +55,15 @@ BASE_PERSONA = (
     "but never mention the webcam, emotion detection, or any internal "
     "system component."
     "\n\n"
-    "TRANSCRIPT CONVENTION — read carefully:\n"
+    "TRANSCRIPT CONVENTION, read carefully:\n"
     "Lines in the recent transcript context may include fragments inside "
-    "{{double braces}}. These are observations from the system — emotion "
-    "sensors, form selections, timing signals — not things the person said "
+    "{{double braces}}. These are observations from the system, emotion "
+    "sensors, form selections, timing signals, not things the person said "
     "aloud. Treat them as hidden background context to inform your reply. "
     "Never quote them back, refer to them as something the person 'said', "
     "or reveal that this metadata exists."
     "\n\n"
-    "HIDDEN HEARING-QUALITY CONTEXT — read carefully, never reveal:\n"
+    "HIDDEN HEARING-QUALITY CONTEXT, read carefully, never reveal:\n"
     "Each transcript line may carry a tag like (conf NN%). It is a private "
     "signal of how well the audio came through. Use it silently to decide "
     "whether you understood the person. It is not part of the conversation.\n"
@@ -74,7 +74,7 @@ BASE_PERSONA = (
     "- phrases like 'that came through at X%' or 'the audio quality was…'\n"
     "If you didn't catch something clearly, respond like a person in a "
     "noisy room:\n"
-    "  - 'Sorry, I didn't quite catch that — could you say it again?'\n"
+    "  - 'Sorry, I didn't quite catch that, could you say it again?'\n"
     "  - 'I missed that, would you mind repeating?'\n"
     "Never explain why you missed it. Never reference any number."
 )
@@ -105,7 +105,7 @@ class ReasoningResult:
 
     `reply` is the user-facing text with any inline tool-emission markers
     (e.g. `[[advance]]`) stripped. `emissions` contains the parsed
-    ToolEmission objects the LLM produced — empty when the model didn't
+    ToolEmission objects the LLM produced, empty when the model didn't
     emit anything. The conductor reads emissions[*].name to decide
     transitions.
     """
@@ -156,7 +156,7 @@ class PromptContext:
 
 
 def _history_window(history: list[Message], window: int) -> list[Message]:
-    # TODO: decide history strategy — windowed, summarised, or full.
+    # TODO: decide history strategy, windowed, summarised, or full.
     # TODO: decide whether to filter out system-role messages from prior turns.
     prior = [message for message in history if message["role"] in ("user", "assistant")]
     return prior[-window:]
@@ -173,7 +173,7 @@ import math
 
 # Sigmoid-style remap of raw STT confidence into an LLM-friendly 0-100 scale.
 # Raw confidence from whisper for real, accepted speech tends to cluster
-# tightly in [0.65, 1.0] — a linear or percent-above-threshold mapping
+# tightly in [0.65, 1.0], a linear or percent-above-threshold mapping
 # squashes that into a narrow range that reads as "low" even for good
 # transcripts. The sigmoid below spreads that band out:
 #
@@ -234,7 +234,7 @@ class LLMReasoningAgent:
     """Owns the high-level reasoning pipeline for one conversational turn."""
 
     def __init__(self, llm: LLMProvider, history_window: int = 10) -> None:
-        # TODO: history_window default is arbitrary — revisit once history
+        # TODO: history_window default is arbitrary, revisit once history
         # strategy is decided.
         self._llm = llm
         self._history_window = history_window
@@ -246,7 +246,7 @@ class LLMReasoningAgent:
     ) -> dict:
         """One-shot JSON-mode LLM call used by the conductor at state-end.
 
-        `instruction` is the state's facts_extraction_prompt — it describes
+        `instruction` is the state's facts_extraction_prompt, it describes
         what fields to return. `segment_slice` is the rendered list of
         transcript + event lines from the state we're closing.
 
@@ -258,7 +258,7 @@ class LLMReasoningAgent:
         system = (
             "You are a fact-extraction helper. Read the conversation slice "
             "between <slice> tags and return a single JSON object as "
-            "instructed. Return ONLY the JSON object — no prose, no "
+            "instructed. Return ONLY the JSON object, no prose, no "
             "markdown fences, no commentary. If a field can't be determined "
             "from the slice, use null."
         )
@@ -271,7 +271,7 @@ class LLMReasoningAgent:
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ])
-        except Exception as exc:  # noqa: BLE001 — never block the transition
+        except Exception as exc:  # noqa: BLE001, never block the transition
             logger.warning("extraction LLM call failed: %s", exc)
             return {"_raw": "", "_error": str(exc)}
 
@@ -390,7 +390,7 @@ class LLMReasoningAgent:
 
         Strips any inline [[…]] tool-emission markers from the raw LLM
         output and collects them into `emissions`. The cleaned text is
-        returned verbatim as the reply — the LLM is no longer asked to
+        returned verbatim as the reply, the LLM is no longer asked to
         emit JSON, so there's no envelope to parse.
         """
         inputs = self.collect_inputs(

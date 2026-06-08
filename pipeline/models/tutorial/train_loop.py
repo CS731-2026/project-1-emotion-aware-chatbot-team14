@@ -1,13 +1,13 @@
-"""train_loop.py — orchestrates training. The meat of a model module.
+"""train_loop.py, orchestrates training. The meat of a model module.
 
 ═══════════════════════════════════════════════════════════════════════════
-FRAMEWORK CHEATSHEET — every affordance you have
+FRAMEWORK CHEATSHEET, every affordance you have
 ═══════════════════════════════════════════════════════════════════════════
 
-ctx — Context the driver hands you. Surface:
+ctx, Context the driver hands you. Surface:
   ctx.config               read-only Config (dataset_name, model_name, config_name, seed, train_cfg)
   ctx.config.train_cfg     the merged hparam dict from configs/<name>.py + per-run yaml overrides
-  ctx.run_dir              Path — you rarely touch this; ctx.save_* handles paths
+  ctx.run_dir              Path, you rarely touch this; ctx.save_* handles paths
   ctx.dataset_module       the dataset module currently running
   ctx.model_module         this module
   ctx.save_image(name, fig)            → artifacts/<name>.png   (matplotlib Figure)
@@ -16,14 +16,14 @@ ctx — Context the driver hands you. Surface:
   ctx.save_scalar(name, val, step=)    → appends to metrics.jsonl
   ctx.save_checkpoint(name, dict)      → checkpoints/<name>.pth
 
-dataset — DatasetSpec from the dataset module's prepare(). Surface:
+dataset, DatasetSpec from the dataset module's prepare(). Surface:
   dataset.name, num_classes, class_names, class_weights
   dataset.splits["train"|"val"|"test"]   → CSV Path with `path,label` rows
 
 pipeline.training.loop helpers:
   auto_device()                        CUDA → MPS → CPU
   merge_cfg(CFG, overrides)            resolved dict + auto-logs defaults/overrides/resolved
-  train_one_epoch / evaluate / collect_predictions — generic loop primitives
+  train_one_epoch / evaluate / collect_predictions, generic loop primitives
 
 pipeline.training.reporting.write_standard_artifacts(ctx, ...)
                                        4 files in one call: training_curves.png,
@@ -60,7 +60,7 @@ from .data import CsvImageDataset
 logger = logging.getLogger(__name__)
 
 
-# Defaults — any key here becomes overridable from configs/*.py CONFIG or
+# Defaults, any key here becomes overridable from configs/*.py CONFIG or
 # runs.yaml train_cfg (merge_cfg auto-whitelists by intersection with CFG).
 CFG = dict(
     epochs       = 30,
@@ -123,7 +123,7 @@ def run(ctx: Context, dataset: DatasetSpec, model: nn.Module) -> TrainedModel:
     test_loader  = _loader("test",  VAL_TF,   shuffle=False)
 
     # ── loss / optimiser / scheduler ─────────────────────────────────────
-    # Weighted CE handles class imbalance — weights come from the dataset module.
+    # Weighted CE handles class imbalance, weights come from the dataset module.
     weight = (torch.tensor(dataset.class_weights, dtype=torch.float32).to(device)
               if dataset.class_weights is not None else None)
     criterion = nn.CrossEntropyLoss(weight=weight)
@@ -142,7 +142,7 @@ def run(ctx: Context, dataset: DatasetSpec, model: nn.Module) -> TrainedModel:
         current_lr = optimizer.param_groups[0]["lr"]
         scheduler.step()
 
-        # save_scalar appends to metrics.jsonl — cheap; call for any metric you want plotted later
+        # save_scalar appends to metrics.jsonl, cheap; call for any metric you want plotted later
         for name, val in [("train/loss", tr_loss), ("train/acc", tr_acc),
                            ("val/loss", vl_loss), ("val/acc", vl_acc), ("lr", current_lr)]:
             ctx.save_scalar(name, val, step=epoch - 1)
@@ -154,7 +154,7 @@ def run(ctx: Context, dataset: DatasetSpec, model: nn.Module) -> TrainedModel:
 
         if vl_acc > best_val_acc:
             best_val_acc, best_epoch, patience = vl_acc, epoch, 0
-            # Envelope is your call — include what deploy + debug need.
+            # Envelope is your call, include what deploy + debug need.
             ctx.save_checkpoint("best", {
                 "epoch": epoch,
                 "model_state_dict": model.state_dict(),
@@ -191,7 +191,7 @@ def run(ctx: Context, dataset: DatasetSpec, model: nn.Module) -> TrainedModel:
                        "test_acc": test_acc, "test_loss": test_loss},
     )
 
-    # Custom artifact example — any matplotlib Figure → ctx.save_image.
+    # Custom artifact example, any matplotlib Figure → ctx.save_image.
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -201,7 +201,7 @@ def run(ctx: Context, dataset: DatasetSpec, model: nn.Module) -> TrainedModel:
         ax.set_xticks(range(num_classes))
         ax.set_xticklabels(dataset.class_names, rotation=30, ha="right", fontsize=8)
         ax.set_ylabel("test set count")
-        ax.set_title(f"{ctx.config.model_name} — test class distribution")
+        ax.set_title(f"{ctx.config.model_name}, test class distribution")
         ctx.save_image("test_class_distribution", fig)
         plt.close(fig)
     except Exception as e:

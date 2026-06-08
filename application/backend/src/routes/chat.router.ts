@@ -35,7 +35,7 @@ type ChatView = {
   state_name?: string | null;
 };
 
-// Default view used when the model service is unreachable — keep the
+// Default view used when the model service is unreachable, keep the
 // frontend on the chat surface so the user can still see the fallback reply.
 const FALLBACK_VIEW: ChatView = { surface: "chat" };
 

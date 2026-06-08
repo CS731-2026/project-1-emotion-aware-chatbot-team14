@@ -1,4 +1,4 @@
-"""Notebook 5's transforms — STD vs NEG augment routing, same shape
+"""Notebook 5's transforms, STD vs NEG augment routing, same shape
 as empathbot_final's augment.py.
 """
 

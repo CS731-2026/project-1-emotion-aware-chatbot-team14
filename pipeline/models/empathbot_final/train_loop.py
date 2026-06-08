@@ -1,4 +1,4 @@
-"""Training loop — ported from notebook 5_v4 cells 20, 22, 24, 25.
+"""Training loop, ported from notebook 5_v4 cells 20, 22, 24, 25.
 
 Differs from empathbot_v1 (6b):
   - MixUp augmentation from epoch 1 (alpha=0.2)
@@ -54,7 +54,7 @@ CFG = dict(
 
 def _compute_class_weights(train_ds: EmpathBotDataset, num_classes: int,
                             neg_boost: float) -> torch.Tensor:
-    """Notebook cell 20 — inverse-frequency * neg_boost for NEGATIVE classes."""
+    """Notebook cell 20, inverse-frequency * neg_boost for NEGATIVE classes."""
     counts = train_ds.class_counts(num_classes)
     total = sum(counts)
     w = [total / (num_classes * max(c, 1)) for c in counts]
@@ -106,7 +106,7 @@ def _train_epoch(model, loader, optimizer, criterion, device,
 
 @torch.no_grad()
 def _eval_epoch(model, loader, criterion, device):
-    """Notebook cell 24 eval_epoch — returns (loss, acc)."""
+    """Notebook cell 24 eval_epoch, returns (loss, acc)."""
     model.eval()
     total_loss = correct = total = 0
     for imgs, labels in loader:

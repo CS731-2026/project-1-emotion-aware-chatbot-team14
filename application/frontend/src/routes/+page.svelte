@@ -5,7 +5,7 @@
   import { api, type ChatDebug, type ChatView, type Message, type Profile } from "$lib/api";
   // conversationState is still imported because it carries unrelated fields
   // (qaTurnCount, feedbackEvents, etc.) some other modules read. The
-  // top-level `mode` / `stage` are no longer used here — the conductor
+  // top-level `mode` / `stage` are no longer used here, the conductor
   // drives the surface via backendView. setMode / setStage retired.
   import { conversationState } from "$lib/conversation/store.svelte";
   import {
@@ -52,7 +52,7 @@
   // Mic-gating feature flag. When true (current behaviour): the moment the
   // user sends a chat message OR a form completes, the VAD pauses until
   // the assistant has finished thinking + speaking. When false, the user
-  // can talk over a pending reply — useful for testing "barge-in" UX
+  // can talk over a pending reply, useful for testing "barge-in" UX
   // later. Flip this to wire up that experiment without touching the
   // dozen call sites that drive assistantThinking.
   const LOCK_MIC_DURING_REPLY = true;
@@ -112,7 +112,7 @@
   let lastPromotedTranscript = $state<string | null>(null);
   let speechPulse = $state(0);
   let latestReasoningDebug = $state<ChatDebug | null>(null);
-  // Backend-supplied view directive — the conductor's current decision about
+  // Backend-supplied view directive, the conductor's current decision about
   // what surface the frontend should render. Source of truth lives in the
   // model service; this is a read-only mirror.
   let backendView = $state<ChatView>({ surface: "chat" });
@@ -135,7 +135,7 @@
   function startAssistantThinking() {
     assistantThinking = true;
     if (assistantThinkingTimeout) clearTimeout(assistantThinkingTimeout);
-    // Safety net — claude-code subprocess may hang or never respond. After
+    // Safety net, claude-code subprocess may hang or never respond. After
     // 60s, give up and let the user speak again.
     assistantThinkingTimeout = setTimeout(() => {
       assistantThinking = false;
@@ -157,13 +157,13 @@
   );
 
   function cancelMicIfRecording() {
-    // Abort any in-progress utterance but keep the audio engine alive —
+    // Abort any in-progress utterance but keep the audio engine alive ,
     // calling stop() here would close the AudioContext and never restart
     // (the auto-listen $effect bails because isListening is still true).
     browserVad?.cancelUtterance();
   }
 
-  // Single funnel for every answer source — chip click, typed text, and
+  // Single funnel for every answer source, chip click, typed text, and
   // speech transcript all flow through here so multi-step overlays advance
   // consistently regardless of input mode.
   function handleCheckInAnswer(value: string) {
@@ -181,7 +181,7 @@
   // Page-elevation per-question hook. For now identical to the overlay path
   // (just send), but takes the questionId so once the reasoner is wired this
   // can carry per-question metadata.
-  // Debug-fixture path (Shift+3/4 checkInState overlay). Ignores isLast — the
+  // Debug-fixture path (Shift+3/4 checkInState overlay). Ignores isLast, the
   // debug overlay is dismissed via Esc, not by form completion.
   function handlePageAnswer(_questionId: string, value: string, _isLast?: boolean) {
     void sendMessage(value);
@@ -199,7 +199,7 @@
   // Conductor-driven check-in path. Each chip click emits a form_answer
   // event; the final chip also emits form_complete so the conductor's
   // qa_form → next-state transition fires. No /chat round-trip for chip
-  // clicks — the answers are structured signals, not user speech.
+  // clicks, the answers are structured signals, not user speech.
   // Text / STT during the form surface flows through QuestionnairePage:
   //   - chip match found → form_answer event + advance
   //   - matchless free-text → handleFormFreeText emits free_text_input
@@ -217,12 +217,12 @@
   function handleConductorPageAnswer(questionId: string, value: string, isLast: boolean) {
     sendSystemEvent("form_answer", { question_id: questionId, value });
     if (isLast) {
-      // Empty payload — the backend conductor knows which form is current;
+      // Empty payload, the backend conductor knows which form is current;
       // exposing the state name to the LLM via the rendered event would
       // violate "the LLM never sees state-machine vocabulary".
       sendSystemEvent("form_complete", {});
       // Note: deliberately no startAssistantThinking() here. After the
-      // form, we want the user to be able to keep going immediately —
+      // form, we want the user to be able to keep going immediately ,
       // the yarn-opener LLM call runs in the background and the reply
       // will be spoken when it lands (which pauses the mic during TTS,
       // not during the wait).
@@ -337,13 +337,13 @@
   }
 
   // Held outside speak() so the utterance survives until the speech
-  // engine fires onend — Chrome occasionally GCs in-flight utterances.
+  // engine fires onend, Chrome occasionally GCs in-flight utterances.
   let activeChatUtterance: SpeechSynthesisUtterance | null = null;
   function speak(text: string) {
     if (!browser || typeof window === "undefined" || !("speechSynthesis" in window)) return;
     const synth = window.speechSynthesis;
     // Chrome / Safari sometimes leave the synth in a paused state when
-    // the tab regains focus — without resume() speak() is a no-op.
+    // the tab regains focus, without resume() speak() is a no-op.
     if (synth.paused) synth.resume();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 1;
@@ -373,7 +373,7 @@
       speechPulse = 0;
     };
     activeChatUtterance = utterance;
-    // Flip isSpeaking BEFORE calling speak() — onstart fires when audio
+    // Flip isSpeaking BEFORE calling speak(), onstart fires when audio
     // begins, which is a few ms later than we need. The VAD has to be
     // gated before the speaker actually emits any sound, otherwise the
     // first phoneme gets captured back into the mic.
@@ -382,7 +382,7 @@
   }
 
   // Neutral TTS for non-chat prompts (e.g. form question prompts). Same
-  // mic-gating discipline as speak() — flip isSpeaking pre-emptively so
+  // mic-gating discipline as speak(), flip isSpeaking pre-emptively so
   // the VAD pauses before audio reaches the speaker. No speechPulse
   // bookkeeping since the SpeakingCircle is the chat-surface animation.
   let activeNeutralUtterance: SpeechSynthesisUtterance | null = null;
@@ -407,7 +407,7 @@
   async function sendMessage(text: string) {
     if (chatBusy) return;
     chatBusy = true;
-    // Lock the mic the moment the message goes to the backend — gated by
+    // Lock the mic the moment the message goes to the backend, gated by
     // LOCK_MIC_DURING_REPLY so the barge-in experiment can flip it later.
     if (LOCK_MIC_DURING_REPLY) startAssistantThinking();
 
@@ -431,11 +431,11 @@
         timestamp: new Date().toISOString(),
       };
       messages = [...messages, agentMsg];
-      // Clear the thinking flag — isSpeaking (from speak()) now drives
+      // Clear the thinking flag, isSpeaking (from speak()) now drives
       // the mic gate while TTS reads the reply aloud.
       clearAssistantThinking();
       // If the conductor just transitioned us into a form, the form's
-      // own TTS will read the first question — speaking the LLM's
+      // own TTS will read the first question, speaking the LLM's
       // wind-down reply on top of it overlaps. Skip TTS unless we're
       // staying on the chat surface.
       if (view.surface === "chat") {
@@ -544,7 +544,7 @@
         // and pushed us a new view. Mirror it; render reactively.
         if (msg.view) backendView = msg.view as ChatView;
       } else if (msg.type === "assistant_reply") {
-        // Backend's yarn opener — assistant speaks first after a form
+        // Backend's yarn opener, assistant speaks first after a form
         // completion. Append to chat history + persist server-side so
         // subsequent /chat calls include it in the LLM's context.
         const text = String(msg.text ?? "").trim();
@@ -703,7 +703,7 @@
   });
 
   // Pause the mic while the assistant is generating its yarn-opener OR
-  // while TTS is speaking the reply aloud — we don't want the mic
+  // while TTS is speaking the reply aloud, we don't want the mic
   // picking up the speaker's own voice. The VAD still reports the audio
   // level while paused so the UI can show "I hear you but can't respond
   // yet" via the micGated/userTryingToSpeak flags below.
@@ -716,7 +716,7 @@
 
   // React to surface transitions driven by the conductor. The form's
   // speakPrompt manages its own TTS lifecycle (and sendMessage already
-  // skips chat-reply TTS when view.surface !== "chat") — so we don't
+  // skips chat-reply TTS when view.surface !== "chat"), so we don't
   // need to cancel speechSynthesis here. We DO want to show the
   // "forming a response" lock when the user finishes a form and the
   // surface flips to chat while the yarn-opener LLM call runs on the
@@ -843,7 +843,7 @@
             <span class="recording-dot" aria-hidden="true"></span>
             <span class="recording-copy">
               {#if userTryingToSpeak}
-                I can hear you, but I can't reply until I finish — one moment.
+                I can hear you, but I can't reply until I finish, one moment.
               {:else if micGated}
                 Mic is paused while I'm replying.
               {:else if isActivelyRecording}
@@ -919,11 +919,11 @@
         <div class="welcome-icon-wrap"><span class="welcome-icon">🏥</span></div>
         <p class="welcome-practice">RIVERSIDE MEDICAL PRACTICE</p>
         <h2 class="welcome-heading">Welcome back, and thank you for seeing your GP today</h2>
-        <p class="welcome-sub">Before you go, your GP would love to hear how your appointment went — especially how you felt about the technology used today.</p>
+        <p class="welcome-sub">Before you go, your GP would love to hear how your appointment went, especially how you felt about the technology used today.</p>
         <div class="welcome-features">
           <div class="welcome-feature">
             <span class="wf-icon">🕐</span>
-            <div><p class="wf-title">Takes about 3 minutes</p><p class="wf-body">Just a few simple questions — no right or wrong answers.</p></div>
+            <div><p class="wf-title">Takes about 3 minutes</p><p class="wf-body">Just a few simple questions, no right or wrong answers.</p></div>
           </div>
           <div class="welcome-feature">
             <span class="wf-icon">🛡️</span>
@@ -1138,7 +1138,7 @@
     color: rgba(255, 255, 255, 0.68);
     /* Hold a stable width so the bars + dot don't slide as the copy
        length flips between "Listening for a strong enough signal…" and
-       "I can hear you, but I can't reply until I finish — one moment." */
+       "I can hear you, but I can't reply until I finish, one moment." */
     min-width: min(440px, 90vw);
     transition:
       background 140ms ease,
@@ -1180,7 +1180,7 @@
   .recording-subtitle.locked .recording-bars span {
     background: rgba(216, 180, 254, 0.55);
   }
-  /* User is actively trying to speak through the lock — pulse to acknowledge
+  /* User is actively trying to speak through the lock, pulse to acknowledge
      we hear them even though we can't act on it. */
   .recording-subtitle.locked-attempt {
     border-color: rgba(192, 132, 252, 0.65);

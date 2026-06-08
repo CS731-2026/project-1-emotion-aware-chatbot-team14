@@ -1,4 +1,4 @@
-"""Baseline — sane defaults that should run end-to-end on any
+"""Baseline, sane defaults that should run end-to-end on any
 (dataset × model) without tuning."""
 
 NAME = "baseline"

@@ -1,5 +1,5 @@
 """
-EmpathBot — Home / Landing page.
+EmpathBot, Home / Landing page.
 
 Entry point for the elderly user. Handles:
   1. Friendly welcome
@@ -14,7 +14,7 @@ from utils.session import init_session
 
 # ── Page setup ────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="EmpathBot — Healthcare Companion",
+    page_title="EmpathBot, Healthcare Companion",
     page_icon="🩺",
     layout="centered",
     initial_sidebar_state="collapsed",
@@ -85,7 +85,7 @@ with col2:
         st.markdown("#### Give feedback")
         st.markdown(
             "Tell me how your visit went today. "
-            "Just a few short questions — there are no wrong answers."
+            "Just a few short questions, there are no wrong answers."
         )
         if st.button(
             "Start giving feedback",

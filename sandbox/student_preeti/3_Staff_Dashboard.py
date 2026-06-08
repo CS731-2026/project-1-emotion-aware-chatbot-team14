@@ -1,5 +1,5 @@
 """
-EmpathBot — Staff Dashboard.
+EmpathBot, Staff Dashboard.
 
 Password-gated view for clinic staff. Shows:
   - Sessions today
@@ -96,12 +96,12 @@ c1, c2 = st.columns(2)
 
 with c1:
     st.markdown("### Stated sentiment")
-    stated = Counter(a.get("stated_sentiment") or "—" for a in all_answers)
+    stated = Counter(a.get("stated_sentiment") or "," for a in all_answers)
     st.bar_chart(pd.DataFrame.from_dict(stated, orient="index", columns=["count"]))
 
 with c2:
     st.markdown("### Dominant facial emotion")
-    facial = Counter(a.get("dominant_facial_emotion") or "—" for a in all_answers)
+    facial = Counter(a.get("dominant_facial_emotion") or "," for a in all_answers)
     st.bar_chart(pd.DataFrame.from_dict(facial, orient="index", columns=["count"]))
 
 st.markdown("---")
@@ -125,7 +125,7 @@ if flagged:
                 })
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 else:
-    st.success("No mismatches today — patients' words and faces aligned.")
+    st.success("No mismatches today, patients' words and faces aligned.")
 
 st.markdown("---")
 
@@ -134,13 +134,13 @@ st.markdown("### All sessions today")
 for s in today_sessions:
     flag_count = sum(1 for a in s["answers"] if a.get("mismatch"))
     badge = f"🚩 {flag_count} flag(s)" if flag_count else "✓ no flags"
-    with st.expander(f"Session {s['session_id']} — {s['started'][11:16]} — {badge}"):
+    with st.expander(f"Session {s['session_id']}, {s['started'][11:16]}, {badge}"):
         for a in s["answers"]:
             st.markdown(f"**Q:** {a['q']}")
             st.markdown(f"**A:** {a['a']}")
             cols = st.columns(3)
-            cols[0].caption(f"Stated: {a.get('stated_sentiment') or '—'}")
-            cols[1].caption(f"Face: {a.get('dominant_facial_emotion') or '—'}")
+            cols[0].caption(f"Stated: {a.get('stated_sentiment') or ','}")
+            cols[1].caption(f"Face: {a.get('dominant_facial_emotion') or ','}")
             cols[2].caption(
                 f"Mismatch: {'YES' if a.get('mismatch') else 'no'}"
             )

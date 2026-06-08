@@ -1,7 +1,7 @@
 """Claude Code CLI as an LLM provider.
 
 Spawns the `claude` CLI in non-interactive mode and returns the model's reply.
-No API key — auth is handled by the user's local Claude Code login (Max/Pro
+No API key, auth is handled by the user's local Claude Code login (Max/Pro
 subscription via `claude login`). Useful for local development to avoid paid
 API costs.
 
@@ -39,7 +39,7 @@ def _collect_system_prompt(messages: list[Message]) -> str:
 class ClaudeCodeProvider(LLMProvider):
     """LLM provider backed by the local `claude` CLI.
 
-    Each call spawns a fresh subprocess — no session persistence. The CLI's
+    Each call spawns a fresh subprocess, no session persistence. The CLI's
     JSON envelope is parsed to extract the model's reply text.
     """
 

@@ -1,4 +1,4 @@
-"""EmpathBotDataset — per-class augment routing (same shape as
+"""EmpathBotDataset, per-class augment routing (same shape as
 empathbot_v1's data.py)."""
 
 from __future__ import annotations

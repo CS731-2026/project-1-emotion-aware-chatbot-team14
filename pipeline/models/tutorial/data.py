@@ -1,4 +1,4 @@
-"""Dataset class — CSV (`path,label`) → batches of (image, label).
+"""Dataset class, CSV (`path,label`) → batches of (image, label).
 
 Copy verbatim for the common case. See pipeline/models/empathbot_v1/data.py
 for per-sample routing (stronger augment for hard classes, etc).
@@ -26,6 +26,6 @@ class CsvImageDataset(Dataset):
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
-        # Force RGB — some FER sets ship grayscale.
+        # Force RGB, some FER sets ship grayscale.
         img = Image.open(row["path"]).convert("RGB")
         return self.transform(img), int(row["label"])

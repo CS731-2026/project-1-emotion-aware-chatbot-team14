@@ -1,4 +1,4 @@
-"""Ada-DF equivalent — faithful port of Notebooks/4_benchmark_ada_df.ipynb.
+"""Ada-DF equivalent, faithful port of Notebooks/4_benchmark_ada_df.ipynb.
 
 The notebook frames this as a trainable fallback for the official
 Ada-DF checkpoint: EfficientNet-B2 with timm's built-in SE attention,

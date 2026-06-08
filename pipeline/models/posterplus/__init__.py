@@ -1,4 +1,4 @@
-"""POSTER++ — vendored as a sibling repo via git-weave.
+"""POSTER++, vendored as a sibling repo via git-weave.
 
 Source of truth: Notebooks/3_benchmark_posterplus.ipynb. The notebook
 clones github.com/Talented-Q/POSTER_V2 at run time; we do the same
@@ -19,7 +19,7 @@ First-run setup:
   npx weave sync
   cp -R vendor/POSTER_V2 pipeline/models/posterplus/POSTER_V2
 
-The notebook is **inference-only** — it loads the published RAF-DB
+The notebook is **inference-only**, it loads the published RAF-DB
 checkpoint and reports accuracy / per-class metrics against the test
 split. `train()` mirrors that: if the published checkpoint is found
 (see inference_loop.py for resolution order), it runs the faithful
@@ -58,7 +58,7 @@ PREPROCESS = T.Compose([
 
 def _import_poster():
     """Defer the POSTER_V2 import to build time so a missing clone
-    only breaks runs that actually want this model — the rest of
+    only breaks runs that actually want this model, the rest of
     the pipeline keeps working."""
     if not _REPO_DIR.is_dir():
         raise FileNotFoundError(
@@ -73,7 +73,7 @@ def _import_poster():
 
 def build(num_classes: int):
     """Instantiate POSTER++ for `num_classes`. The notebook uses 7
-    (RAF-DB); for EmpathBot 6-class we pass 6 — POSTER++'s constructor
+    (RAF-DB); for EmpathBot 6-class we pass 6, POSTER++'s constructor
     accepts arbitrary num_classes."""
     pyramid_trans_expr2 = _import_poster()
     return pyramid_trans_expr2(img_size=_IMG_SIZE, num_classes=num_classes)

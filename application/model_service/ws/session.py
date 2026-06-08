@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TranscriptSegment:
     text: str
-    timestamp: float  # unix seconds — from audio_chunk message
+    timestamp: float  # unix seconds, from audio_chunk message
     # STT confidence in [0, 1] when the engine exposes it (faster-whisper),
     # None otherwise (whisper-cpp). Used by the reasoner to flag transcripts
     # that may be mis-heard.

@@ -1,4 +1,4 @@
-"""EmpathBot V3 — faithful port of Notebooks/5_final_empathbot_training.ipynb.
+"""EmpathBot V3, faithful port of Notebooks/5_final_empathbot_training.ipynb.
 
 Predecessor to empathbot_final (notebook 5_v4). Hard-coded ResNet-18
 backbone (no selectable EfficientNet) + single SqueezeExcitation

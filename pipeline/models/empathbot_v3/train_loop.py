@@ -1,4 +1,4 @@
-"""Training loop — ported from notebook 5 cells 20, 22, 24, 25.
+"""Training loop, ported from notebook 5 cells 20, 22, 24, 25.
 
 Three optimizer param groups (backbone / attention / classifier),
 LR_HEAD=3e-3, no backbone freeze, MixUp from epoch 11 (MIXUP_START=10).
@@ -119,7 +119,7 @@ def run(ctx: Context, dataset: DatasetSpec, model: nn.Module) -> TrainedModel:
     cls_w = _compute_class_weights(train_ds, num_classes, cfg["neg_boost"]).to(device)
     criterion = nn.CrossEntropyLoss(weight=cls_w, label_smoothing=cfg["label_smoothing"])
 
-    # Three param groups (notebook cell 22) — backbone / attention / classifier
+    # Three param groups (notebook cell 22), backbone / attention / classifier
     optimizer = optim.AdamW([
         {"params": model.backbone.parameters(),   "lr": cfg["lr_backbone"]},
         {"params": model.attention.parameters(),  "lr": cfg["lr_head"]},

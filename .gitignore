@@ -7,6 +7,7 @@
 /models/**/*.ipynb
 /models/.locks/
 /models/models--*/
+/models/empathbot/experiments-*/
 .env
 node_modules
 sandbox/student_taurajgreig/vendor/

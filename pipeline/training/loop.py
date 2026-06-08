@@ -1,4 +1,4 @@
-"""Inner training mechanics — train_one_epoch + evaluate.
+"""Inner training mechanics, train_one_epoch + evaluate.
 
 These two functions own the per-step / per-batch detail so the train
 phase stays orchestration. They're architecture-blind: any model that
@@ -36,7 +36,7 @@ def merge_cfg(default: dict, overrides: dict | None) -> dict:
     Unknown keys in `overrides` (typos, keys that belong to a different
     model) are silently dropped so a single shared config can be passed
     to many models without each one breaking on extra fields. Any key
-    in `default` is automatically overridable — no manual whitelist.
+    in `default` is automatically overridable, no manual whitelist.
 
     Three lines land at INFO so the run log is self-documenting:
       hparams (defaults): {...}        ← model's CFG (notebook values)
@@ -66,7 +66,7 @@ def merge_cfg(default: dict, overrides: dict | None) -> dict:
 
 def auto_device() -> torch.device:
     """Pick CUDA → MPS → CPU. Matches what core/face_detector and the
-    emotion model do — keep selection consistent across the project."""
+    emotion model do, keep selection consistent across the project."""
     if torch.cuda.is_available():
         return torch.device("cuda")
     if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
@@ -139,7 +139,7 @@ def evaluate(
     device:   torch.device,
 ) -> dict[str, float]:
     """Run inference over `loader`, returning overall {loss, acc}.
-    Single-number metrics only — split-aware logging is the caller's
+    Single-number metrics only, split-aware logging is the caller's
     job (the train phase tags these as val/ or test/)."""
     model.eval()
     total_loss = 0.0

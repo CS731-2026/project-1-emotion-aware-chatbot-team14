@@ -46,7 +46,7 @@ def _fetch_specific_checkpoint(repo_root: Path, rel_path: str, slug: str) -> boo
 
     Staging-first means a stray --force unzip into models/ can never
     overwrite hand-trained checkpoints already on disk. We only copy
-    the one file the caller actually asked for — siblings under
+    the one file the caller actually asked for, siblings under
     models/<id>/ stay untouched."""
     staging = repo_root / "output" / "kaggle_fetch_temp"
     if staging.exists():
@@ -80,7 +80,7 @@ def _fetch_specific_checkpoint(repo_root: Path, rel_path: str, slug: str) -> boo
 
     dst = (repo_root / rel_path).resolve()
     if dst.exists():
-        # Belt + braces — resolve_checkpoint() already returns early when
+        # Belt + braces, resolve_checkpoint() already returns early when
         # dst exists, so we should never get here. Log loudly if we do.
         logger.warning("model_resolver: refusing to overwrite existing %s "
                        "(this branch shouldn't be reachable)", dst)
@@ -102,7 +102,7 @@ def resolve_checkpoint(rel_path: str, *, repo_root: Path,
       model_id:  the registry id, only used in error messages.
 
     Raises FileNotFoundError if the file isn't on disk after the fetch
-    attempt — message names the slug + suggests `make fetch-models` so
+    attempt, message names the slug + suggests `make fetch-models` so
     the developer has a manual path.
     """
     abs_path = (repo_root / rel_path).resolve()

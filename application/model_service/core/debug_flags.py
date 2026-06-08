@@ -3,7 +3,7 @@
 Centralised, mutable runtime state seeded from .env at startup.
 
 Two-layer design:
-  - .env / config.py provides the *defaults* — read once at process start.
+  - .env / config.py provides the *defaults*, read once at process start.
   - This module exposes those defaults as mutable singletons that any code
     path (routers, websocket handlers, ad-hoc shell hooks) can override
     at runtime without restarting the service.
@@ -31,12 +31,12 @@ class EmotionDebug:
     """Runtime overrides for the emotion pipeline.
 
     Resolution priority in ws/handler.py::pick_emotion is:
-      1. ``force_label``      — pin a specific emotion (bypasses everything)
-      2. ``cycle_test_labels`` — step through EMOTIONS on a timer (bypasses model)
+      1. ``force_label``     , pin a specific emotion (bypasses everything)
+      2. ``cycle_test_labels``, step through EMOTIONS on a timer (bypasses model)
       3. Real model output
       4. Neutral fallback
 
-    ``log_predictions`` is independent — when true, every real model
+    ``log_predictions`` is independent, when true, every real model
     prediction is logged at INFO level.
     """
 
