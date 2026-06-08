@@ -26,13 +26,13 @@ For parallel branches with isolated ports, see "Working in parallel branches" in
 | Folder | Purpose |
 |---|---|
 | `application/` | The production three-service web app |
-| `face_cropper/` | CLI + library wrapping the production face detector for use in notebooks / dataset preprocessing |
+| `pipeline/face_cropper/` | CLI + library wrapping the production face detector for use in notebooks / dataset preprocessing |
 | `sandbox/` | Per-student exploratory research (pre-application) |
 | `experiments/` | Shared cross-team experiments |
 | `pipeline/` | ML training harness (YAML config, step persistence) |
 | `models/` | Downloaded model weights (gitignored) |
 
-`face_cropper.py` (repo root) is the CLI + library; `application/model_service/core/face_detector.py` is the canonical detector, `face_cropper` re-exports it, so notebooks and the live service share one implementation.
+`pipeline/face_cropper/` (repo root) is the CLI + library; `application/model_service/core/face_detector.py` is the canonical detector, `face_cropper` re-exports it, so notebooks and the live service share one implementation.
 
 ## application/: service layout
 
@@ -150,11 +150,11 @@ Resolution order in `ws/handler.py::pick_emotion()`:
 
 ## Face cropper for teammates
 
-`face_cropper.py` (repo root) + `face_cropper/` (docs, demo, smoke test), wraps the **same** `FaceDetector` class the model service uses, so dataset preprocessing in notebooks stays consistent with live inference.
+`pipeline/face_cropper/` (repo root) + `pipeline/face_cropper/` (docs, demo, smoke test), wraps the **same** `FaceDetector` class the model service uses, so dataset preprocessing in notebooks stays consistent with live inference.
 
-- CLI: `python face_cropper.py crop-dir <in> <out> --recursive --resize 224 --padding 0.1 --report r.json`
-- Library: `from face_cropper import crop_face` (accepts path / PIL / numpy)
-- Demo: `face_cropper/demo.ipynb` (runnable end-to-end)
+- CLI: `python -m pipeline.face_cropper crop-dir <in> <out> --recursive --resize 224 --padding 0.1 --report r.json`
+- Library: `from pipeline.face_cropper import crop_face` (accepts path / PIL / numpy)
+- Demo: `pipeline/face_cropper/demo.ipynb` (runnable end-to-end)
 
 ## Code conventions
 

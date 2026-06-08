@@ -48,7 +48,7 @@ def _blur_score(rgb) -> float:
 
 def _yolo():
     """Reuse the shared FaceDetector to avoid duplicate YOLO downloads."""
-    from face_cropper import FaceDetector  # type: ignore[attr-defined]
+    from pipeline.face_cropper import FaceDetector  # type: ignore[attr-defined]
     fd = FaceDetector()
     return fd._model, fd.device
 

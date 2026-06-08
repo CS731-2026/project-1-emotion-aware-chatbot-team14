@@ -155,7 +155,7 @@ KAGGLE_KEY=your_api_key
 - `pipeline/models/tutorial/` — every framework feature with inline comments
 - `pipeline/datasets/tutorial/` — same on the dataset side
 
-The face cropper is still around for raw-dataset preprocessing in notebooks: `python face_cropper.py crop-dir ./raw ./crops --recursive --resize 224` or `from face_cropper import crop_face`. Same `FaceDetector` class the live service uses.
+The face cropper is still around for raw-dataset preprocessing in notebooks: `python -m pipeline.face_cropper crop-dir ./raw ./crops --recursive --resize 224` or `from pipeline.face_cropper import crop_face`. Same `FaceDetector` class the live service uses.
 
 > The legacy `training_pipeline/` directory is **archived** under `.archive/` and superseded entirely by `pipeline/`.
 

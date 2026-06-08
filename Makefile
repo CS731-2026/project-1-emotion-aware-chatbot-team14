@@ -34,21 +34,21 @@ kill:
 	lsof -ti tcp:8000 | xargs kill -9 2>/dev/null || true
 	@echo "Ports 3000 / 3001 / 5173 / 8000 cleared"
 
-# Face cropper — see face_cropper/README.md for details.
+# Face cropper — see pipeline/face_cropper/README.md for details.
 # Wraps the production face detector for batch dataset preprocessing.
 crop-faces:
 	@if [ -z "$(INPUT)" ] || [ -z "$(OUTPUT)" ]; then \
 		echo "usage: make crop-faces INPUT=<dir> OUTPUT=<dir> [RESIZE=224] [PADDING=0.1]"; \
 		exit 2; \
 	fi
-	python face_cropper.py crop-dir "$(INPUT)" "$(OUTPUT)" --recursive \
+	python -m pipeline.face_cropper crop-dir "$(INPUT)" "$(OUTPUT)" --recursive \
 		$(if $(RESIZE),--resize $(RESIZE)) \
 		$(if $(PADDING),--padding $(PADDING)) \
 		--skip-existing \
 		--report "$(OUTPUT)/_crop_report.json"
 
 test-face-cropper:
-	python face_cropper/test_face_cropper.py $(IMAGE)
+	python pipeline/face_cropper/test_face_cropper.py $(IMAGE)
 
 # ──────────────────────────────────────────────────────────────────────────
 # Training pipeline (v2). See TRAINING.md for the full layout.

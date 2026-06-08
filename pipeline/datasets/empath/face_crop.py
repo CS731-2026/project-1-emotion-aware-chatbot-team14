@@ -44,7 +44,7 @@ def load_yolo():
 
     Public name so the in-stream cropping path (affectnet/rafdb
     _download_to) can call it once outside the per-sample loop."""
-    from face_cropper import FaceDetector  # type: ignore[attr-defined]
+    from pipeline.face_cropper import FaceDetector  # type: ignore[attr-defined]
     fd = FaceDetector()
     return fd._model, fd.device
 
