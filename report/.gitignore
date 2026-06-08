@@ -1,7 +1,0 @@
-builds/
-.tmp/
-
-# Downloaded/generated dependencies (installed via `make deps`)
-tools/templates/default.docx
-tools/default.csl
-tools/latex/
