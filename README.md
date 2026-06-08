@@ -35,7 +35,7 @@ The training pipeline is set up so a teammate only needs their Kaggle creds in `
 
 ---
 
-## Run it in 60 seconds
+## How to Run
 
 ```bash
 # First time only
@@ -107,7 +107,6 @@ The real emotion model is **EmpathBotV1** (EfficientNet-B2, EmpathBot 6-class). 
 ```
 
 For deeper internals — request flow, WebSocket protocol, file-by-file map, "what's working / what isn't" — see [ARCHITECTURE.md](ARCHITECTURE.md).
-For a condensed file-by-file map and the full env-var catalogue: [CLAUDE.md](CLAUDE.md). (Originally written as instructions for AI pair-programming tools, but it's also the fastest way for a human to find which file owns which behaviour.)
 
 ---
 
@@ -189,7 +188,7 @@ models:
 
 If you need a new architecture (different from `empathbot` / `resnet18`), see [ARCHITECTURE.md](ARCHITECTURE.md) → "Integration Points" — it's a four-step recipe.
 
-**Debugging emotion behaviour live:** there are runtime flags in `core/debug_flags.py` for cycling through labels, pinning a single label, or logging every prediction. Set them in `.env` or flip them in code. CLAUDE.md has the full list.
+**Debugging emotion behaviour live:** there are runtime flags in `core/debug_flags.py` for cycling through labels, pinning a single label, or logging every prediction. Set them in `.env` or flip them in code.
 
 ---
 
@@ -202,8 +201,6 @@ Each service has a `.env` (gitignored) and a committed `.env.example`. Copy `.en
 | backend | `application/backend/.env` | `PORT`, `NODE_ENV`, `MODEL_SERVICE_URL` |
 | frontend | `application/frontend/.env` | `PUBLIC_BACKEND_URL`, `PUBLIC_HARNESS_WS_URL` |
 | model_service | `application/model_service/.env` | `PORT`, `HOST`, `LLM_PROVIDER`, `LLM_MODEL`, `EMOTION_MODEL_ID`, `OPENAI_API_KEY` / `GEMINI_API_KEY` |
-
-Full env-var catalogue: [CLAUDE.md](CLAUDE.md).
 
 ---
 
