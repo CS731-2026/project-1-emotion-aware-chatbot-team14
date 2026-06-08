@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: dev dev-services dev-harness dev-backend dev-frontend install install-training open kill crop-faces test-face-cropper \
+.PHONY: dev dev-services dev-harness dev-backend dev-frontend install install-training open kill crop-faces test-face-cropper fetch-model-fallback \
         train train-list train-clean deploy-model publish-model publish-models fetch-models compare evaluate-baseline prune-runs new-model
 
 dev: kill
@@ -218,3 +218,30 @@ publish-model:
 
 fetch-models:
 	python -m pipeline.cli.fetch_models $(if $(SLUG),--slug $(SLUG))
+
+# ──────────────────────────────────────────────────────────────────────────
+# Credential-free model fetch via REANNZ FileSender. For reviewers/markers
+# who do not have Kaggle API keys. The URL is time-limited (FileSender links
+# are 30-day TTL by default); refresh FILESENDER_URL if it expires.
+# ──────────────────────────────────────────────────────────────────────────
+FILESENDER_URL      ?= https://filesender.reannz.co.nz/download.php?token=f17dd93f-1f81-4fbf-8af4-9dd81bfcc0ce&files_ids=306174
+FILESENDER_FILENAME ?= empathbot_v1_final.pt
+FILESENDER_DEST     ?= models/empathbot
+
+fetch-model-fallback:
+	@mkdir -p "$(FILESENDER_DEST)"
+	@if [ -f "$(FILESENDER_DEST)/$(FILESENDER_FILENAME)" ] && [ -z "$(FORCE)" ]; then \
+		echo "ok: $(FILESENDER_DEST)/$(FILESENDER_FILENAME) already present (FORCE=1 to re-download)"; \
+	else \
+		echo "fetching $(FILESENDER_FILENAME) from REANNZ FileSender..."; \
+		if curl -L -f -# -o "$(FILESENDER_DEST)/$(FILESENDER_FILENAME).part" "$(FILESENDER_URL)"; then \
+			mv "$(FILESENDER_DEST)/$(FILESENDER_FILENAME).part" "$(FILESENDER_DEST)/$(FILESENDER_FILENAME)"; \
+			echo "saved to $(FILESENDER_DEST)/$(FILESENDER_FILENAME)"; \
+		else \
+			rm -f "$(FILESENDER_DEST)/$(FILESENDER_FILENAME).part"; \
+			echo "download failed; FileSender link may have expired (30-day TTL)." >&2; \
+			echo "ask the team for a refreshed FILESENDER_URL, or use 'make fetch-models' with" >&2; \
+			echo "KAGGLE_USERNAME / KAGGLE_KEY set in .env instead." >&2; \
+			exit 1; \
+		fi; \
+	fi

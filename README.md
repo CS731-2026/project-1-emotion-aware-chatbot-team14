@@ -66,15 +66,16 @@ With the default `.env`, the model service runs in **placeholder mode** — it e
 
 ### Switching to the real model
 
-The real emotion model is **EmpathBotV1** (EfficientNet-B2, EmpathBot 6-class). The checkpoint (`empath_final.pth`) lives at `models/empathbot/empath_final.pth` under the gitignored `models/` directory.
+The real emotion model is **EmpathBotV1** (EfficientNet-B2, EmpathBot 6-class). The checkpoint lives under the gitignored `models/empathbot/` directory.
 
-1. **Get the file.** It's not in git (too large) and not yet hosted publicly. Ask another teammate to share it (Google Drive / Slack / etc.). A Kaggle dataset for this is planned but not live yet.
-2. **Place it.** `models/empathbot/empath_final.pth` — create the directory if needed.
-3. **Switch the service to use it.** In `application/model_service/.env`, uncomment:
+1. **Fetch the checkpoint.** Two options:
+   - **Kaggle** (long-term, recommended for teammates): set `KAGGLE_USERNAME` / `KAGGLE_KEY` in `.env`, then run `make fetch-models`. The live model service also auto-fetches from the team's Kaggle weights dataset on first boot when `EMOTION_MODEL_ID` is set.
+   - **REANNZ FileSender** (credential-free, for reviewers): run `make fetch-model-fallback`. No login required. The FileSender link has a 30-day expiry; if it has lapsed, the team can refresh `FILESENDER_URL` in the Makefile.
+2. **Switch the service to use it.** In `application/model_service/.env`, set:
    ```
    EMOTION_MODEL_ID=empathbot_final
    ```
-4. Restart `make dev`. You should see `[model_service] INFO EmpathBot emotion model loaded: …` in the logs.
+3. Restart `make dev`. You should see `[model_service] INFO EmpathBot emotion model loaded: …` in the logs.
 
 ---
 
