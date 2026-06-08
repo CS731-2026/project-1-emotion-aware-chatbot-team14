@@ -32,7 +32,7 @@ For parallel branches with isolated ports, see "Working in parallel branches" in
 | `pipeline/` | ML training harness (YAML config, step persistence) |
 | `models/` | Downloaded model weights (gitignored) |
 
-`pipeline/face_cropper/` (repo root) is the CLI + library; `application/model_service/core/face_detector.py` is the canonical detector, `face_cropper` re-exports it, so notebooks and the live service share one implementation.
+`pipeline/face_cropper/` is the CLI + library; `application/model_service/core/face_detector.py` is the canonical detector that it re-exports, so notebooks and the live service share one implementation.
 
 ## application/: service layout
 

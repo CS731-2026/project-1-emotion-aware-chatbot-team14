@@ -91,19 +91,18 @@ The real emotion model is **EmpathBotV1** (EfficientNet-B2, EmpathBot 6-class). 
 │   ├── models/tutorial/        heavily-commented reference model (read this first)
 │   ├── datasets/tutorial/      same on the dataset side
 │   ├── framework/              orchestration internals (you rarely touch)
-│   └── training/               shared helpers (loops, losses, optimizers, reporting)
+│   ├── training/               shared helpers (loops, losses, optimizers, reporting)
+│   └── face_cropper/           CLI + library wrapping the production face detector
+│                                  (re-exports application/model_service/core/face_detector.py)
 ├── runs.yaml            What `make train` runs — one YAML entry per (dataset, model, config)
 ├── configs/             Hyperparameter presets (fast / baseline / thorough)
 ├── Notebooks/           Original research notebooks — source of truth for ports under pipeline/
-├── face_cropper.py      CLI + library wrapping the production face detector
-│                          (re-exports the model service's FaceDetector — single source of truth)
-├── face_cropper/        Docs + demo + smoke test for the above
 ├── sandbox/             Per-student exploratory research
-├── report/              Academic paper (Markdown → PDF via pandoc)
 ├── vendor/              git-weave .thread files for vendored third-party repos
 │                          (POSTER_V2 cloned here at install time)
 ├── models/              Trained checkpoints (gitignored — auto-fetched from Kaggle)
 ├── output/              Run artifacts (gitignored — checkpoints, plots, metrics per run)
+├── .archive/            Earlier scaffolds + design notes, kept for context
 └── Makefile             dev / install / kill / train / deploy-model / publish-models / compare / new-model
 ```
 
@@ -126,7 +125,6 @@ Pick the doc that matches what you're about to do — they're each focused and s
 | Test the emotion model without the chat surface | Open `http://localhost:5173/emotion-test/` after `make dev` |
 | Work on a feature without breaking other peoples' branches | "Working in parallel branches" section below |
 | Understand the team's branching philosophy | [CONTRIBUTIONS.md](CONTRIBUTIONS.md) |
-| Write the report | [report/README.md](report/README.md) |
 
 ---
 
@@ -142,7 +140,7 @@ make train RUN=my_model            # picks just the matching row from runs.yaml
 make compare FILTER=my_model       # leaderboard of every run you've done so far
 ```
 
-10 of 18 declared runs in `runs.yaml` work without any extra setup (synthetic data; no Kaggle). The 8 FER2013 runs need a Kaggle API key in `.env`:
+Most rows in `runs.yaml` work without any extra setup (synthetic data; no Kaggle). FER2013 rows need a Kaggle API key in `.env`:
 
 ```env
 # .env at repo root
@@ -251,12 +249,12 @@ Branches and PRs follow the philosophy in [CONTRIBUTIONS.md](CONTRIBUTIONS.md). 
 
 - `main` is the shared trunk
 - `sandbox/student_<name>/` is each person's exploratory space
-- `application/`, `pipeline/`, `report/` are protected — changes go through a PR
+- `application/` and `pipeline/` are protected — changes go through a PR
 - Branch names should describe a **question** being answered, not a ticket: `invest/<q>` for research, `integration/<q>` for landing the result, `feat/<thing>` for product work
 
 ## Working in parallel branches
 
-Use git worktrees to develop several branches simultaneously without port collisions or duplicating the multi-GB `models/` and `dataset/` directories.
+Use git worktrees to develop several branches simultaneously without port collisions or duplicating the multi-GB `models/` directory.
 
 ```bash
 # Create a new worktree branched off your current HEAD
